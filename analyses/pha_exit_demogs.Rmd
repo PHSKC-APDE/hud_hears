@@ -1,0 +1,132 @@
+---
+title: "PHA Exit Demographics"
+author: "Public Health - Seattle & King County"
+date: "8/23/2021"
+output: html_document
+---
+
+```{=html}
+<style type="text/css">
+
+h1 { color: DarkBlue;}
+h2 { color: DarkBlue;}
+h3 { color: DarkBlue;}
+h4 { color: DarkBlue;}
+code.r{ /* Code block */
+    font-size: 12px;
+}
+pre { /* Code block - determines code spacing between lines */
+    font-size: 14px;
+}
+</style>
+```
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = FALSE,
+  warning = FALSE,
+  fig.width = 9,
+  fig.asp = 0.8,
+  out.width = "100%"
+  )
+options(knitr.table.format = "html") 
+```
+
+<span style="color: red;">**WARNING: Small numbers are not suppressed. Data below are not for distribution.**</span>
+
+The data below show demographics of people who exited from King County Housing Authority or Seattle Housing Authority between 2012 and 2020. Note the following limitations:
+
+-   KCHA data is incomplete for exits prior to late 2015.
+-   Only complete exits are included here. People with action type = 6 who had subsequent 50058 records are not considered to have exited.
+-   Exit types are categorized according to the document here: <https://github.com/PHSKC-APDE/hud_hears/blob/main/data_processing/PHA_exit_definitions.csv>.
+
+## Exits over time
+
+### Number of exits by year
+
+-   Exits of all types increased over time for SHA before a sharp decrease in 2020.
+-   There was no clear pattern for KCHA exits between 2016 (the first year full exit data were available) and 2020. Though there was a decrease in exits in 2020, it was not as substantial as for SHA.
+
+```{r exityear}
+# Line graph showing numbers over time
+ggplot(exit_year, aes(group = exit_category, y = n, x = year, color = exit_category)) + 
+  geom_line(size = 1) +
+  scale_color_viridis(discrete = T) +
+  theme_ipsum() + 
+  labs(title = "Number of exits from KCHA and SHA",
+       x = "Year",
+       y = "Number of exits",
+       caption = "NB. KCHA exit data is incomplete prior to October 2015") +
+  facet_wrap(~agency)
+```
+
+### Type of exits by year
+
+-   The proportion of KCHA exits due to positive reasons increased over time, peaking at `r kcha_max_pos$pct`% in `r glue_collapse(unique(kcha_max_pos$year), sep = ", ", last = ", and ")`.
+-   Negative exits decreased as a proportion of all KCHA exits from 2016 to 2020.
+-   The proportion of SHA exits for positive reasons was flat between 2012 and 2017, but increased in the following years to `r sha_max_pos$pct`% in `r glue_collapse(unique(sha_max_pos$year), sep = ", ", last = ", and ")`.
+-   Negative exits increased as a proportion of all SHA exits over time.
+
+```{r exitstackyear}
+# Stacked percent bar graph
+ggplot(exit_year, aes(fill = exit_category, y = n, x = year)) + 
+  geom_bar(position = "fill", stat="identity", colour = "black") +
+  geom_text(position = position_fill(vjust = 0.5), size = 2.5, show.legend = F,
+            aes(group = exit_category, label = paste0(pct, "%"),
+                color = exit_category)) +
+  scale_color_manual(values = label_col) +
+  geom_text(aes(x = year, y = 1.02, label = year_tot), vjust = 0, size = 3) +
+  scale_fill_viridis(discrete = T) +
+  scale_y_continuous(labels = scales::percent) +
+  theme_ipsum() +
+  labs(title = "Proportion of exit types by year",
+       x = "Year",
+       y = "Percent of exits",
+       caption = "NB. KCHA exit data is incomplete prior to October 2015",
+       fill = "Exit category") +
+  facet_wrap(~agency)
+```
+
+## Exits by demographics
+### Exits by age
+```{r exitage, fig.asp=1.3}
+# Line graph showing numbers over time by age group
+exit_demogs_sum_collapse %>%
+  filter(category == "agegrp_expanded" & !is.na(group) & exit == 1) %>%
+  ggplot(aes(y = n, x = year)) + 
+  geom_line(data = exit_demogs_sum_collapse %>% select(-group) %>%
+              filter(category == "agegrp_expanded" & !is.na(group2) & exit == 1),
+            aes(group = group2), color = "grey", size = 0.5, alpha = 0.6) +
+  geom_line(color = "#69b3a2", size = 1.2) +
+  scale_color_viridis(discrete = T) +
+  theme_ipsum(grid = F) + 
+  labs(title = "Number of exits from KCHA and SHA by age",
+       x = "Year",
+       y = "Number of exits",
+       caption = "NB. KCHA exit data is incomplete prior to October 2015") +
+  facet_grid(group ~ agency)
+```
+
+### Proportion of exit types by age and year
+```{r exitagestack, fig.asp=1.3}
+# Stacked percent bar graph for age group
+exit_demogs_sum %>%
+  filter(category == "agegrp_expanded" & !is.na(group) & exit == 1) %>%
+ggplot(aes(fill = exit_category, y = n, x = year)) + 
+  geom_bar(position = "fill", stat="identity", colour = "black") +
+  geom_text(position = position_fill(vjust = 0.5), size = 2, show.legend = F,
+            aes(group = exit_category, label = paste0(pct, "%"),
+                color = exit_category)) +
+  scale_color_manual(values = label_col) +
+  geom_text(aes(x = year, y = 1.02, label = year_tot), vjust = 0, size = 2) +
+  scale_fill_viridis(discrete = T) +
+  scale_y_continuous(labels = scales::percent) +
+  theme_ipsum(axis_text_size = 10) +
+  labs(title = "Proportion of exit types by year and age group",
+       x = "Year",
+       y = "Percent of exits",
+       caption = "NB. KCHA exit data is incomplete prior to October 2015",
+       fill = "Exit category") +
+  facet_grid(group ~ agency)
+```
+
+## Exits by gender

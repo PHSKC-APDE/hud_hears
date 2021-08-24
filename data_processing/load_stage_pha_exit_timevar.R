@@ -14,7 +14,7 @@
 options(scipen = 6, digits = 4, warning.length = 8170)
 
 if (!require("pacman")) {install.packages("pacman")}
-pacman::p_load(tidyverse, odbc, glue, data.table, RecordLinkage)
+pacman::p_load(tidyverse, odbc, glue, data.table, RecordLinkage, lubridate)
 
 # Connect to HHSAW
 db_hhsaw <- DBI::dbConnect(odbc::odbc(),
@@ -283,31 +283,31 @@ pairs_01 <- getPairs(classify_01, single.rows = TRUE) %>%
 
 
 ## Review output and select cutoff point(s) ----
-pairs_01 %>% 
-  # Only keep matches with waitlist data in it
-  filter(!(pha_source.1 == "existing_ids" & pha_source.2 == "existing_ids")) %>%
-  # NON-JAN 1 SECTION
-  # filter(!((dob_m.1 == "1" & dob_d.1 == "1") | (dob_m.2 == "1" & dob_d.2 == "1"))) %>%
-  # filter(Weight >= 0.7 & dob_y.1 != dob_y.2 & dob_m.1 == dob_m.2 & dob_d.1 == dob_d.2) %>%
-  # filter((Weight >= 0.4 & (dob_y.1 == dob_y.2 | abs(dob_y.1 - dob_y.2) == 100) &
-  #           lname.1 == fname.2 & fname.1 == lname.2)) %>%
-  # filter(Weight >= 0.5 & dob_y.1 != dob_y.2 & lname.1 == fname.2 & fname.1 == lname.2) %>%
-  # filter(Weight >= 0.65 & dob_y.1 == dob_y.2 & (dob_m.1 != dob_m.2 | dob_d.1 != dob_d.2)) %>%
-  # filter(Weight >= 0.63 & dob_y.1 == dob_y.2 & dob_m.1 == dob_d.2 & dob_d.1 == dob_m.2) %>%
-  # filter(Weight >= 0.6 & dob_y.1 == dob_y.2 & dob_m.1 == dob_m.2 & dob_d.1 == dob_d.2) %>%
-  # filter(Weight >= 0.74) %>%
-  # JAN 1 SECTION
-filter((dob_m.1 == "1" & dob_d.1 == "1") | (dob_m.2 == "1" & dob_d.2 == "1")) %>%
-  # filter(Weight >= 0.65 & dob_y.1 == dob_y.2) %>%
-  filter(Weight >= 0.65 & dob_y.1 != dob_y.2) %>%
-  # MISSING DOB
-  # filter((is.na(dob_y.1) | is.na(dob_y.2))) %>%
-  # filter(Weight > 0.55 & fname.1 == fname.2) %>%
-  # filter(Weight > 0.55 & fname.1 != fname.2) %>%
-  select(id1, ssn.1, lname.1, fname.1, mname.1, dob.1, female.1, id_kc_pha.1, pha_source.1,
-         id2, ssn.2, lname.2, fname.2, mname.2, dob.2, female.2, id_kc_pha.2, pha_source.2,
-         Weight) %>%
-  tail()
+# pairs_01 %>% 
+#   # Only keep matches with waitlist data in it
+#   filter(!(pha_source.1 == "existing_ids" & pha_source.2 == "existing_ids")) %>%
+#   # NON-JAN 1 SECTION
+#   # filter(!((dob_m.1 == "1" & dob_d.1 == "1") | (dob_m.2 == "1" & dob_d.2 == "1"))) %>%
+#   # filter(Weight >= 0.7 & dob_y.1 != dob_y.2 & dob_m.1 == dob_m.2 & dob_d.1 == dob_d.2) %>%
+#   # filter((Weight >= 0.4 & (dob_y.1 == dob_y.2 | abs(dob_y.1 - dob_y.2) == 100) &
+#   #           lname.1 == fname.2 & fname.1 == lname.2)) %>%
+#   # filter(Weight >= 0.5 & dob_y.1 != dob_y.2 & lname.1 == fname.2 & fname.1 == lname.2) %>%
+#   # filter(Weight >= 0.65 & dob_y.1 == dob_y.2 & (dob_m.1 != dob_m.2 | dob_d.1 != dob_d.2)) %>%
+#   # filter(Weight >= 0.63 & dob_y.1 == dob_y.2 & dob_m.1 == dob_d.2 & dob_d.1 == dob_m.2) %>%
+#   # filter(Weight >= 0.6 & dob_y.1 == dob_y.2 & dob_m.1 == dob_m.2 & dob_d.1 == dob_d.2) %>%
+#   # filter(Weight >= 0.74) %>%
+#   # JAN 1 SECTION
+# filter((dob_m.1 == "1" & dob_d.1 == "1") | (dob_m.2 == "1" & dob_d.2 == "1")) %>%
+#   # filter(Weight >= 0.65 & dob_y.1 == dob_y.2) %>%
+#   filter(Weight >= 0.65 & dob_y.1 != dob_y.2) %>%
+#   # MISSING DOB
+#   # filter((is.na(dob_y.1) | is.na(dob_y.2))) %>%
+#   # filter(Weight > 0.55 & fname.1 == fname.2) %>%
+#   # filter(Weight > 0.55 & fname.1 != fname.2) %>%
+#   select(id1, ssn.1, lname.1, fname.1, mname.1, dob.1, female.1, id_kc_pha.1, pha_source.1,
+#          id2, ssn.2, lname.2, fname.2, mname.2, dob.2, female.2, id_kc_pha.2, pha_source.2,
+#          Weight) %>%
+#   tail()
 
 
 pairs_01_trunc <- pairs_01 %>%
@@ -376,23 +376,23 @@ pairs_02 <- getPairs(classify_02, single.rows = TRUE) %>%
          across(contains("dob_"), ~ as.numeric(.)))
 
 ## Review output and select cutoff point(s) ----
-pairs_02 %>% filter(Weight <= 0.8 & ssn_id.1 != ssn_id.2) %>% select(-contains("id_hash")) %>% head()
-
-pairs_02 %>% 
-  # Only keep matches with waitlist data in it
-  filter(!(pha_source.1 == "existing_ids" & pha_source.2 == "existing_ids")) %>%
-  # select(-contains("id_hash")) %>% 
-  filter(Weight >= 0.69) %>% 
-  # SECTION WHERE SSNs DO NOT MATCH
-  # filter(ssn.1 != ssn.2 & !is.na(ssn.1) & !is.na(ssn.2)) %>%
-  # SECTION WHERE AN SSN IS MISSING
-  filter(is.na(ssn.1) | is.na(ssn.2)) %>%
-  filter(!(dob_m.1 == "1" & dob_d.1 == "1")) %>%
-  # filter(dob_m.1 == "1" & dob_d.1 == "1") %>%
-  select(id1, ssn.1, lname.1, fname.1, mname.1, dob.1, female.1, id_kc_pha.1, pha_source.1,
-         id2, ssn.2, lname.2, fname.2, mname.2, dob.2, female.2, id_kc_pha.2, pha_source.2,
-         Weight) %>%
-  tail()
+# pairs_02 %>% filter(Weight <= 0.8 & ssn_id.1 != ssn_id.2) %>% select(-contains("id_hash")) %>% head()
+# 
+# pairs_02 %>% 
+#   # Only keep matches with waitlist data in it
+#   filter(!(pha_source.1 == "existing_ids" & pha_source.2 == "existing_ids")) %>%
+#   # select(-contains("id_hash")) %>% 
+#   filter(Weight >= 0.69) %>% 
+#   # SECTION WHERE SSNs DO NOT MATCH
+#   # filter(ssn.1 != ssn.2 & !is.na(ssn.1) & !is.na(ssn.2)) %>%
+#   # SECTION WHERE AN SSN IS MISSING
+#   filter(is.na(ssn.1) | is.na(ssn.2)) %>%
+#   filter(!(dob_m.1 == "1" & dob_d.1 == "1")) %>%
+#   # filter(dob_m.1 == "1" & dob_d.1 == "1") %>%
+#   select(id1, ssn.1, lname.1, fname.1, mname.1, dob.1, female.1, id_kc_pha.1, pha_source.1,
+#          id2, ssn.2, lname.2, fname.2, mname.2, dob.2, female.2, id_kc_pha.2, pha_source.2,
+#          Weight) %>%
+#   tail()
 
 
 pairs_02_trunc <- pairs_02 %>%
@@ -713,7 +713,7 @@ names_final <- left_join(names_final, names_hh_id, by = "id_hash") %>%
 names_final %>% filter(pha_source != "existing_ids") %>% count(pha_source, id_cnt)
 
 
-# PREPARE STAGE EXIT TABLE ----
+# PREPARE STAGE EXIT TIMEVAR TABLE ----
 ## Join names back to exit data ----
 pha_exit_id <- left_join(pha_exit, select(names_final, id_hash, id_kc_pha, id_cnt),
                          by = "id_hash") %>%
@@ -722,13 +722,19 @@ pha_exit_id <- left_join(pha_exit, select(names_final, id_hash, id_kc_pha, id_cn
          id_cnt = coalesce(id_cnt.x, id_cnt.y))
 
 
+## Set up the max period for each person ----
+pha_timevar <- pha_timevar %>%
+  group_by(id_kc_pha, period) %>%
+  mutate(max_period = from_date == max(from_date)) %>%
+  ungroup()
+
 ## Join exit data to the timevar table ----
 # Only people who matched IDs will be included
-pha_timevar_exit <- left_join(pha_timevar,
-                              distinct(pha_exit_id, id_kc_pha, act_date, exit_reason,
-                                       exit_category, pha_source, id_cnt),
-                              by = "id_kc_pha") %>%
-  select(-last_run)
+# Just include key elements for now, add remaining details later once exit data is processed
+pha_timevar_exit <- pha_timevar %>%
+  select(id_kc_pha, hh_id_long, agency, from_date, to_date, period, max_period) %>%
+  left_join(., distinct(pha_exit_id, id_kc_pha, act_date, exit_reason, exit_category, pha_source, id_cnt),
+            by = "id_kc_pha")
 
 
 # Apply exit information across entire household
@@ -738,28 +744,101 @@ hh_timevar_exit <- pha_timevar_exit %>%
 
 pha_timevar_exit <- left_join(pha_timevar_exit, hh_timevar_exit, by = "hh_id_long") %>%
   mutate(act_date = coalesce(act_date.x, act_date.y),
-         exit_reason = coalesce(exit_reason.x, exit_reason.y),
-         exit_category = coalesce(exit_category.x, exit_category.y),
-         pha_source = coalesce(pha_source.x, pha_source.y)) %>%
+         # Can't use coalesce for other fields because sometimes they are NA when there is an act_date
+         exit_reason = ifelse(is.na(act_date.x), exit_reason.y, exit_reason.x),
+         exit_category = ifelse(is.na(act_date.x), exit_category.y, exit_category.x),
+         pha_source = ifelse(is.na(act_date.x), pha_source.y, pha_source.x)) %>%
   select(-ends_with(".x"), -ends_with(".y")) %>%
   distinct()
 
 
-## Flag if a household has activity after an exit date ----
-pha_timevar_exit <- pha_timevar_exit %>%
-  mutate(in_range = act_date >= from_date & act_date <= to_date) %>%
-  group_by(id_kc_pha) %>%
-  mutate(max_period = from_date == max(from_date),
-         activity_mismatch = max(in_range != max_period)) %>%
-  ungroup()
+## Set up a complete set of from/to dates for each exit a person has ----
+# This is needed to find 'true' exits versus those where a person had activity after an exit
+# Also to apply exit dates to all of a person's from/to dates 
+#  (some are NA because they were associated with multiple household IDs)
+# Make a list of a person's exit dates and add a count (don't include NAs)
+exit_list <- pha_timevar_exit %>% filter(!is.na(act_date)) %>% distinct(id_kc_pha, act_date) %>%
+  group_by(id_kc_pha) %>% mutate(exit_cnt = n_distinct(act_date)) %>% ungroup()
+
+# Repeat a person's from/to date for each act date
+timevar_repeat <- pha_timevar_exit %>% 
+  distinct(id_kc_pha, agency, from_date, to_date, period, max_period) %>%
+  left_join(., exit_list, by = "id_kc_pha") %>%
+  arrange(id_kc_pha, act_date, from_date, to_date, agency)
+
+
+## Flag if a person has activity after an exit date ----
+# Consider 12 months between exit and next from_date to be a true exit
+# Need to account for time in the current interval after 'exit_date'
+# Also include exits that fall within 6 months of a person's final to_date
+timevar_repeat <- setDT(timevar_repeat) # Switch to data table for faster group work
+
+timevar_repeat[, in_range := act_date >= from_date & act_date <= to_date]
+timevar_repeat[, activity_mismatch := max(in_range != max_period, na.rm = T), by = c("id_kc_pha", "act_date")]
+timevar_repeat[, `:=` (activity_gap = case_when(in_range == F ~ NA_real_,
+                                                activity_mismatch == 0 ~ NA_real_,
+                                                TRUE ~ interval(start = act_date, end = to_date) / ddays(1) + 1),
+                       activity_gap_next = case_when(in_range == F ~ NA_real_,
+                                                     activity_mismatch == 0 ~ NA_real_,
+                                                     lead(id_kc_pha, 1) == id_kc_pha ~ 
+                                                       interval(start = act_date, end = lead(from_date, 1)) / ddays(1) + 1,
+                                                     TRUE ~ NA_real_))]
+timevar_repeat[, true_exit := case_when(is.na(activity_mismatch) ~ NA_integer_,
+                              activity_mismatch == 0 & max_period == T ~ 1L,
+                              activity_gap_next - activity_gap > 365 ~ 1L,
+                              max_period == T & act_date > to_date & lead(id_kc_pha, 1) != id_kc_pha & 
+                                interval(start = to_date, end = act_date) / ddays(1) + 1 <= 180 ~ 1L,
+                              TRUE ~ 0L)]
+
+# Apply true exit status across all records for that exit
+timevar_repeat[, true_exit := max(true_exit, na.rm = T), by = c("id_kc_pha", "act_date")]
+
+# See if the act date was ever in range of a person's activity intervals
+timevar_repeat[, ever_in_range := max(in_range), by = c("id_kc_pha", "act_date")]
+
+timevar_repeat %>% count(ever_in_range, true_exit)
+
+
+## Add in remaining timevar and exit columns ----
+# Only add in bare minimum, join to regular timevar table on id and from_date to get rest
+timevar_exit_final <- timevar_repeat %>%
+  left_join(., 
+            distinct(pha_timevar, id_kc_pha, from_date, to_date, hh_id_long, cov_time),
+            by = c("id_kc_pha", "from_date", "to_date")) %>%
+  left_join(., 
+            distinct(pha_timevar_exit, id_kc_pha, act_date, exit_reason, exit_category, pha_source) %>%
+              mutate(exit_year = year(act_date)),
+            by = c("id_kc_pha", "act_date"))
+
+
+## Truncate to_date if appropriate ----
+# If an exit date falls in the last known coverage period for a person, truncate to_date
+timevar_exit_final <- timevar_exit_final %>%
+  mutate(truncate_date = case_when(is.na(act_date) ~ NA_integer_,
+                                   in_range == T & max_period == T ~ 1L,
+                                   TRUE ~ 0L)) %>%
+  mutate(to_date = as.Date(case_when(is.na(truncate_date) ~ to_date,
+                                     truncate_date == 1 ~ act_date,
+                                     TRUE ~ to_date), origin = "1970-01-01"),
+         cov_time = case_when(is.na(truncate_date) ~ cov_time,
+                              truncate_date == 1 ~ interval(start = from_date, end = to_date) / ddays(1) + 1,
+                              TRUE ~ cov_time))
 
 
 ## Tidy up exit reasons ----
-pha_timevar_exit <- pha_timevar_exit %>%
+timevar_exit_final <- timevar_exit_final %>%
   rename(exit_category_pha = exit_category) %>%
   # Remove a non-breaking space that messes up the join
   mutate(exit_reason = str_replace_all(exit_reason, "\u00A0", " ")) %>%
   left_join(., select(exit_def, exit_reason, exit_category), by = "exit_reason")
+
+
+## Reorder columns ----
+timevar_exit_final <- timevar_exit_final %>%
+  select(id_kc_pha, hh_id_long, agency, from_date, to_date, truncate_date, period, max_period, cov_time,
+         exit_cnt, exit_year, act_date, true_exit, exit_reason, exit_category_pha, exit_category, 
+         pha_source, in_range, ever_in_range, activity_mismatch, activity_gap, activity_gap_next) %>%
+  distinct()
 
 
 # LOAD TO SQL ----
@@ -787,13 +866,26 @@ lapply(seq(start, cycles), function(i) {
   message("Loading cycle ", i, " of ", cycles)
   if (i == 1) {
     dbWriteTable(db_hhsaw,
-                 name = DBI::Id(schema = "pha", table = "stage_pha_exits"),
+                 name = DBI::Id(schema = "pha", table = "stage_pha_exit_timevar"),
                  value = as.data.frame(pha_timevar_exit[start_row:end_row, ]),
                  overwrite = T, append = F)
   } else {
     dbWriteTable(db_hhsaw,
-                 name = DBI::Id(schema = "pha", table = "stage_pha_exits"),
+                 name = DBI::Id(schema = "pha", table = "stage_pha_exit_timevar"),
                  value = as.data.frame(pha_timevar_exit[start_row:end_row ,]),
                  overwrite = F, append = T)
   }
 })
+
+# CLEAN UP ----
+rm(list = ls(pattern = "match"))
+rm(list = ls(pattern = "classify"))
+rm(list = ls(pattern = "pairs"))
+rm(list = ls(pattern = "names"))
+rm(list = ls(pattern = "pha"))
+rm(list = ls(pattern = "id"))
+rm(list = ls(pattern = "exit"))
+rm(kcha_stage, timevar_add)
+rm(recursion_dt, recursion_level, remaining_dupes)
+rm(cycles, max_rows, start)
+rm(run_time, st, final_dedup, self_join_dups)

@@ -93,12 +93,22 @@ only_exit %>% count(year)
 # EXITS BY YEAR ----
 ## Any exit vs not ----
 exit_count <- function(year) {
+  message("Working on ", year)
+  # exits <- setDT(exit_demogs)
+  # exits <- exits[exit_year == year | (year >= year(from_date) & year <= year(to_date))]
+  # exits[, exited := max(exit_year == year & true_exit == 1), by = "id_kc_pha"]
+  # exits[, exited := ifelse(exited == 1, "Exited", "Did not exit")]
+  # exits <- exits[, .(agency, id_kc_pha, exited)]
+  # exits <- unique(exits)
+  # exits[]
+  
   exits <- exit_demogs %>%
     filter(exit_year == year | (year >= year(from_date) & year <= year(to_date))) %>%
     group_by(id_kc_pha) %>%
     # Only people who had no activity after an exit are truly exited
-    mutate(exited = max(exit_year == year & activity_mismatch == 0),
-           exited = replace_na(exited, 0)) %>%
+    mutate(exited = max(exit_year == year & true_exit == 1),
+           exited = case_when(exited == 1 ~ "Exited",
+                              TRUE ~ "Did not exit")) %>%
     ungroup() %>%
     distinct(agency, id_kc_pha, exited) %>%
     group_by(agency) %>%
@@ -109,12 +119,33 @@ exit_count <- function(year) {
     mutate(year = year)
 }
 
+any_exit <- bind_rows(lapply(c(2012:2020), exit_count))
+
+
+# Stacked percent bar graph of any exit/no exit
+any_exit %>%
+  ggplot(aes(fill = as.character(exited), y = n, x = year)) +
+  geom_bar(position = "fill", stat="identity", colour = "black") +
+  geom_text(position = position_fill(vjust = 0.5), size = 2.5, show.legend = F,
+            aes(group = exited, label = paste0(pct, "%"),
+                color = exited)) +
+  scale_color_manual(values = c("white", "black")) +
+  geom_text(aes(x = year, y = 1.02, label = year_tot), vjust = 0, size = 3) +
+  scale_fill_viridis(discrete = T) +
+  scale_y_continuous(labels = scales::percent) +
+  theme_ipsum(axis_text_size = 10, grid = F) +
+  labs(title = "Proportion of people exiting by year",
+       x = "Year",
+       y = "Percent of people",
+       caption = "NB. KCHA exit data is incomplete prior to October 2015",
+       fill = "Exit vs. not") +
+  facet_grid(~ agency)
 
 
 ## Exit types ----
 exit_year <- exit_timevar %>% 
   # Only keep people who had no activity after an exit
-  filter(!is.na(act_date) & activity_mismatch == 0) %>%
+  filter(true_exit == 1) %>%
   distinct(id_kc_pha, agency, act_date, exit_category) %>%
   mutate(year = year(act_date)) %>%
   group_by(agency, year) %>%
@@ -138,28 +169,6 @@ label_col <- ifelse(hcl[, "l"] > 50, "black", "white")
 #        y = "Number of exits",
 #        caption = "NB. KCHA exit data is incomplete prior to October 2015") +
 #   facet_wrap(~agency)
-
-
-
-# Stacked percent bar graph of any exit/no exit
-exit_demogs_sum_collapse %>%
-  filter(category == "agegrp_expanded" & !is.na(group)) %>%
-  ggplot(aes(fill = as.character(exit), y = n, x = year)) +
-  geom_bar(position = "fill", stat="identity", colour = "black") +
-  geom_text(position = position_fill(vjust = 0.5), size = 2, show.legend = F,
-            aes(group = exit, label = paste0(pct, "%"),
-                color = exit)) +
-  scale_color_manual(values = label_col) +
-  geom_text(aes(x = year, y = 1.02, label = year_tot), vjust = 0, size = 2) +
-  scale_fill_viridis(discrete = T) +
-  scale_y_continuous(labels = scales::percent) +
-  theme_ipsum(axis_text_size = 10) +
-  labs(title = "Proportion of age group exiting by year",
-       x = "Year",
-       y = "Percent of people",
-       caption = "NB. KCHA exit data is incomplete prior to October 2015",
-       fill = "Exit vs. not") +
-  facet_grid(group ~ agency)
 
 # # Stacked percent bar graph
 # ggplot(exit_year, aes(fill = exit_category, y = n, x = year)) + 
@@ -192,17 +201,19 @@ sha_max_pos <- exit_year %>%
 
 # DEMOGS OF PEOPLE EXITING ----
 exit_demogs <- left_join(exit_timevar, pha_demo, by = "id_kc_pha") %>%
-  mutate(exit_year = year(act_date))
+  mutate(exit_year = year(act_date)) %>%
+  # Recode Latino so that it trumps in race_eth_me (currently most Latino/a are found under multiple)
+  # Consider changing how the pha_demo table sets this up
+  mutate(race_eth_me = ifelse(race_latino == 1, "Latino", race_eth_me))
 
 # Look at demogs of people who exit vs don't in a given year
 exit_demogs_year <- function(year) {
   exits <- exit_demogs %>%
     filter(exit_year == year | (year >= year(from_date) & year <= year(to_date))) %>%
     group_by(id_kc_pha) %>%
-    mutate(exited = max(exit_year == year & activity_mismatch == 0)) %>%
+    mutate(exited = max(exit_year == year & true_exit == 1)) %>%
     ungroup() %>%
     mutate(year = year) %>%
-    select(-disability) %>%
     left_join(., select(pha_calyear, id_kc_pha, year, time_housing, agegrp_expanded, disability), 
               by = c("id_kc_pha", "year"))
   
@@ -250,16 +261,7 @@ exit_demogs_sum <- bind_rows(lapply(c(2012:2020), exit_demogs_year))
 exit_demogs_sum <- exit_demogs_sum %>% mutate(group2 = group)
 
 
-## Make a higher level summaries ----
-# Count of all exits vs not
-exit_sum_collapse <- exit_demogs_sum %>%
-  group_by(year, agency, category, group, group2, exit) %>%
-  summarise(n = sum(n)) %>%
-  group_by(year, agency, category, group, group2) %>%
-  mutate(year_tot = sum(n)) %>%
-  ungroup() %>%
-  mutate(pct = round(n / year_tot * 100, 1))
-
+## Make a higher level summary ----
 # Count of all exits by group
 exit_demogs_sum_collapse <- exit_demogs_sum %>%
   group_by(year, agency, category, group, group2, exit) %>%
@@ -270,41 +272,41 @@ exit_demogs_sum_collapse <- exit_demogs_sum %>%
   mutate(pct = round(n / year_tot * 100, 1))
 
 
-# # Line graph showing numbers over time by age group
-# exit_demogs_sum_collapse %>%
-#   filter(category == "agegrp_expanded" & !is.na(group) & exit == 1) %>%
-#   ggplot(aes(y = n, x = year)) + 
-#   geom_line(data = exit_demogs_sum_collapse %>% select(-group) %>%
-#               filter(category == "agegrp_expanded" & !is.na(group2) & exit == 1),
-#             aes(group = group2), color = "grey", size = 0.5, alpha = 0.6) +
-#   geom_line(color = "#69b3a2", size = 1.2) +
-#   scale_color_viridis(discrete = T) +
-#   theme_ipsum(grid = F) + 
-#   labs(title = "Number of exits from KCHA and SHA by age",
-#        x = "Year",
-#        y = "Number of exits",
-#        caption = "NB. KCHA exit data is incomplete prior to October 2015") +
-#   facet_grid(group ~ agency)
+# Line graph showing numbers over time by age group
+exit_demogs_sum_collapse %>%
+  filter(category == "race_eth_me" & !is.na(group) & exit == 1) %>%
+  ggplot(aes(y = n, x = year)) +
+  geom_line(data = exit_demogs_sum_collapse %>% select(-group) %>%
+              filter(category == "agegrp_expanded" & !is.na(group2) & exit == 1),
+            aes(group = group2), color = "grey", size = 0.5, alpha = 0.6) +
+  geom_line(color = "#69b3a2", size = 1.2) +
+  scale_color_viridis(discrete = T) +
+  theme_ipsum(grid = F) +
+  labs(title = "Number of exits from KCHA and SHA by age",
+       x = "Year",
+       y = "Number of exits",
+       caption = "NB. KCHA exit data is incomplete prior to October 2015") +
+  facet_grid(group ~ agency)
 
-# # Stacked percent bar graph of exit type by age group
-# exit_demogs_sum %>%
-#   filter(category == "agegrp_expanded" & !is.na(group) & exit == 1) %>%
-# ggplot(aes(fill = exit_category, y = n, x = year)) + 
-#   geom_bar(position = "fill", stat="identity", colour = "black") +
-#   geom_text(position = position_fill(vjust = 0.5), size = 2, show.legend = F,
-#             aes(group = exit_category, label = paste0(pct, "%"),
-#                 color = exit_category)) +
-#   scale_color_manual(values = label_col) +
-#   geom_text(aes(x = year, y = 1.02, label = year_tot), vjust = 0, size = 2) +
-#   scale_fill_viridis(discrete = T) +
-#   scale_y_continuous(labels = scales::percent) +
-#   theme_ipsum(axis_text_size = 10) +
-#   labs(title = "Proportion of exit types by year and age group",
-#        x = "Year",
-#        y = "Percent of exits",
-#        caption = "NB. KCHA exit data is incomplete prior to October 2015",
-#        fill = "Exit category") +
-#   facet_grid(group ~ agency)
+# Stacked percent bar graph of exit type by age group
+exit_demogs_sum %>%
+  filter(category == "agegrp_expanded" & !is.na(group) & exit == 1) %>%
+ggplot(aes(fill = exit_category, y = n, x = year)) +
+  geom_bar(position = "fill", stat="identity", colour = "black") +
+  geom_text(position = position_fill(vjust = 0.5), size = 2, show.legend = F,
+            aes(group = exit_category, label = paste0(pct, "%"),
+                color = exit_category)) +
+  scale_color_manual(values = label_col) +
+  geom_text(aes(x = year, y = 1.02, label = year_tot), vjust = 0, size = 2) +
+  scale_fill_viridis(discrete = T) +
+  scale_y_continuous(labels = scales::percent) +
+  theme_ipsum(axis_text_size = 10) +
+  labs(title = "Proportion of exit types by year and age group",
+       x = "Year",
+       y = "Percent of exits",
+       caption = "NB. KCHA exit data is incomplete prior to October 2015",
+       fill = "Exit category") +
+  facet_grid(group ~ agency)
 
 
 

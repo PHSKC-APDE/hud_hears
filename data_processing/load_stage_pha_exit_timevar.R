@@ -834,7 +834,9 @@ timevar_exit_final <- timevar_exit_final %>%
 
 
 ## Reorder columns ----
+# Also replace Infinite values
 timevar_exit_final <- timevar_exit_final %>%
+  mutate(activity_mismatch = ifelse(is.infinite(activity_mismatch), NA, activity_mismatch)) %>%
   select(id_kc_pha, hh_id_long, agency, from_date, to_date, truncate_date, period, max_period, cov_time,
          exit_cnt, exit_year, act_date, true_exit, exit_reason, exit_category_pha, exit_category, 
          pha_source, in_range, ever_in_range, activity_mismatch, activity_gap, activity_gap_next) %>%
@@ -857,22 +859,22 @@ db_hhsaw <- DBI::dbConnect(odbc::odbc(),
 # Split into smaller tables to avoid SQL db_hhsawection issues
 start <- 1L
 max_rows <- 50000L
-cycles <- ceiling(nrow(pha_timevar_exit)/max_rows)
+cycles <- ceiling(nrow(timevar_exit_final)/max_rows)
 
 lapply(seq(start, cycles), function(i) {
   start_row <- ifelse(i == 1, 1L, max_rows * (i-1) + 1)
-  end_row <- min(nrow(pha_timevar_exit), max_rows * i)
+  end_row <- min(nrow(timevar_exit_final), max_rows * i)
   
   message("Loading cycle ", i, " of ", cycles)
   if (i == 1) {
     dbWriteTable(db_hhsaw,
                  name = DBI::Id(schema = "pha", table = "stage_pha_exit_timevar"),
-                 value = as.data.frame(pha_timevar_exit[start_row:end_row, ]),
+                 value = as.data.frame(timevar_exit_final[start_row:end_row, ]),
                  overwrite = T, append = F)
   } else {
     dbWriteTable(db_hhsaw,
                  name = DBI::Id(schema = "pha", table = "stage_pha_exit_timevar"),
-                 value = as.data.frame(pha_timevar_exit[start_row:end_row ,]),
+                 value = as.data.frame(timevar_exit_final[start_row:end_row ,]),
                  overwrite = F, append = T)
   }
 })

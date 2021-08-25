@@ -203,7 +203,7 @@ names_existing <- dbGetQuery(db_hhsaw, "SELECT * FROM pha.final_identities")
 
 
 ## Exit data ----
-pha_exit <- dbGetQuery(db_hhsaw, "SELECT * FROM pha.stage_exit") %>%
+pha_exit <- dbGetQuery(db_hhsaw, "SELECT * FROM pha.stage_pha_exit") %>%
   mutate(hh_female = case_when(hh_gender == "Female" ~ 1L,
                                hh_gender == "Male" ~ 0L,
                                TRUE ~ NA_integer_),

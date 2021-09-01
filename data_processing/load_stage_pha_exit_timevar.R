@@ -732,14 +732,14 @@ pha_timevar <- pha_timevar %>%
 # Only people who matched IDs will be included
 # Just include key elements for now, add remaining details later once exit data is processed
 pha_timevar_exit <- pha_timevar %>%
-  select(id_kc_pha, hh_id_long, agency, from_date, to_date, period, max_period) %>%
+  select(id_kc_pha, hh_id_long, hh_id_kc_pha, agency, from_date, to_date, period, max_period) %>%
   left_join(., distinct(pha_exit_id, id_kc_pha, act_date, exit_reason, exit_category, pha_source, id_cnt),
             by = "id_kc_pha")
 
 
 # Apply exit information across entire household
 hh_timevar_exit <- pha_timevar_exit %>%
-  distinct(hh_id_long, act_date, exit_reason, exit_category, pha_source) %>%
+  distinct(hh_id_long, hh_id_kc_pha, act_date, exit_reason, exit_category, pha_source) %>%
   filter(!is.na(act_date))
 
 pha_timevar_exit <- left_join(pha_timevar_exit, hh_timevar_exit, by = "hh_id_long") %>%
@@ -803,7 +803,7 @@ timevar_repeat %>% count(ever_in_range, true_exit)
 # Only add in bare minimum, join to regular timevar table on id and from_date to get rest
 timevar_exit_final <- timevar_repeat %>%
   left_join(., 
-            distinct(pha_timevar, id_kc_pha, from_date, to_date, hh_id_long, cov_time),
+            distinct(pha_timevar, id_kc_pha, from_date, to_date, hh_id_long, hh_id_kc_pha, cov_time),
             by = c("id_kc_pha", "from_date", "to_date")) %>%
   left_join(., 
             distinct(pha_timevar_exit, id_kc_pha, act_date, exit_reason, exit_category, pha_source) %>%
@@ -837,7 +837,7 @@ timevar_exit_final <- timevar_exit_final %>%
 # Also replace Infinite values
 timevar_exit_final <- timevar_exit_final %>%
   mutate(activity_mismatch = ifelse(is.infinite(activity_mismatch), NA, activity_mismatch)) %>%
-  select(id_kc_pha, hh_id_long, agency, from_date, to_date, truncate_date, period, max_period, cov_time,
+  select(id_kc_pha, hh_id_long, hh_id_kc_pha, agency, from_date, to_date, truncate_date, period, max_period, cov_time,
          exit_cnt, exit_year, act_date, true_exit, exit_reason, exit_category_pha, exit_category, 
          pha_source, in_range, ever_in_range, activity_mismatch, activity_gap, activity_gap_next) %>%
   distinct()

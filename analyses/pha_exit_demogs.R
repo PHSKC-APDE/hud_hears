@@ -13,6 +13,8 @@
 
 # SET OPTIONS AND BRING IN PACKAGES ----
 options(scipen = 6, digits = 4, warning.length = 8170)
+# Suppress summarise info
+options(dplyr.summarise.inform = FALSE)
 
 if (!require("pacman")) {install.packages("pacman")}
 pacman::p_load(tidyverse, odbc, glue, data.table, ggplot2, viridis, hrbrthemes,
@@ -91,25 +93,26 @@ only_exit %>% count(agency, exit_year)
 
 # EXITS BY YEAR ----
 ## Any exit vs not ----
-exit_count <- function(year) {
+exit_count <- function(year, hh = F, drop_death = F) {
   message("Working on ", year)
-  # exits <- setDT(exit_demogs)
-  # exits <- exits[exit_year == year | (year >= year(from_date) & year <= year(to_date))]
-  # exits[, exited := max(exit_year == year & true_exit == 1), by = "id_kc_pha"]
-  # exits[, exited := ifelse(exited == 1, "Exited", "Did not exit")]
-  # exits <- exits[, .(agency, id_kc_pha, exited)]
-  # exits <- unique(exits)
-  # exits[]
+  exits <- setDT(exit_timevar)
+  exits <- exits[exit_year == year | (year >= year(from_date) & year <= year(to_date))]
   
-  exits <- exit_demogs %>%
-    filter(exit_year == year | (year >= year(from_date) & year <= year(to_date))) %>%
-    group_by(id_kc_pha) %>%
-    # Only people who had no activity after an exit are truly exited
-    mutate(exited = max(exit_year == year & true_exit == 1),
-           exited = case_when(exited == 1 ~ "Exited",
-                              TRUE ~ "Did not exit")) %>%
-    ungroup() %>%
-    distinct(agency, id_kc_pha, exited) %>%
+  if (drop_death == T) {
+    exits <- exits[!str_detect(tolower(exit_timevar$exit_reason), "decease")]
+  }
+  
+  if (hh == F) {
+    exits[, exited := max(exit_year == year & true_exit == 1), by = "id_kc_pha"]
+    exits[, exited := ifelse(exited == 1, "Exited", "Did not exit")]
+    exits <- unique(exits[, .(agency, id_kc_pha, exited)])
+  } else {
+    exits[, exited := max(exit_year == year & true_exit == 1), by = "hh_id_kc_pha"]
+    exits[, exited := ifelse(exited == 1, "Exited", "Did not exit")]
+    exits <- unique(exits[, .(agency, hh_id_kc_pha, exited)])
+  }
+  
+  exits <- exits %>%
     group_by(agency) %>%
     count(exited) %>%
     mutate(year_tot = sum(n)) %>%
@@ -119,10 +122,11 @@ exit_count <- function(year) {
 }
 
 any_exit <- bind_rows(lapply(c(2012:2020), exit_count))
+any_exit_hh <- bind_rows(lapply(c(2012:2020), exit_count, hh = T))
 
 
 # Stacked percent bar graph of any exit/no exit
-any_exit %>%
+any_exit_hh %>%
   ggplot(aes(fill = as.character(exited), y = n, x = year)) +
   geom_bar(position = "fill", stat="identity", colour = "black") +
   geom_text(position = position_fill(vjust = 0.5), size = 2.5, show.legend = F,
@@ -133,25 +137,46 @@ any_exit %>%
   scale_fill_viridis(discrete = T) +
   scale_y_continuous(labels = scales::percent) +
   theme_ipsum(axis_text_size = 10, grid = F) +
-  labs(title = "Proportion of people exiting by year",
+  labs(title = "Proportion of households exiting by year",
        x = "Year",
-       y = "Percent of people",
+       y = "Percent of households",
        caption = "NB. KCHA exit data is incomplete prior to October 2015",
        fill = "Exit vs. not") +
   facet_grid(~ agency)
 
 
 ## Exit types ----
-exit_year <- exit_timevar %>% 
-  # Only keep people who had no activity after an exit
-  filter(true_exit == 1) %>%
-  distinct(id_kc_pha, agency, act_date, exit_category) %>%
-  mutate(year = year(act_date)) %>%
-  group_by(agency, year) %>%
-  count(exit_category) %>%
-  mutate(year_tot = sum(n)) %>%
-  ungroup() %>%
-  mutate(pct = round(n / year_tot * 100, 1))
+exit_any <- function(hh = F, drop_death = F) {
+  if (hh == F) {
+    id_var <- "id_kc_pha"
+  } else {
+    id_var <- "hh_id_kc_pha"
+  }
+  
+  output <-  exit_timevar %>% 
+    # Only keep people who had no activity after an exit
+    filter(true_exit == 1) 
+  
+  if (drop_death == T) {
+    output <- output %>% filter(str_detect(tolower(exit_reason), "decease", negate = T))
+  }
+  
+  output <- output %>%
+    select(id_var, agency, act_date, exit_year, exit_category) %>%
+    distinct() %>%
+    group_by(agency, exit_year) %>%
+    count(exit_category) %>%
+    mutate(year_tot = sum(n)) %>%
+    ungroup() %>%
+    mutate(pct = round(n / year_tot * 100, 1))
+  
+  output
+}
+
+exit_year <- exit_any(hh = F, drop_death = F)
+exit_year_hh <- exit_any(hh = T, drop_death = F)
+exit_year_nodeath <- exit_any(hh = F, drop_death = T)
+exit_year_hh_nodeath <- exit_any(hh = T, drop_death = T)
 
 # Trick from scales::show_col
 # (https://stackoverflow.com/questions/62800823/set-a-color-to-show-clear-the-numbers)
@@ -170,7 +195,7 @@ label_col <- ifelse(hcl[, "l"] > 50, "black", "white")
 #   facet_wrap(~agency)
 
 # # Stacked percent bar graph
-# ggplot(exit_year, aes(fill = exit_category, y = n, x = year)) + 
+# ggplot(exit_year, aes(fill = exit_category, y = n, x = year)) +
 #   geom_bar(position = "fill", stat="identity", colour = "black") +
 #   geom_text(position = position_fill(vjust = 0.5), size = 2.5, show.legend = F,
 #             aes(group = exit_category, label = paste0(pct, "%"),
@@ -196,32 +221,66 @@ sha_max_pos <- exit_year %>%
   filter(agency == "SHA" & exit_category == "Positive") %>%
   filter(pct == max(pct))
 
+kcha_max_pos_hh <- exit_year_hh %>% 
+  filter(agency == "KCHA" & exit_category == "Positive") %>%
+  filter(pct == max(pct))
+sha_max_pos_hh <- exit_year_hh %>% 
+  filter(agency == "SHA" & exit_category == "Positive") %>%
+  filter(pct == max(pct))
 
 
 # DEMOGS OF PEOPLE EXITING ----
-exit_demogs <- left_join(exit_timevar, pha_demo, by = "id_kc_pha") %>%
-  mutate(exit_year = year(act_date)) %>%
+exit_demogs <- exit_timevar %>%
+  distinct(agency, id_kc_pha, from_date, to_date, act_date, exit_year, exit_reason, exit_category, true_exit,
+           major_prog, disability, portfolio_final) %>%
+  left_join(., pha_demo, by = "id_kc_pha") %>%
   # Recode Latino so that it trumps in race_eth_me (currently most Latino/a are found under multiple)
   # Consider changing how the pha_demo table sets this up
   mutate(race_eth_me = ifelse(race_latino == 1, "Latino", race_eth_me))
 
+exit_demogs_hh <- exit_timevar %>%
+  select(-id_kc_pha) %>%
+  distinct() %>%
+  left_join(., pha_demo, by = c("hh_id_kc_pha" = "id_kc_pha")) %>%
+  mutate(exit_year = year(act_date)) %>%
+  mutate(race_eth_me = ifelse(race_latino == 1, "Latino", race_eth_me))
+
+
 # Look at demogs of people who exit vs don't in a given year
-exit_demogs_year <- function(year) {
-  exits <- exit_demogs %>%
-    filter(exit_year == year | (year >= year(from_date) & year <= year(to_date))) %>%
-    group_by(id_kc_pha) %>%
-    mutate(exited = max(exit_year == year & true_exit == 1)) %>%
-    ungroup() %>%
-    mutate(year = year) %>%
-    left_join(., select(pha_calyear, id_kc_pha, year, time_housing, agegrp_expanded, disability), 
-              by = c("id_kc_pha", "year"))
+exit_demogs_year <- function(year_run, hh = F, drop_death = F) {
+  demog_list <- c("major_prog", "race_eth_me", "gender_recent", "agegrp_expanded", 
+                  "time_housing", "disability", "portfolio_final")
   
-  demog_list <- c("race_eth_me", "gender_recent", "agegrp_expanded", "time_housing", "disability")
+  if (hh == F) {
+    id_var <- rlang::sym("id_kc_pha")
+    exits <- exit_demogs
+  } else {
+    id_var <- rlang::sym("hh_id_kc_pha")
+    exits <- exit_demogs_hh
+  }
+  
+  if (drop_death == T) {
+    exits <- exits %>% filter(str_detect(tolower(exit_reason), "decease", negate = T))
+  }
+  
+  exits <- exits %>%
+    filter(exit_year == year_run | (year_run >= year(from_date) & year_run <= year(to_date))) %>%
+    group_by({{id_var}}) %>%
+    # group_by(id_kc_pha) %>%
+    mutate(exited = max(exit_year == year_run & true_exit == 1)) %>%
+    ungroup() %>%
+    select(id_var, agency, exited, act_date, exit_category, race_eth_me, gender_recent,
+           major_prog, disability, portfolio_final) %>%
+    distinct() %>%
+    left_join(., filter(pha_calyear, .data[[id_var]] == id_kc_pha & year == year_run) %>%
+                select(id_var, agegrp_expanded, time_housing),
+              by = quo_name(id_var))
+  
   
   exit_sum <- bind_rows(lapply(demog_list, function(x) {
     exits %>%
       filter(exited == 1 & !is.na(exited)) %>%
-      distinct(agency, id_kc_pha, act_date, exit_category, across(all_of(x))) %>%
+      distinct(agency, {{id_var}}, act_date, exit_category, across(all_of(x))) %>%
       group_by(agency, across(all_of(x))) %>%
       count(exit_category) %>%
       mutate(year_tot = sum(n)) %>%
@@ -232,12 +291,13 @@ exit_demogs_year <- function(year) {
       mutate(group = as.character(group))
   }))
   
+
   non_exit_sum <- bind_rows(lapply(demog_list, function(x) {
     exits %>%
       filter(exited == 0 | is.na(exited)) %>%
-      distinct(agency, id_kc_pha, act_date, exit_category, across(all_of(x))) %>%
+      distinct(agency, {{id_var}}, act_date, exit_category, across(all_of(x))) %>%
       group_by(agency, across(all_of(x))) %>%
-      summarise(n = n_distinct(id_kc_pha)) %>%
+      summarise(n = n_distinct({{id_var}})) %>%
       mutate(year_tot = sum(n)) %>%
       ungroup() %>%
       mutate(pct = round(n / year_tot * 100, 1),
@@ -248,32 +308,47 @@ exit_demogs_year <- function(year) {
   
   output <- bind_rows(mutate(exit_sum, exit = 1L), 
                       mutate(non_exit_sum, exit = 0L)) %>%
-    mutate(year = year) %>%
+    mutate(year = year_run) %>%
     select(year, agency, category, group, exit, exit_category, n, year_tot, pct) %>%
     arrange(year, agency, category, group, exit, exit_category)
   return(output)
 }
-  
-exit_demogs_sum <- bind_rows(lapply(c(2012:2020), exit_demogs_year))
+
+
+# Run function for various combinations of options
+exit_demogs_sum <- bind_rows(lapply(c(2012:2020), exit_demogs_year, hh = F, drop_death = F))
+exit_demogs_sum_hh <- bind_rows(lapply(c(2012:2020), exit_demogs_year, hh = T, drop_death = F))
+exit_demogs_sum_nodeath <- bind_rows(lapply(c(2012:2020), exit_demogs_year, hh = F, drop_death = T))
+exit_demogs_sum_hh_nodeath <- bind_rows(lapply(c(2012:2020), exit_demogs_year, hh = T, drop_death = T))
 
 # Duplicate group values to make highlighted gpplots
 exit_demogs_sum <- exit_demogs_sum %>% mutate(group2 = group)
+exit_demogs_sum_hh <- exit_demogs_sum_hh %>% mutate(group2 = group)
+exit_demogs_sum_nodeath <- exit_demogs_sum_nodeath %>% mutate(group2 = group)
+exit_demogs_sum_hh_nodeath <- exit_demogs_sum_hh_nodeath %>% mutate(group2 = group)
 
 
 ## Make a higher level summary ----
-# Count of all exits by group
-exit_demogs_sum_collapse <- exit_demogs_sum %>%
-  group_by(year, agency, category, group, group2, exit) %>%
-  summarise(n = sum(n)) %>%
-  group_by(year, agency, category, group, group2) %>%
-  mutate(year_tot = sum(n)) %>%
-  ungroup() %>%
-  mutate(pct = round(n / year_tot * 100, 1))
+demog_collapse <- function(df) {
+  output <- df %>%
+    group_by(year, agency, category, group, group2, exit) %>%
+    summarise(n = sum(n)) %>%
+    group_by(year, agency, category, group, group2) %>%
+    mutate(year_tot = sum(n)) %>%
+    ungroup() %>%
+    mutate(pct = round(n / year_tot * 100, 1))
+  output
+}
 
+# Count of all exits by group
+exit_demogs_sum_collapse <- demog_collapse(exit_demogs_sum)
+exit_demogs_sum_hh_collapse <- demog_collapse(exit_demogs_sum_hh)
+exit_demogs_sum_nodeath_collapse <- demog_collapse(exit_demogs_sum_nodeath)
+exit_demogs_sum_hh_nodeath_collapse <- demog_collapse(exit_demogs_sum_hh_nodeath)
 
 # # Line graph showing numbers over time by age group
 # exit_demogs_sum_collapse %>%
-#   filter(category == "race_eth_me" & !is.na(group) & exit == 1) %>%
+#   filter(category == "agegrp_expanded" & !is.na(group) & exit == 1) %>%
 #   ggplot(aes(y = n, x = year)) +
 #   geom_line(data = exit_demogs_sum_collapse %>% select(-group) %>%
 #               filter(category == "agegrp_expanded" & !is.na(group2) & exit == 1),
@@ -286,26 +361,50 @@ exit_demogs_sum_collapse <- exit_demogs_sum %>%
 #        y = "Number of exits",
 #        caption = "NB. KCHA exit data is incomplete prior to October 2015") +
 #   facet_grid(group ~ agency)
-# 
-# # Stacked percent bar graph of exit type by age group
-# exit_demogs_sum %>%
-#   filter(category == "agegrp_expanded" & !is.na(group) & exit == 1) %>%
-# ggplot(aes(fill = exit_category, y = n, x = year)) +
-#   geom_bar(position = "fill", stat="identity", colour = "black") +
-#   geom_text(position = position_fill(vjust = 0.5), size = 2, show.legend = F,
-#             aes(group = exit_category, label = paste0(pct, "%"),
-#                 color = exit_category)) +
-#   scale_color_manual(values = label_col) +
-#   geom_text(aes(x = year, y = 1.02, label = year_tot), vjust = 0, size = 2) +
-#   scale_fill_viridis(discrete = T) +
-#   scale_y_continuous(labels = scales::percent) +
-#   theme_ipsum(axis_text_size = 10) +
-#   labs(title = "Proportion of exit types by year and age group",
-#        x = "Year",
-#        y = "Percent of exits",
-#        caption = "NB. KCHA exit data is incomplete prior to October 2015",
-#        fill = "Exit category") +
-#   facet_grid(group ~ agency)
+
+# Stacked percent bar graph of exit type by age group
+exit_demogs_sum %>%
+  filter(category == "agegrp_expanded" & !is.na(group) & exit == 1) %>%
+ggplot(aes(fill = exit_category, y = n, x = year)) +
+  geom_bar(position = "fill", stat="identity", colour = "black") +
+  geom_text(position = position_fill(vjust = 0.5), size = 2, show.legend = F,
+            aes(group = exit_category, label = paste0(pct, "%"),
+                color = exit_category)) +
+  scale_color_manual(values = label_col) +
+  geom_text(aes(x = year, y = 1.02, label = year_tot), vjust = 0, size = 2) +
+  scale_fill_viridis(discrete = T) +
+  scale_y_continuous(labels = scales::percent) +
+  theme_ipsum(axis_text_size = 10) +
+  labs(title = "Proportion of exit types by year and age group",
+       x = "Year",
+       y = "Percent of exits",
+       caption = "NB. KCHA exit data is incomplete prior to October 2015",
+       fill = "Exit category") +
+  facet_grid(group ~ agency)
+
+# Stacked bar chart for portfolios
+exit_demogs_sum %>%
+  filter(agency == "SHA") %>%
+  filter(category == "portfolio_final" & !is.na(group) & group != "Unknown" & exit == 1) %>%
+  ggplot(aes(fill = exit_category, y = n, x = year)) + 
+  geom_bar(position = "fill", stat="identity", colour = "black") +
+  geom_text(position = position_fill(vjust = 0.5), size = 2, show.legend = F,
+            aes(group = exit_category, label = paste0(pct, "%"),
+                color = exit_category)) +
+  scale_color_manual(values = label_col) +
+  geom_text(aes(x = year, y = 1.02, label = year_tot), vjust = 0, size = 2) +
+  scale_fill_viridis(discrete = T) +
+  scale_y_continuous(labels = scales::percent) +
+  theme_ipsum(axis_text_size = 10, grid = F) +
+  labs(title = "Proportion of exit types by year and portfolio (SHA)",
+       x = "Year",
+       y = "Percent of exits",
+       caption = "NB. KCHA exit data is incomplete prior to October 2015",
+       fill = "Exit category") +
+  facet_wrap(~ group)
+
+
+# REMOVE DEATHS AND RERUN ----
 
 
 

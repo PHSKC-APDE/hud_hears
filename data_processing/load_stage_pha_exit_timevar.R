@@ -803,7 +803,9 @@ timevar_repeat %>% count(ever_in_range, true_exit)
 # Only add in bare minimum, join to regular timevar table on id and from_date to get rest
 timevar_exit_final <- timevar_repeat %>%
   left_join(., 
-            distinct(pha_timevar, id_kc_pha, from_date, to_date, hh_id_long, hh_id_kc_pha, cov_time),
+            distinct(pha_timevar, id_kc_pha, from_date, to_date, hh_id_long, hh_id_kc_pha, cov_time,
+                     disability, major_prog, subsidy_type, prog_type, operator_type, vouch_type_final, geo_hash_clean,
+                     geo_kc_area, portfolio_final),
             by = c("id_kc_pha", "from_date", "to_date")) %>%
   left_join(., 
             distinct(pha_timevar_exit, id_kc_pha, act_date, exit_reason, exit_category, pha_source) %>%
@@ -839,7 +841,9 @@ timevar_exit_final <- timevar_exit_final %>%
   mutate(activity_mismatch = ifelse(is.infinite(activity_mismatch), NA, activity_mismatch)) %>%
   select(id_kc_pha, hh_id_long, hh_id_kc_pha, agency, from_date, to_date, truncate_date, period, max_period, cov_time,
          exit_cnt, exit_year, act_date, true_exit, exit_reason, exit_category_pha, exit_category, 
-         pha_source, in_range, ever_in_range, activity_mismatch, activity_gap, activity_gap_next) %>%
+         pha_source, in_range, ever_in_range, activity_mismatch, activity_gap, activity_gap_next,
+         disability, major_prog, subsidy_type, prog_type, operator_type, vouch_type_final, geo_hash_clean,
+         geo_kc_area, portfolio_final) %>%
   distinct()
 
 

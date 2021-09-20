@@ -844,7 +844,8 @@ timevar_exit_final <- timevar_exit_final %>%
          pha_source, in_range, ever_in_range, activity_mismatch, activity_gap, activity_gap_next,
          disability, major_prog, subsidy_type, prog_type, operator_type, vouch_type_final, geo_hash_clean,
          geo_kc_area, portfolio_final) %>%
-  distinct()
+  distinct() %>%
+  mutate(last_run = Sys.time())
 
 
 # LOAD TO SQL ----
@@ -891,7 +892,7 @@ rm(list = ls(pattern = "names"))
 rm(list = ls(pattern = "pha"))
 rm(list = ls(pattern = "id"))
 rm(list = ls(pattern = "exit"))
-rm(kcha_stage, timevar_add)
+rm(kcha_stage, timevar_add, timevar_repeat)
 rm(recursion_dt, recursion_level, remaining_dupes)
 rm(cycles, max_rows, start)
 rm(run_time, st, final_dedup, self_join_dups)

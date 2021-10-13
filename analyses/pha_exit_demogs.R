@@ -33,13 +33,17 @@ db_hhsaw <- DBI::dbConnect(odbc::odbc(),
 
 # BRING IN DATA ----
 # Combined exit/timevar data
-exit_timevar <- dbGetQuery(db_hhsaw, "SELECT * FROM pha.stage_pha_exit_timevar")
+exit_timevar <- dbGetQuery(db_hhsaw, "SELECT * FROM pha.stage_pha_exit_timevar") %>%
+  mutate(portfolio_final = ifelse(str_detect(portfolio_final, "LAKE CITY"),
+                                  "LAKE CITY COURT", portfolio_final))
 
 # Demographic table
 pha_demo <- dbGetQuery(db_hhsaw, "SELECT * FROM pha.final_demo")
 
 # Calyear table
-pha_calyear <- dbGetQuery(db_hhsaw, "SELECT * FROM pha.final_calyear")
+pha_calyear <- dbGetQuery(db_hhsaw, "SELECT * FROM pha.final_calyear") %>%
+  mutate(portfolio_final = ifelse(str_detect(portfolio_final, "LAKE CITY"),
+                                  "LAKE CITY COURT", portfolio_final))
 
 # Action codes from raw 50058 data
 exits_58 <- dbGetQuery(db_hhsaw,
@@ -117,8 +121,13 @@ exit_count <- function(year, hh = F, drop_death = F) {
     count(exited) %>%
     mutate(year_tot = sum(n)) %>%
     ungroup() %>%
-    mutate(pct = round(n / year_tot * 100, 1)) %>%
-    mutate(year = year)
+    mutate(suppressed = between(year_tot, 1, 9),
+           n_supp = ifelse(suppressed, NA, n),
+           year_tot_label = ifelse(suppressed, "<10", as.character(year_tot)),
+           year_tot_supp = ifelse(suppressed, NA, year_tot),
+           pct = round(n / year_tot * 100, 1),
+           pct_supp = ifelse(suppressed, NA, pct),) %>%
+    mutate(exit_year = year)
 }
 
 any_exit <- bind_rows(lapply(c(2012:2020), exit_count))
@@ -127,13 +136,13 @@ any_exit_hh <- bind_rows(lapply(c(2012:2020), exit_count, hh = T))
 
 # Stacked percent bar graph of any exit/no exit
 any_exit_hh %>%
-  ggplot(aes(fill = as.character(exited), y = n, x = year)) +
+  ggplot(aes(fill = as.character(exited), y = n_supp, x = exit_year)) +
   geom_bar(position = "fill", stat="identity", colour = "black") +
   geom_text(position = position_fill(vjust = 0.5), size = 2.5, show.legend = F,
-            aes(group = exited, label = paste0(pct, "%"),
+            aes(group = exited, label = paste0(pct_supp, "%"),
                 color = exited)) +
   scale_color_manual(values = c("white", "black")) +
-  geom_text(aes(x = year, y = 1.02, label = year_tot), vjust = 0, size = 3) +
+  geom_text(aes(x = exit_year, y = 1.02, label = year_tot_label), vjust = 0, size = 3) +
   scale_fill_viridis(discrete = T) +
   scale_y_continuous(labels = scales::percent) +
   theme_ipsum(axis_text_size = 10, grid = F) +
@@ -168,7 +177,12 @@ exit_any <- function(hh = F, drop_death = F) {
     count(exit_category) %>%
     mutate(year_tot = sum(n)) %>%
     ungroup() %>%
-    mutate(pct = round(n / year_tot * 100, 1))
+    mutate(suppressed = between(year_tot, 1, 9),
+           n_supp = ifelse(suppressed, NA, n),
+           year_tot_label = ifelse(suppressed, "<10", as.character(year_tot)),
+           year_tot_supp = ifelse(suppressed, NA, year_tot),
+           pct = round(n / year_tot * 100, 1),
+           pct_supp = ifelse(suppressed, NA, pct),)
   
   output
 }
@@ -184,33 +198,34 @@ hcl <- farver::decode_colour(viridisLite::viridis(length(unique(exit_year$exit_c
 label_col <- ifelse(hcl[, "l"] > 50, "black", "white")
 
 # # Line graph showing numbers over time
-# ggplot(exit_year, aes(group = exit_category, y = n, x = year, color = exit_category)) + 
-#   geom_line(size = 1) +
-#   scale_color_viridis(discrete = T) +
-#   theme_ipsum() + 
-#   labs(title = "Number of exits from KCHA and SHA",
-#        x = "Year",
-#        y = "Number of exits",
-#        caption = "NB. KCHA exit data is incomplete prior to October 2015") +
-#   facet_wrap(~agency)
+ggplot(exit_year, aes(group = exit_category, y = n_supp, x = exit_year, color = exit_category)) +
+  geom_line(size = 1) +
+  scale_color_viridis(discrete = T) +
+  theme_ipsum() +
+  labs(title = "Number of exits from KCHA and SHA",
+       x = "Year",
+       y = "Number of exits",
+       caption = "NB. KCHA exit data is incomplete prior to October 2015") +
+  facet_wrap(~agency)
+
 
 # # Stacked percent bar graph
-# ggplot(exit_year, aes(fill = exit_category, y = n, x = year)) +
-#   geom_bar(position = "fill", stat="identity", colour = "black") +
-#   geom_text(position = position_fill(vjust = 0.5), size = 2.5, show.legend = F,
-#             aes(group = exit_category, label = paste0(pct, "%"),
-#                 color = exit_category)) +
-#   scale_color_manual(values = label_col) +
-#   geom_text(aes(x = year, y = 1.02, label = year_tot), vjust = 0, size = 3) +
-#   scale_fill_viridis(discrete = T) +
-#   scale_y_continuous(labels = scales::percent) +
-#   theme_ipsum() +
-#   labs(title = "Proportion of exit types by year",
-#        x = "Year",
-#        y = "Percent of exits",
-#        caption = "NB. KCHA exit data is incomplete prior to October 2015",
-#        fill = "Exit category") +
-#   facet_wrap(~agency)
+ggplot(exit_year, aes(fill = exit_category, y = n_supp, x = exit_year)) +
+  geom_bar(position = "fill", stat="identity", colour = "black") +
+  geom_text(position = position_fill(vjust = 0.5), size = 2.5, show.legend = F,
+            aes(group = exit_category, label = paste0(pct_supp, "%"),
+                color = exit_category)) +
+  scale_color_manual(values = label_col) +
+  geom_text(aes(x = exit_year, y = 1.02, label = year_tot_label), vjust = 0, size = 3) +
+  scale_fill_viridis(discrete = T) +
+  scale_y_continuous(labels = scales::percent) +
+  theme_ipsum() +
+  labs(title = "Proportion of exit types by year",
+       x = "Year",
+       y = "Percent of exits",
+       caption = "NB. KCHA exit data is incomplete prior to October 2015",
+       fill = "Exit category") +
+  facet_wrap(~agency)
 
 
 ## Set up key values for markdown outpuyt ----
@@ -285,7 +300,12 @@ exit_demogs_year <- function(year_run, hh = F, drop_death = F) {
       count(exit_category) %>%
       mutate(year_tot = sum(n)) %>%
       ungroup() %>%
-      mutate(pct = round(n / year_tot * 100, 1),
+      mutate(suppressed = between(year_tot, 1, 9),
+             n_supp = ifelse(suppressed, NA, n),
+             year_tot_label = ifelse(suppressed, "<10", as.character(year_tot)),
+             year_tot_supp = ifelse(suppressed, NA, year_tot),
+             pct = round(n / year_tot * 100, 1),
+             pct_supp = ifelse(suppressed, NA, pct),
              category = rlang::as_name(x)) %>%
       rename(group = x) %>%
       mutate(group = as.character(group))
@@ -300,7 +320,12 @@ exit_demogs_year <- function(year_run, hh = F, drop_death = F) {
       summarise(n = n_distinct({{id_var}})) %>%
       mutate(year_tot = sum(n)) %>%
       ungroup() %>%
-      mutate(pct = round(n / year_tot * 100, 1),
+      mutate(suppressed = between(year_tot, 1, 9),
+             n_supp = ifelse(suppressed, NA, n),
+             year_tot_label = ifelse(suppressed, "<10", as.character(year_tot)),
+             year_tot_supp = ifelse(suppressed, NA, year_tot),
+             pct = round(n / year_tot * 100, 1),
+             pct_supp = ifelse(suppressed, NA, pct),
              category = rlang::as_name(x)) %>%
       rename(group = x) %>%
       mutate(group = as.character(group))
@@ -308,9 +333,10 @@ exit_demogs_year <- function(year_run, hh = F, drop_death = F) {
   
   output <- bind_rows(mutate(exit_sum, exit = 1L), 
                       mutate(non_exit_sum, exit = 0L)) %>%
-    mutate(year = year_run) %>%
-    select(year, agency, category, group, exit, exit_category, n, year_tot, pct) %>%
-    arrange(year, agency, category, group, exit, exit_category)
+    mutate(exit_year = year_run) %>%
+    select(exit_year, agency, category, group, exit, exit_category, n, n_supp,
+           year_tot, year_tot_supp, year_tot_label, pct, pct_supp, suppressed) %>%
+    arrange(exit_year, agency, category, group, exit, exit_category)
   return(output)
 }
 
@@ -331,10 +357,12 @@ exit_demogs_sum_hh_nodeath <- exit_demogs_sum_hh_nodeath %>% mutate(group2 = gro
 ## Make a higher level summary ----
 demog_collapse <- function(df) {
   output <- df %>%
-    group_by(year, agency, category, group, group2, exit) %>%
+    group_by(exit_year, agency, category, group, group2, exit) %>%
     summarise(n = sum(n)) %>%
-    group_by(year, agency, category, group, group2) %>%
-    mutate(year_tot = sum(n)) %>%
+    group_by(exit_year, agency, category, group, group2) %>%
+    mutate(year_tot = sum(n),
+           year_tot_label = ifelse(between(year_tot, 1, 9), "<10", as.character(year_tot)),
+           year_tot_supp = ifelse(between(year_tot, 1, 9), 0, year_tot)) %>%
     ungroup() %>%
     mutate(pct = round(n / year_tot * 100, 1))
   output
@@ -349,7 +377,7 @@ exit_demogs_sum_hh_nodeath_collapse <- demog_collapse(exit_demogs_sum_hh_nodeath
 # # Line graph showing numbers over time by age group
 # exit_demogs_sum_collapse %>%
 #   filter(category == "agegrp_expanded" & !is.na(group) & exit == 1) %>%
-#   ggplot(aes(y = n, x = year)) +
+#   ggplot(aes(y = n_supp, x = exit_year)) +
 #   geom_line(data = exit_demogs_sum_collapse %>% select(-group) %>%
 #               filter(category == "agegrp_expanded" & !is.na(group2) & exit == 1),
 #             aes(group = group2), color = "grey", size = 0.5, alpha = 0.6) +
@@ -365,13 +393,13 @@ exit_demogs_sum_hh_nodeath_collapse <- demog_collapse(exit_demogs_sum_hh_nodeath
 # Stacked percent bar graph of exit type by age group
 exit_demogs_sum %>%
   filter(category == "agegrp_expanded" & !is.na(group) & exit == 1) %>%
-ggplot(aes(fill = exit_category, y = n, x = year)) +
-  geom_bar(position = "fill", stat="identity", colour = "black") +
+  ggplot(aes(fill = exit_category, y = n_supp, x = exit_year)) +
+  geom_bar(position = "fill", stat = "identity", colour = "black") +
   geom_text(position = position_fill(vjust = 0.5), size = 2, show.legend = F,
-            aes(group = exit_category, label = paste0(pct, "%"),
+            aes(group = exit_category, label = paste0(pct_supp, "%"),
                 color = exit_category)) +
   scale_color_manual(values = label_col) +
-  geom_text(aes(x = year, y = 1.02, label = year_tot), vjust = 0, size = 2) +
+  geom_text(aes(x = exit_year, y = 1.02, label = year_tot_label), vjust = 0, size = 2) +
   scale_fill_viridis(discrete = T) +
   scale_y_continuous(labels = scales::percent) +
   theme_ipsum(axis_text_size = 10) +
@@ -382,17 +410,18 @@ ggplot(aes(fill = exit_category, y = n, x = year)) +
        fill = "Exit category") +
   facet_grid(group ~ agency)
 
+
 # Stacked bar chart for portfolios
 exit_demogs_sum %>%
   filter(agency == "SHA") %>%
   filter(category == "portfolio_final" & !is.na(group) & group != "Unknown" & exit == 1) %>%
-  ggplot(aes(fill = exit_category, y = n, x = year)) + 
+  ggplot(aes(fill = exit_category, y = n_supp, x = exit_year)) + 
   geom_bar(position = "fill", stat="identity", colour = "black") +
   geom_text(position = position_fill(vjust = 0.5), size = 2, show.legend = F,
-            aes(group = exit_category, label = paste0(pct, "%"),
+            aes(group = exit_category, label = paste0(pct_supp, "%"),
                 color = exit_category)) +
   scale_color_manual(values = label_col) +
-  geom_text(aes(x = year, y = 1.02, label = year_tot), vjust = 0, size = 2) +
+  geom_text(aes(x = exit_year, y = 1.02, label = year_tot_label), vjust = 0, size = 2) +
   scale_fill_viridis(discrete = T) +
   scale_y_continuous(labels = scales::percent) +
   theme_ipsum(axis_text_size = 10, grid = F) +

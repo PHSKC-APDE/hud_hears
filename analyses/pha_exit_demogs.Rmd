@@ -42,7 +42,7 @@ The data below show demographics of people who exited from King County Housing A
 # Individual-level analyses
 ## Exits over time
 ### Proportion of people exiting
--   Approximately 5% of KCHA and SHA residents exit in a given year, excluding 2020 when the COVID pandemic reduced this proportion (to <1% for SHA).
+-   Approximately 5% of KCHA and SHA residents exit in a given year, excluding 2020 when the COVID pandemic reduced this proportion.
 ```{r exitprop, fig.asp=0.7, fig.width=10}
 any_exit %>%
   ggplot(aes(fill = as.character(exited), y = n_supp, x = exit_year)) +
@@ -67,7 +67,8 @@ any_exit %>%
 ### Type of exits by year
 
 -   Both positive and negative exits increased over time at SHA before a sharp decrease in 2020.
--   There was no clear pattern of KCHA exits between 2016 (the first year full exit data were available) and 2020. Though there was a decrease in exits in 2020, it was not as substantial as for SHA.
+-   There was no clear pattern of KCHA exits between 2016 (the first year full exit data were available) and 2020 beyond a decline in negative exits.
+-   Numbers of positive and negative exits from SHA were largely the same across 2012 to 2019, before a decline in 2020.
 
 ```{r year}
 # Line graph showing numbers over time

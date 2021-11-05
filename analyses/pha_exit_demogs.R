@@ -138,7 +138,7 @@ any_exit_hh <- bind_rows(lapply(c(2012:2020), exit_count, hh = T))
 any_exit_hh %>%
   ggplot(aes(fill = as.character(exited), y = n_supp, x = exit_year)) +
   geom_bar(position = "fill", stat="identity", colour = "black") +
-  geom_text(position = position_fill(vjust = 0.5), size = 2.5, show.legend = F,
+  geom_text(position = position_fill(vjust = 0.5), size = 3, show.legend = F,
             aes(group = exited, label = paste0(pct_supp, "%"),
                 color = exited)) +
   scale_color_manual(values = c("white", "black")) +
@@ -212,7 +212,7 @@ ggplot(exit_year, aes(group = exit_category, y = n_supp, x = exit_year, color = 
 # # Stacked percent bar graph
 ggplot(exit_year, aes(fill = exit_category, y = n_supp, x = exit_year)) +
   geom_bar(position = "fill", stat="identity", colour = "black") +
-  geom_text(position = position_fill(vjust = 0.5), size = 2.5, show.legend = F,
+  geom_text(position = position_fill(vjust = 0.5), size = 3, show.legend = F,
             aes(group = exit_category, label = paste0(pct_supp, "%"),
                 color = exit_category)) +
   scale_color_manual(values = label_col) +
@@ -438,4 +438,4 @@ exit_demogs_sum %>%
 
 
 # MAKE MARKDOWN DOC ----
-render(file.path(here::here(), "analyses/pha_exit_demogs.Rmd"), "html_document")
+render(file.path(here::here(), "analyses/pha_exit_demogs.Rmd"), "word_document")

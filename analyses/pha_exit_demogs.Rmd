@@ -47,7 +47,7 @@ The data below show demographics of people who exited from King County Housing A
 any_exit %>%
   ggplot(aes(fill = as.character(exited), y = n_supp, x = exit_year)) +
   geom_bar(position = "fill", stat="identity", colour = "black") +
-  geom_text(position = position_fill(vjust = 0.5), size = 2.5, show.legend = F,
+  geom_text(position = position_fill(vjust = 0.5), size = 3, show.legend = F,
             aes(group = exited, label = paste0(pct_supp, "%"),
                 color = exited)) +
   scale_color_manual(values = c("white", "black")) +
@@ -93,7 +93,7 @@ ggplot(exit_year, aes(group = exit_category, y = n_supp, x = exit_year, color = 
 # Stacked percent bar graph
 ggplot(exit_year, aes(fill = exit_category, y = n_supp, x = exit_year)) + 
   geom_bar(position = "fill", stat="identity", colour = "black") +
-  geom_text(position = position_fill(vjust = 0.5), size = 2.5, show.legend = F,
+  geom_text(position = position_fill(vjust = 0.5), size = 3, show.legend = F,
             aes(group = exit_category, label = paste0(pct_supp, "%"),
                 color = exit_category)) +
   scale_color_manual(values = label_col) +
@@ -278,7 +278,7 @@ exit_demogs_sum %>%
 any_exit_hh %>%
   ggplot(aes(fill = as.character(exited), y = n_supp, x = exit_year)) +
   geom_bar(position = "fill", stat="identity", colour = "black") +
-  geom_text(position = position_fill(vjust = 0.5), size = 2.5, show.legend = F,
+  geom_text(position = position_fill(vjust = 0.5), size = 3, show.legend = F,
             aes(group = exited, label = paste0(pct_supp, "%"),
                 color = exited)) +
   scale_color_manual(values = c("white", "black")) +
@@ -323,7 +323,7 @@ ggplot(exit_year_hh, aes(group = exit_category, y = n_supp, x = exit_year, color
 # Stacked percent bar graph
 ggplot(exit_year_hh, aes(fill = exit_category, y = n_supp, x = exit_year)) + 
   geom_bar(position = "fill", stat="identity", colour = "black") +
-  geom_text(position = position_fill(vjust = 0.5), size = 2.5, show.legend = F,
+  geom_text(position = position_fill(vjust = 0.5), size = 3, show.legend = F,
             aes(group = exit_category, label = paste0(pct_supp, "%"),
                 color = exit_category)) +
   scale_color_manual(values = label_col) +
@@ -524,7 +524,7 @@ ggplot(exit_year_nodeath, aes(group = exit_category, y = n_supp, x = exit_year, 
 # Stacked percent bar graph
 ggplot(exit_year_nodeath, aes(fill = exit_category, y = n_supp, x = exit_year)) + 
   geom_bar(position = "fill", stat="identity", colour = "black") +
-  geom_text(position = position_fill(vjust = 0.5), size = 2.5, show.legend = F,
+  geom_text(position = position_fill(vjust = 0.5), size = 3, show.legend = F,
             aes(group = exit_category, label = paste0(pct_supp, "%"),
                 color = exit_category)) +
   scale_color_manual(values = label_col) +

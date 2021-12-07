@@ -14,7 +14,7 @@
 options(scipen = 6, digits = 4, warning.length = 8170)
 
 if (!require("pacman")) {install.packages("pacman")}
-pacman::p_load(tidyverse, odbc, glue, data.table, RecordLinkage, lubridate)
+pacman::p_load(tidyverse, odbc, glue, data.table, RecordLinkage, lubridate, sqldf)
 
 # Connect to HHSAW
 db_hhsaw <- DBI::dbConnect(odbc::odbc(),
@@ -725,30 +725,43 @@ pha_exit_id <- left_join(pha_exit, select(names_final, id_hash, id_kc_pha, id_cn
 ## Set up the max period for each person ----
 pha_timevar <- pha_timevar %>%
   group_by(id_kc_pha, period) %>%
-  mutate(max_period = from_date == max(from_date)) %>%
+  mutate(max_in_period = to_date == max(to_date)) %>%
+  group_by(id_kc_pha) %>%
+  mutate(max_period = max(period, na.rm = T)) %>%
   ungroup()
 
 ## Join exit data to the timevar table ----
 # Only people who matched IDs will be included
 # Just include key elements for now, add remaining details later once exit data is processed
 pha_timevar_exit <- pha_timevar %>%
-  select(id_kc_pha, hh_id_long, hh_id_kc_pha, agency, from_date, to_date, period, max_period) %>%
+  select(id_kc_pha, hh_id_long, hh_id_kc_pha, agency, from_date, to_date, period, max_in_period, max_period) %>%
   left_join(., distinct(pha_exit_id, id_kc_pha, act_date, exit_reason, exit_category, pha_source, id_cnt),
             by = "id_kc_pha")
 
 
-# Apply exit information across entire household
+## Apply exit information across entire household ----
 hh_timevar_exit <- pha_timevar_exit %>%
   distinct(hh_id_long, hh_id_kc_pha, act_date, exit_reason, exit_category, pha_source) %>%
   filter(!is.na(act_date))
 
-pha_timevar_exit <- left_join(pha_timevar_exit, hh_timevar_exit, by = "hh_id_long") %>%
-  mutate(act_date = coalesce(act_date.x, act_date.y),
+# Use sqldf for non-equi join
+pha_timevar_exit <- sqldf("SELECT a.*, b.hh_id_kc_pha AS hh_id_kc_pha_y, 
+              b.act_date AS act_date_y, b.exit_reason AS exit_reason_y,
+              b.exit_category AS exit_category_y, b.pha_source AS pha_source_y
+              FROM 
+              (SELECT * FROM pha_timevar_exit) a
+              LEFT JOIN
+              (SELECT * FROM hh_timevar_exit) b
+              ON a.hh_id_long = b.hh_id_long AND 
+              a.from_date <= b.act_date AND a.to_date >= b.act_date
+              ") %>%
+  rename(act_date.x = act_date) %>%
+  mutate(act_date = coalesce(act_date.x, as.Date(act_date_y, origin = "1970-01-01")),
          # Can't use coalesce for other fields because sometimes they are NA when there is an act_date
-         exit_reason = ifelse(is.na(act_date.x), exit_reason.y, exit_reason.x),
-         exit_category = ifelse(is.na(act_date.x), exit_category.y, exit_category.x),
-         pha_source = ifelse(is.na(act_date.x), pha_source.y, pha_source.x)) %>%
-  select(-ends_with(".x"), -ends_with(".y")) %>%
+         exit_reason = ifelse(is.na(act_date.x), exit_reason_y, exit_reason),
+         exit_category = ifelse(is.na(act_date.x), exit_category_y, exit_category),
+         pha_source = ifelse(is.na(act_date.x), pha_source_y, pha_source)) %>%
+  select(-ends_with(".x"), -ends_with("_y")) %>%
   distinct()
 
 
@@ -762,36 +775,47 @@ exit_list <- pha_timevar_exit %>% filter(!is.na(act_date)) %>% distinct(id_kc_ph
 
 # Repeat a person's from/to date for each act date
 timevar_repeat <- pha_timevar_exit %>% 
-  distinct(id_kc_pha, agency, from_date, to_date, period, max_period) %>%
+  distinct(id_kc_pha, agency, from_date, to_date, period, max_in_period, max_period) %>%
   left_join(., exit_list, by = "id_kc_pha") %>%
   arrange(id_kc_pha, act_date, from_date, to_date, agency)
+
 
 
 ## Flag if a person has activity after an exit date ----
 # Consider 12 months between exit and next from_date to be a true exit
 # Need to account for time in the current interval after 'exit_date'
 # Also include exits that fall within 6 months of a person's final to_date
+# (e.g., some exits due to death have a later act_date than the final to_date)
 timevar_repeat <- setDT(timevar_repeat) # Switch to data table for faster group work
 
 timevar_repeat[, in_range := act_date >= from_date & act_date <= to_date]
-timevar_repeat[, activity_mismatch := max(in_range != max_period, na.rm = T), by = c("id_kc_pha", "act_date")]
+timevar_repeat[, activity_mismatch := max(in_range != max_in_period, na.rm = T), by = c("id_kc_pha", "act_date")]
 timevar_repeat[, `:=` (activity_gap = case_when(in_range == F ~ NA_real_,
-                                                activity_mismatch == 0 ~ NA_real_,
+                                                is.na(act_date) ~ NA_real_,
                                                 TRUE ~ interval(start = act_date, end = to_date) / ddays(1) + 1),
                        activity_gap_next = case_when(in_range == F ~ NA_real_,
-                                                     activity_mismatch == 0 ~ NA_real_,
+                                                     max_in_period == 0 ~ NA_real_,
                                                      lead(id_kc_pha, 1) == id_kc_pha ~ 
                                                        interval(start = act_date, end = lead(from_date, 1)) / ddays(1) + 1,
                                                      TRUE ~ NA_real_))]
 timevar_repeat[, true_exit := case_when(is.na(activity_mismatch) ~ NA_integer_,
-                              activity_mismatch == 0 & max_period == T ~ 1L,
+                              activity_mismatch == 0 & max_in_period == T ~ 1L,
                               activity_gap_next - activity_gap > 365 ~ 1L,
-                              max_period == T & act_date > to_date & lead(id_kc_pha, 1) != id_kc_pha & 
+                              max_in_period == T & act_date > to_date & lead(id_kc_pha, 1) != id_kc_pha & 
                                 interval(start = to_date, end = act_date) / ddays(1) + 1 <= 180 ~ 1L,
                               TRUE ~ 0L)]
 
-# Apply true exit status across all records for that exit
-timevar_repeat[, true_exit := max(true_exit, na.rm = T), by = c("id_kc_pha", "act_date")]
+
+# Remove rows that don't have an in_range exit (except for ones that occur later than 
+# the final to_date)
+timevar_repeat[in_range == F & !(max_in_period == T & max_period == period & act_date > to_date), 
+               `:=` (act_date = NA_Date_, activity_mismatch = NA_integer_, true_exit = NA_integer_)]
+timevar_repeat <- unique(timevar_repeat)
+
+# Also get rid of duplicate rows where one has an act_date and one does not
+timevar_repeat[, `:=` (row_cnt = .N, dates = uniqueN(act_date, na.rm = T)), by = .(id_kc_pha, from_date, to_date)]
+timevar_repeat <- timevar_repeat[!(row_cnt > dates & dates != 0 & is.na(act_date))]
+
 
 # See if the act date was ever in range of a person's activity intervals
 timevar_repeat[, ever_in_range := max(in_range), by = c("id_kc_pha", "act_date")]
@@ -814,17 +838,16 @@ timevar_exit_final <- timevar_repeat %>%
 
 
 ## Truncate to_date if appropriate ----
-# If an exit date falls in the last known coverage period for a person, truncate to_date
+# If an exit date falls in the last known coverage period for a person, consider truncating to_date
+# Do not do this by default because a single head of household exit may not mean exits for everyone
+# and/or people may have moved from SHA to KCHA or vice versa.
+# Instead flag potential false exits by calculating time to exit
 timevar_exit_final <- timevar_exit_final %>%
-  mutate(truncate_date = case_when(is.na(act_date) ~ NA_integer_,
-                                   in_range == T & max_period == T ~ 1L,
-                                   TRUE ~ 0L)) %>%
-  mutate(to_date = as.Date(case_when(is.na(truncate_date) ~ to_date,
-                                     truncate_date == 1 ~ act_date,
-                                     TRUE ~ to_date), origin = "1970-01-01"),
-         cov_time = case_when(is.na(truncate_date) ~ cov_time,
-                              truncate_date == 1 ~ interval(start = from_date, end = to_date) / ddays(1) + 1,
-                              TRUE ~ cov_time))
+  mutate(possible_false_exit = case_when(is.na(act_date) ~ NA_integer_,
+                                         in_range == T & max_in_period == T & activity_gap >= 365 ~ 1L,
+                                         in_range == T & max_in_period == T & activity_gap < 365 ~ 0L,
+                                         in_range == T & max_in_period == F ~ 0L,
+                                         TRUE ~ NA_integer_))
 
 
 ## Tidy up exit reasons ----
@@ -839,9 +862,9 @@ timevar_exit_final <- timevar_exit_final %>%
 # Also replace Infinite values
 timevar_exit_final <- timevar_exit_final %>%
   mutate(activity_mismatch = ifelse(is.infinite(activity_mismatch), NA, activity_mismatch)) %>%
-  select(id_kc_pha, hh_id_long, hh_id_kc_pha, agency, from_date, to_date, truncate_date, period, max_period, cov_time,
+  select(id_kc_pha, hh_id_long, hh_id_kc_pha, agency, from_date, to_date, period, max_in_period, cov_time,
          exit_cnt, exit_year, act_date, true_exit, exit_reason, exit_category_pha, exit_category, 
-         pha_source, in_range, ever_in_range, activity_mismatch, activity_gap, activity_gap_next,
+         pha_source, in_range, ever_in_range, activity_mismatch, activity_gap, activity_gap_next, possible_false_exit,
          disability, major_prog, subsidy_type, prog_type, operator_type, vouch_type_final, geo_hash_clean,
          geo_kc_area, portfolio_final) %>%
   distinct() %>%

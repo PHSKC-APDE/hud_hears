@@ -1,7 +1,7 @@
 # HEADER ----
 # Author: Alastair Matheson, 2021-09-20
 #
-# Purpose: Create master ID linkage file for the HUD HEARS project, identifying people across Mcaid, Mcare, and PHA with a NEW ID_APDE
+# Purpose: Create master ID linkage file for the HUD HEARS project, identifying people across Mcaid, Mcare, and PHA with a NEW HUD HEARS study ID
 #
 
 
@@ -110,7 +110,7 @@ prep_sex <- function(dt){
   dt[gender == "Multiple", gender := 0L]
   dt[gender %in% c("Male", "M"), gender := 1L]
   dt[gender %in% c("Female", "F"), gender := 2L]
-  dt[gender == "Unknown", gender := NA_integer_]
+  dt[gender %in% c("Unknown", "NULL"), gender := NA_integer_]
   dt[, gender := as.integer(gender)]
   
   return(dt)
@@ -207,9 +207,9 @@ match_process <- function(pairs_input, df, iteration) {
       rowid_min <- unique(rowid_min[, .(rowid, rowid_min)])
       # Join back to data to keep min
       double_dups <- merge(double_dups, rowid_min, by.x = "row_min", by.y = "rowid", all.x = T)
-      double_dups[, back_join_id := min(rowid_min), by = "rowid"]
-      double_dups[, row_min := NULL]
-      double_dups[, rowid_min := NULL]
+      double_dups[, back_join_id := min(rowid_min.y), by = "rowid"]
+      double_dups[, rowid_min.x := NULL]
+      double_dups[, rowid_min.y := NULL]
     } else if (max(double_dups$rows_per_id) >= 3) {
       stop("Need to check the the logic for double_dups works when rows_per_id > 3")
     } else {
@@ -300,7 +300,7 @@ self_join_dups <- function(base_df, iterate_df, iteration) {
 # This function creates a vector of unique IDs of any length
 # id_n = how many unique IDs you want generated
 # id_length = how long do you want the ID to get (too short and you'll be stuck in a loop)
-id_nodups <- function(id_n, id_length, seed = 98104) {
+id_nodups <- function(id_n, id_length, seed = 202198104) {
   set.seed(seed)
   id_list <- stringi::stri_rand_strings(n = id_n, length = id_length, pattern = "[a-z0-9]")
   
@@ -531,10 +531,68 @@ pha <- unique(pha)
 # Placeholder for now until there is a table of existing IDs and history
 
 
+
+# PREP ESD DATA ----
+## (1) Load data from SQL ----
+db_hhsaw_dev <- DBI::dbConnect(odbc::odbc(),
+                           driver = "ODBC Driver 17 for SQL Server",
+                           server = "tcp:kcitazrhpasqldev20.database.windows.net,1433",
+                           database = "hhs_analytics_workspace",
+                           uid = keyring::key_list("hhsaw")[["username"]],
+                           pwd = keyring::key_get("hhsaw", keyring::key_list("hhsaw")[["username"]]),
+                           Encrypt = "yes",
+                           TrustServerCertificate = "yes",
+                           Authentication = "ActiveDirectoryPassword")
+
+esd <- setDT(odbc::dbGetQuery(db_hhsaw_dev, "SELECT * FROM esd.stage_elig_id"))
+
+
+## (2) Tidy PHA data ----
+# Rename fields
+setnames(esd, names(esd), c("customerkey", "ssn", "fname", "mname", "lname", "dob", "gender"))
+
+# Names
+esd <- prep_names(esd)
+
+# Gender
+esd <- prep_sex(esd)
+
+# DOB
+esd <- prep_dob(esd)
+
+# SSN
+esd <- prep_ssn(esd)
+
+
+# id_hash
+esd[, id_hash := as.character(toupper(openssl::sha256(paste(str_replace_na(ssn, ''),
+                                                            str_replace_na(customerkey, ''),
+                                                            str_replace_na(lname, ''),
+                                                            str_replace_na(fname, ''),
+                                                            str_replace_na(mname, ''),
+                                                            str_replace_na(dob_y, ''),
+                                                            str_replace_na(dob_m, ''),
+                                                            str_replace_na(dob_d, ''),
+                                                            str_replace_na(gender, ''),
+                                                            sep = "|"))))]
+
+
+# Add source
+esd[, source_system := "esd"]
+
+# Keep only distinct values
+esd <- unique(esd)
+
+## (3) Compare to existing IDs ----
+# Placeholder for now until there is a table of existing IDs and history
+
+
+
 # COMBINE ALL SOURCES INTO ONE PLACE ----
 input <- bind_rows(idh,
                    # mcare.dt,
-                   pha) %>%
+                   pha,
+                   esd) %>%
   select(-starts_with("geo_"), -full_name, -ssn_raw, -dob_raw, -gender_raw, 
          -female, -dob, -last_run, -pha_id) %>%
   distinct() %>%
@@ -574,23 +632,24 @@ pairs_01 <- getPairs(classify_01, single.rows = TRUE) %>%
 
 ## Review output and select cutoff point(s) ----
 # pairs_01 %>%
-#   filter(Weight >= 0.77) %>%
+#   filter(Weight >= 0.4) %>%
 #   filter(id_kcmaster.1 != id_kcmaster.2 | is.na(id_kcmaster.1) | is.na(id_kcmaster.2)) %>%
 #   filter(id_kc_pha.1 != id_kc_pha.2 | is.na(id_kc_pha.1) | is.na(id_kc_pha.2)) %>%
-#   # filter(((dob_m.1 == "1" & dob_d.1 == "1") | (dob_m.2 == "1" & dob_d.2 == "1"))) %>%
+#   filter(source_system.1 == "esd" | source_system.2 == "esd") %>%
+#   filter(!((dob_m.1 == "1" & dob_d.1 == "1") | (dob_m.2 == "1" & dob_d.2 == "1"))) %>%
 #   # filter(!(dob_m.1 == "1" & dob_d.1 == "1" & dob_m.2 == "1" & dob_d.2 == "1")) %>%
 #   # filter(dob_m.1 == "1" & dob_d.1 == "1" & dob_m.2 == "1" & dob_d.2 == "1") %>%
 #   # filter(dob_y.1 != dob_y.2) %>%
-#   # filter(dob_y.1 == dob_y.2 | abs(dob_y.1 - dob_y.2) == 100) %>%
+#   filter(dob_y.1 == dob_y.2 | abs(dob_y.1 - dob_y.2) == 100) %>%
 #   # filter(dob_m.1 != dob_m.2 | dob_d.1 != dob_d.2) %>%
 #   # filter(dob_m.1 == dob_d.2 & dob_d.1 == dob_m.2) %>%
 #   # filter(dob_m.1 != dob_d.1) %>%
 #   # filter(is.na(lname.1) | is.na(lname.2)) %>%
-#   # filter(lname.1 == fname.2 & fname.1 == lname.2) %>%
+#   filter(lname.1 == fname.2 & fname.1 == lname.2) %>%
 #   # filter(gender.1 == gender.2) %>%
 #   # filter(source_system.1 != source_system.2) %>%
-#   filter(is.na(gender.1) | is.na(gender.2) | is.na(dob_y.1) | is.na(dob_y.2)) %>%
-#   filter(fname.1 == fname.2) %>%
+#   # filter(is.na(gender.1) | is.na(gender.2) | is.na(dob_y.1) | is.na(dob_y.2)) %>%
+#   # filter(fname.1 == fname.2) %>%
 #   select(id1, ssn.1, lname.1, fname.1, mname.1, dob_y.1,
 #          dob_m.1, dob_d.1, gender.1, source_system.1, id_kcmaster.1, id_mcaid.1, id_kc_pha.1,
 #          id2, ssn.2, lname.2, fname.2, mname.2, dob_y.2,
@@ -600,7 +659,7 @@ pairs_01 <- getPairs(classify_01, single.rows = TRUE) %>%
 
 # Make truncated version
 pairs_01_trunc <- pairs_01 %>%
-  # Avoid matching all the PHA of IDH IDs again
+  # Avoid matching all the PHA or IDH IDs again
   filter(id_kcmaster.1 != id_kcmaster.2 | is.na(id_kcmaster.1) | is.na(id_kcmaster.2)) %>%
   filter(id_kc_pha.1 != id_kc_pha.2 | is.na(id_kc_pha.1) | is.na(id_kc_pha.2)) %>%
   filter(
@@ -637,7 +696,9 @@ pairs_01_trunc <- pairs_01 %>%
               # Higher threshold first names don't match
               (Weight > 0.64 & fname.1 != fname.2)
           )
-      )
+      ) |
+      # SECTION FOR CATCHING OTHER MATCHES
+      id_hash.1 == id_hash.2
   )
 
 ## Collapse IDs ----
@@ -703,7 +764,7 @@ pairs_02 %>%
 
 # Make truncated data frame
 pairs_02_trunc <- pairs_02 %>%
-  # Avoid matching all the PHA IDs again but allow Medicaid rows to match
+  # Avoid matching all the PHA or IDH IDs again
   filter(id_kcmaster.1 != id_kcmaster.2 | is.na(id_kcmaster.1) | is.na(id_kcmaster.2)) %>%
   filter(id_kc_pha.1 != id_kc_pha.2 | is.na(id_kc_pha.1) | is.na(id_kc_pha.2)) %>%
   # Don't include mismatching id_mcaids (spot checking a few indicated most (but not all) are different people)
@@ -738,135 +799,30 @@ if (max(match_02_chk$cnt) > 1) {
 rm(match_02_chk)
 
 
-# THIRD PASS: BLOCK ON ID_MCAID ----
-# This only applies to Medicaid sources but will capture variations within an ID
-## Run deduplication ----
-st <- Sys.time()
-match_03 <- RecordLinkage::compare.dedup(
-  input, 
-  blockfld = c("id_mcaid"), 
-  strcmp = c("ssn", "lname", "fname", "mname", "gender", "dob_y", "dob_m", "dob_d"), 
-  exclude = c(#"id_mcare", 
-    "id_kc_pha", "lname_phon", "fname_phon", "rowid", "id_hash", "source"))
-message("Pairwise comparisons complete. Total run time: ", round(Sys.time() - st, 2), " ", units(Sys.time()-st))
 
-summary(match_03)
-
-## Add weights and extract pairs ----
-# Using EpiLink approach
-match_03 <- epiWeights(match_03)
-classify_03 <- epiClassify(match_03, threshold.upper = 0.6)
-summary(classify_03)
-pairs_03 <- getPairs(classify_03, single.rows = TRUE) %>%
-  mutate(across(contains("dob_"), ~ str_squish(.)),
-         across(contains("dob_"), ~ as.numeric(.)))
-
-## Review output and select cutoff point(s) ----
-# pairs_03 %>% 
-#   filter(source_system.1 == source_system.2) %>%
-#   filter(Weight >= 0.6) %>% 
-#   filter(ssn.1 == ssn.2) %>%
-#   # filter(!is.na(ssn.1) & !is.na(ssn.2)) %>%
-#   # filter(is.na(ssn.1) | is.na(ssn.2)) %>%
-#   # filter(!(dob_m.1 == "1" & dob_d.1 == "1")) %>%
-#   # filter(dob_m.1 == "1" & dob_d.1 == "1") %>%
-#   # filter(id_mcaid.1 != id_mcaid.2) %>%
-#   filter(fname.1 != fname.2) %>%
-#   select(id1, ssn.1, lname.1, fname.1, mname.1, dob_y.1, 
-#          dob_m.1, dob_d.1, gender.1, source_system.1, id_mcaid.1, id_kc_pha.1,
-#          id2, ssn.2, lname.2, fname.2, mname.2, dob_y.2, 
-#          dob_m.2, dob_d.2, gender.2, source_system.2, id_mcaid.2, id_kc_pha.2,
-#          Weight) %>%
-#   tail()
+# THIRD PASS: BLOCK ON ID_KCMASTER ----
+# Makes sure existing linkages within IDH data end up in the same ID
+# Can just add a cluster ID to id_kcmaster
+match_03_dedup <- input %>% 
+  filter(!is.na(id_kcmaster)) %>%
+  distinct(id_kcmaster) %>%
+  mutate(clusterid_3 = row_number() + max(match_02_dedup$clusterid_2)) %>%
+  inner_join(., input, by = "id_kcmaster") %>% 
+  select(id_kcmaster, source_system:rowid, clusterid_3)
 
 
-# Make truncated data frame
-pairs_03_trunc <- pairs_03 %>%
-  filter(
-    # Keep any matching id_mcaid (i.e. all pairs)
-    id_mcaid.1 == id_mcaid.2
-  )
+
+# FOURTH PASS: BLOCK ON ID_KC_PHA ----
+# Makes sure existing linkages within PHA data end up in the same ID
+# Can just add a cluster ID to id_kc_pha
+match_04_dedup <- input %>% 
+  filter(!is.na(id_kc_pha)) %>%
+  distinct(id_kc_pha) %>%
+  mutate(clusterid_4 = row_number() + max(match_03_dedup$clusterid_3)) %>%
+  inner_join(., input, by = "id_kc_pha") %>% 
+  select(id_kc_pha, source_system:rowid, clusterid_4)
 
 
-## Collapse IDs ----
-match_03_dedup <- match_process(pairs_input = pairs_03_trunc, df = input, iteration = 3) %>%
-  mutate(clusterid_3 = clusterid_3 + max(match_02_dedup$clusterid_2))
-
-## Error check ----
-match_03_chk <- setDT(match_03_dedup %>% distinct(id_hash, clusterid_3))
-match_03_chk[, cnt := .N, by = "id_hash"]
-
-if (max(match_03_chk$cnt) > 1) {
-  stop("Some id_hash values are associated with multiple clusterid_3 values. ",
-       "Check what went wrong.")
-}
-
-rm(match_03_chk)
-
-
-# FOURTH PASS: BLOCK ON ID_KC_PHA AND PHONETIC NAME ----
-# This only applies to PHA sources but will capture variations within an ID
-## Run deduplication ----
-st <- Sys.time()
-match_04 <- RecordLinkage::compare.dedup(
-  input, 
-  blockfld = c("id_kc_pha"), 
-  strcmp = c("ssn", "lname", "fname", "mname", "gender", "dob_y", "dob_m", "dob_d"), 
-  exclude = c("id_mcaid", #"id_mcare", 
-              "rowid", "id_hash", "source", "lname_phon", "fname_phon"))
-message("Pairwise comparisons complete. Total run time: ", round(Sys.time() - st, 2), " ", units(Sys.time()-st))
-
-summary(match_04)
-
-## Add weights and extract pairs ----
-# Using EpiLink approach
-match_04 <- epiWeights(match_04)
-classify_04 <- epiClassify(match_04, threshold.upper = 0.6)
-summary(classify_04)
-pairs_04 <- getPairs(classify_04, single.rows = TRUE) %>%
-  mutate(across(contains("dob_"), ~ str_squish(.)),
-         across(contains("dob_"), ~ as.numeric(.)))
-
-## Review output and select cutoff point(s) ----
-# pairs_04 %>% 
-#   filter(source_system.1 == source_system.2) %>%
-#   filter(Weight >= 0.7) %>% 
-#   filter(ssn.1 == ssn.2) %>%
-#   # filter(!is.na(ssn.1) & !is.na(ssn.2)) %>%
-#   # filter(is.na(ssn.1) | is.na(ssn.2)) %>%
-#   # filter(!(dob_m.1 == "1" & dob_d.1 == "1")) %>%
-#   # filter(dob_m.1 == "1" & dob_d.1 == "1") %>%
-#   # filter(id_mcaid.1 != id_mcaid.2) %>%
-#   # filter(fname.1 == fname.2) %>%
-#   select(id1, ssn.1, lname.1, fname.1, mname.1, dob_y.1, 
-#          dob_m.1, dob_d.1, gender.1, source_system.1, id_mcaid.1, id_kc_pha.1,
-#          id2, ssn.2, lname.2, fname.2, mname.2, dob_y.2, 
-#          dob_m.2, dob_d.2, gender.2, source_system.2, id_mcaid.2, id_kc_pha.2,
-#          Weight) %>%
-#   tail()
-
-
-# Make truncated data frame
-pairs_04_trunc <- pairs_04 %>%
-  filter(
-    # Keep any matching id_mcaid (i.e. all pairs)
-    id_kc_pha.1 == id_kc_pha.2
-  )
-
-## Collapse IDs ----
-match_04_dedup <- match_process(pairs_input = pairs_04_trunc, df = input, iteration = 4) %>%
-  mutate(clusterid_4 = clusterid_4 + max(match_03_dedup$clusterid_3))
-
-## Error check ----
-match_04_chk <- setDT(match_04_dedup %>% distinct(id_hash, clusterid_4))
-match_04_chk[, cnt := .N, by = "id_hash"]
-
-if (max(match_04_chk$cnt) > 1) {
-  stop("Some id_hash values are associated with multiple clusterid_4 values. ",
-       "Check what went wrong.")
-}
-
-rm(match_04_chk)
 
 
 # BRING MATCHING ROUNDS TOGETHER ----
@@ -874,7 +830,7 @@ rm(match_04_chk)
 # is associated with multiple clusterid_1 values, then take the min of the latter.
 # Repeat using clusterid_2 until there is a 1:1 match between clusterid_1 and _2
 # For now, need to do this iterative for passes 3 and 4. Eventually come up with a better
-# scaleable solution
+# scalable solution
 
 final_dedup <- function(df1, df2, id1, id2) {
   ## Make joint data
@@ -955,6 +911,7 @@ final_dedup_collapse <- function(iterate_dt, iteration) {
 }
 
 
+
 ## Make joint data with pass 1 plus other passes ----
 combine_1_2 <- final_dedup(df1 = match_01_dedup, id1 = "clusterid_1",
                            df2 = match_02_dedup, id2 = "clusterid_2")
@@ -997,146 +954,6 @@ combine_all <- final_dedup(df1 = combine_all_1_2, id1 = "cluster_final",
                            df2 = combine_3_4, id2 = "cluster_final")
 
 
-## Tests ----
-match_03_dedup %>% filter(id_hash %in% c("09FEBBF264A9DC9565629D830D8FF3DD7BAD9E81F6C61AFE09EE082A071D5EEA",
-                                         "AC2C86570ED170951CF1CAD7102135BFBAE594E1700A57D52547CF19263F8525",
-                                         "A5C7968DF4FE03642756BF75751A00E2E4950E83DC159BB4774A6292273649DB"))
-
-
-pairs_03 %>% filter(id_hash.1 %in% c("09FEBBF264A9DC9565629D830D8FF3DD7BAD9E81F6C61AFE09EE082A071D5EEA",
-                                     "AC2C86570ED170951CF1CAD7102135BFBAE594E1700A57D52547CF19263F8525",
-                                     "A5C7968DF4FE03642756BF75751A00E2E4950E83DC159BB4774A6292273649DB") | 
-                      id_hash.2 %in% c("09FEBBF264A9DC9565629D830D8FF3DD7BAD9E81F6C61AFE09EE082A071D5EEA",
-                                       "AC2C86570ED170951CF1CAD7102135BFBAE594E1700A57D52547CF19263F8525",
-                                       "A5C7968DF4FE03642756BF75751A00E2E4950E83DC159BB4774A6292273649DB"))
-
-
-
-
-
-
-test <- ids_dedup <- setDT(full_join(select(match_01_dedup, id_hash, clusterid_1) %>%
-                                       filter(id_hash %in% c("89F13EF65AE8D45219AC51C308168F8C86F9A6E5AAB7B12ED18991F791379457",
-                                                             "3EAB915BCCA039A85AB55308CF824CF03CAE0B0DD0D4E9822BC2628CBCE0AA1C",
-                                                             "6C314D9B54BBDDDCA3AD57D941812636883EFAEFEC5B05646B05A15DDA3D6EE5")), 
-                                     select(match_02_dedup, id_hash, clusterid_2) %>%
-                                       filter(id_hash %in% c("89F13EF65AE8D45219AC51C308168F8C86F9A6E5AAB7B12ED18991F791379457",
-                                                             "6C314D9B54BBDDDCA3AD57D941812636883EFAEFEC5B05646B05A15DDA3D6EE5")),
-                                     by = "id_hash"))
-
-
-
-
-match_01_dedup %>%
-  filter(id_hash %in% c("89F13EF65AE8D45219AC51C308168F8C86F9A6E5AAB7B12ED18991F791379457",
-                        "3EAB915BCCA039A85AB55308CF824CF03CAE0B0DD0D4E9822BC2628CBCE0AA1C",
-                        "6C314D9B54BBDDDCA3AD57D941812636883EFAEFEC5B05646B05A15DDA3D6EE5",
-                        "2BA8D30805A8ABAE15D7746E48D5DC87DDB54D31F5C7DCA17B0C39C8BA2ED28C",
-                        "5D8C9C4BBC3C661E5CDAE9DABAF31652E05D1A88F94A189B65A17B8843120EEB")) %>%
-  arrange(id_hash)
-
-match_02_dedup %>%
-  filter(id_hash %in% c("89F13EF65AE8D45219AC51C308168F8C86F9A6E5AAB7B12ED18991F791379457",
-                        "3EAB915BCCA039A85AB55308CF824CF03CAE0B0DD0D4E9822BC2628CBCE0AA1C",
-                        "6C314D9B54BBDDDCA3AD57D941812636883EFAEFEC5B05646B05A15DDA3D6EE5",
-                        "2BA8D30805A8ABAE15D7746E48D5DC87DDB54D31F5C7DCA17B0C39C8BA2ED28C",
-                        "5D8C9C4BBC3C661E5CDAE9DABAF31652E05D1A88F94A189B65A17B8843120EEB")) %>%
-  arrange(id_hash)
-
-
-test3 <- final_dedup(df1 = test, id1 = "clusterid_1",
-                     df2 = test2, id2 = "clusterid_2")
-
-
-# Test final part
-test_ids_final <- id_nodups(id_n = n_distinct(combine_1_2$cluster_final),
-                            id_length = 10)
-test_ids_final <- bind_cols(combine_1_2 %>%
-                              distinct(cluster_final) %>%
-                              arrange(cluster_final),
-                            id_apde = test_ids_final)
-
-test_names_final <- input %>%
-  select(ssn, id_mcaid, 
-         #id_mcare, 
-         id_kc_pha, lname, fname, mname, 
-         dob_y, dob_m, dob_d, gender, id_hash) %>%
-  left_join(., select(combine_1_2, id_hash, cluster_final), by = "id_hash") %>%
-  left_join(., test_ids_final, by = "cluster_final") %>%
-  # select(id_apde, id_mcaid, 
-  #        #id_mcare, 
-  #        id_kc_pha, id_hash) %>%
-  distinct() %>%
-  mutate(last_run = Sys.time())
-
-test_names_final %>%
-  filter(id_hash %in% c("89F13EF65AE8D45219AC51C308168F8C86F9A6E5AAB7B12ED18991F791379457",
-                        "3EAB915BCCA039A85AB55308CF824CF03CAE0B0DD0D4E9822BC2628CBCE0AA1C",
-                        "6C314D9B54BBDDDCA3AD57D941812636883EFAEFEC5B05646B05A15DDA3D6EE5",
-                        "2BA8D30805A8ABAE15D7746E48D5DC87DDB54D31F5C7DCA17B0C39C8BA2ED28C",
-                        "5D8C9C4BBC3C661E5CDAE9DABAF31652E05D1A88F94A189B65A17B8843120EEB")) %>%
-  arrange(id_hash)
-
-test_names_final %>% filter(id_apde == "w8xfrms2f3")
-
-
-
-test[, clusterid_1_cnt := uniqueN(clusterid_1), by = "clusterid_2"]
-test[, clusterid_2_cnt := uniqueN(clusterid_2), by = "clusterid_1"]
-
-recursion_dt <- copy(test)
-test2 <- final_dedup_collapse(iterate_dt = recursion_dt, iteration = 1)
-
-test2 %>% head()
-test3 <- test2[, cluster_final := get(paste0("id_1_recur", 1))]
-test3 %>% head()
-
-
-
-
-## Old code ----
-ids_dedup <- setDT(full_join(select(match_01_dedup, id_hash, clusterid_1), 
-                             select(match_02_dedup, id_hash, clusterid_2),
-                             by = "id_hash"))
-
-# Count how much consolidation is required
-ids_dedup[, clusterid_1_cnt := uniqueN(clusterid_1), by = "clusterid_2"]
-ids_dedup[, clusterid_2_cnt := uniqueN(clusterid_2), by = "clusterid_1"]
-remaining_dupes <- ids_dedup %>% 
-  count(clusterid_1_cnt, clusterid_2_cnt) %>%
-  filter(clusterid_1_cnt != clusterid_2_cnt) %>%
-  summarise(dups = sum(n))
-remaining_dupes <- remaining_dupes$dups[1]
-
-if (remaining_dupes > 0) {
-  # Keep deduplicating until there are no more open triangles
-  recursion_level <- 0
-  recursion_dt <- copy(ids_dedup)
-  setnames(recursion_dt, old = c("clusterid_1", "clusterid_2"), new = c("id_1_recur0", "id_2_recur0"))
-  
-  while (remaining_dupes > 0) {
-    recursion_level <- recursion_level + 1
-    message(remaining_dupes, " remaining duplicated rows. Starting recursion iteration ", recursion_level)
-    
-    recursion_dt <- final_dedup_collapse(iterate_dt = recursion_dt, iteration = recursion_level)
-    
-    # Check how many duplicates remain
-    remaining_dupes <- recursion_dt %>% count(clusterid_1_cnt, clusterid_2_cnt) %>%
-      filter(clusterid_1_cnt != clusterid_2_cnt) %>%
-      summarise(dups = sum(n))
-    remaining_dupes <- remaining_dupes$dups[1]
-  }
-  
-  # Get final ID to use
-  ids_dedup <- recursion_dt[, cluster_final := get(paste0("id_1_recur", recursion_level))]
-} else {
-  ids_dedup[, cluster_final := clusterid_1]
-}
-
-# Keep only relevant columns
-ids_dedup <- ids_dedup[, .(id_hash, cluster_final)]
-
-
 
 ## Error check ----
 combine_all_chk <- unique(combine_all[, c("id_hash", "cluster_final")])
@@ -1147,6 +964,11 @@ combine_all_chk %>% count(cnt_id, cnt_hash)
 if (max(combine_all_chk$cnt_id) > 1) {
   stop("There is more than one cluster ID for a given id_has. Investigate why.")
 }
+
+# Check cnt_hash by source system
+left_join(select(input, id_hash, source_system), combine_all_chk, by = "id_hash") %>%
+  count(source_system, cnt_id, cnt_hash) %>%
+  as.data.frame()
 
 
 ## Now make an alpha-numeric ID that will be stored in a table ----
@@ -1159,28 +981,37 @@ ids_final <- id_nodups(id_n = n_distinct(combine_all$cluster_final),
 ids_final <- combine_all %>%
   distinct(cluster_final) %>%
   arrange(cluster_final) %>%
-  bind_cols(., id_apde = ids_final)
+  bind_cols(., id_hudhears = ids_final)
 
 names_final <- input %>%
-  select(ssn, id_mcaid, 
+  select(source_system, id_kcmaster, id_mcaid, kcid, id_hmis, id_hchn, customerkey, id_kc_pha, 
          #id_mcare, 
-         id_kc_pha, lname, fname, mname, 
+         ssn, fname, mname, lname, lname_suff, lname_alt, 
          dob_y, dob_m, dob_d, gender, id_hash) %>%
   left_join(., select(combine_all, id_hash, cluster_final), by = "id_hash") %>%
   left_join(., ids_final, by = "cluster_final") %>%
-  # select(id_apde, id_mcaid, 
+  # select(id_hudhears, id_mcaid, 
   #        #id_mcare, 
   #        id_kc_pha, id_hash) %>%
   distinct() %>%
   mutate(last_run = Sys.time())
 
 
+# Look at sources by ID
+names_final_cnt <- setDT(unique(names_final[, c("id_hudhears", "source_system")]))
+names_final_cnt[, cnt_source := .N, by = "id_hudhears"]
+names_final_cnt %>% group_by(source_system, cnt_source) %>%
+  summarise(n = n_distinct(id_hudhears)) %>%
+  group_by(source_system) %>% mutate(tot = sum(n)) %>%
+  ungroup() %>%
+  mutate(pct = round(n/tot*100, 1)) %>%
+  as.data.frame()
 
 # QA FINAL DATA ----
 ### REVIEW POINT ----
-# Number of id_hashes compared to the number of id_apdes
+# Number of id_hashes compared to the number of id_hudhearss
 message("There are ", n_distinct(names_final$id_hash), " IDs and ", 
-        n_distinct(names_final$id_apde), " id_apde IDs")
+        n_distinct(names_final$id_hudhears), " id_hudhears IDs")
 
 db_hhsaw <- DBI::dbConnect(odbc::odbc(),
                            driver = "ODBC Driver 17 for SQL Server",
@@ -1211,9 +1042,9 @@ length(missing_mcaid) # should be zero
 # length(missing.mcare) # should be zero in length
 
 ## Confirm that there are no duplicates in the final names_final linkage ----      
-# Mcaid - id_apde per id_mcaid
+# Mcaid - id_hudhears per id_mcaid
 id_dup_chk <- copy(names_final)
-id_dup_chk[!is.na(id_mcaid), dup_mcaid := uniqueN(id_apde, na.rm = T), by = "id_mcaid"]
+id_dup_chk[!is.na(id_mcaid), dup_mcaid := uniqueN(id_hudhears, na.rm = T), by = "id_mcaid"]
 id_dup_chk %>% count(dup_mcaid)
 if (nrow(id_dup_chk[!is.na(id_mcaid) & dup_mcaid > 1]) == 0) {
   message("There were no Medicaid IDs allocated to >1 APDE IDs (as expected)")
@@ -1221,13 +1052,13 @@ if (nrow(id_dup_chk[!is.na(id_mcaid) & dup_mcaid > 1]) == 0) {
   stop("Some Medicaid IDs have been assigned to multiple APDE IDs. Investigate why.")
 }
 
-# Mcaid - id_mcaid per id_apde
-id_dup_chk[!is.na(id_mcaid), dup_apde_mcaid := uniqueN(id_mcaid, na.rm = T), by = "id_apde"]
+# Mcaid - id_mcaid per id_hudhears
+id_dup_chk[!is.na(id_mcaid), dup_apde_mcaid := uniqueN(id_mcaid, na.rm = T), by = "id_hudhears"]
 id_dup_chk %>% count(dup_apde_mcaid)
 id_dup_chk[dup_apde_mcaid > 1]
 
 # PHA
-id_dup_chk[!is.na(id_kc_pha), dup_pha := uniqueN(id_apde, na.rm = T), by = "id_kc_pha"]
+id_dup_chk[!is.na(id_kc_pha), dup_pha := uniqueN(id_hudhears, na.rm = T), by = "id_kc_pha"]
 id_dup_chk %>% count(dup_pha)
 if (nrow(id_dup_chk[!is.na(id_kc_pha) & dup_pha > 1]) == 0) {
   message("There were no PHA IDs allocated to >1 APDE IDs (as expected)")
@@ -1235,27 +1066,28 @@ if (nrow(id_dup_chk[!is.na(id_kc_pha) & dup_pha > 1]) == 0) {
   stop("Some PHA IDs have been assigned to multiple APDE IDs. Investigate why.")
 }
 
-# PHA - id_kc_pha per id_apde
-id_dup_chk[!is.na(id_kc_pha), dup_apde_pha := uniqueN(id_kc_pha, na.rm = T), by = "id_apde"]
+# PHA - id_kc_pha per id_hudhears
+id_dup_chk[!is.na(id_kc_pha), dup_apde_pha := uniqueN(id_kc_pha, na.rm = T), by = "id_hudhears"]
 id_dup_chk %>% count(dup_apde_pha)
 id_dup_chk[dup_apde_pha > 1]
 
 
 ## Check there aren't a crazy high number of rows per ID ----
-id_dup_chk[, id_cnt := .N, by = "id_apde"]
+id_dup_chk[, id_cnt := .N, by = "id_hudhears"]
 id_dup_chk %>% count(id_cnt)
 
 
 ## Check that some mcaid and PHA IDs matched ----
 id_dup_chk[, id_mcaid_present := ifelse(!is.na(dup_apde_mcaid), 1L, 0L)]
 id_dup_chk[, id_pha_present := ifelse(!is.na(dup_apde_pha), 1L, 0L)]
-id_dup_chk[, id_mcaid_pha := max(id_mcaid_present) + max(id_pha_present), by = "id_apde"]
-id_dup_chk %>% distinct(id_apde, id_mcaid_pha) %>% count(id_mcaid_pha)
+id_dup_chk[, id_mcaid_pha := max(id_mcaid_present) + max(id_pha_present), by = "id_hudhears"]
+id_dup_chk %>% distinct(id_hudhears, id_mcaid_pha) %>% count(id_mcaid_pha)
 
 
 # LOAD TO SQL ----
 ## identify the column types to be created in SQL ----
-sql_columns <- c("id_apde" = "char(10)", 
+# Only consider ones that might not load as desired
+sql_columns <- c("id_hudhears" = "char(10)", 
                  #"id_mcare" = "CHAR(15) collate SQL_Latin1_General_Cp1_CS_AS", 
                  "id_mcaid" = "char(11)", 
                  "id_kc_pha" = "char(10)", 
@@ -1263,9 +1095,9 @@ sql_columns <- c("id_apde" = "char(10)",
                  "last_run" = "datetime")  
 
 # ensure column order in R is the same as that in SQL
-setcolorder(names_final, names(sql_columns))
-names_final <- names_final[, names(sql_columns), with = F]
-
+setcolorder(names_final, c("id_hudhears", "source_system", "id_kcmaster", "id_kc_pha", "id_mcaid", 
+            "kcid", "id_hmis", "id_hchn", "customerkey", "ssn", "fname", "mname", "lname", 
+            "lname_suff", "lname_alt", "dob_y", "dob_m", "dob_d", "gender", "id_hash", "last_run"))
 
 ## Write table to SQL ----
 # Split into smaller tables to avoid SQL connection issues
@@ -1277,16 +1109,16 @@ lapply(seq(start, cycles), function(i) {
   start_row <- ifelse(i == 1, 1L, max_rows * (i-1) + 1)
   end_row <- min(nrow(names_final), max_rows * i)
   
-  message("Loading cycle ", i, " of ", cycles)
+  message("Loading cycle ", i, " of ", cycles, " (rows: ", start_row, "-", end_row, ")")
   if (i == 1) {
     dbWriteTable(db_hhsaw,
-                 DBI::Id(schema = "claims", table = "stage_xwalk_apde_ids"),
+                 DBI::Id(schema = "amatheson", table = "hudhears_xwalk_ids"),
                  value = as.data.frame(names_final[start_row:end_row]),
                  overwrite = T, append = F,
                  field.types = sql_columns)
   } else {
     dbWriteTable(db_hhsaw,
-                 DBI::Id(schema = "claims", table = "stage_xwalk_apde_ids"),
+                 DBI::Id(schema = "amatheson", table = "hudhears_xwalk_ids"),
                  value = as.data.frame(names_final[start_row:end_row]),
                  overwrite = F, append = T)
   }
@@ -1295,7 +1127,7 @@ lapply(seq(start, cycles), function(i) {
 
 ## Confirm that all rows were loaded to sql ----
 stage.count <- as.numeric(odbc::dbGetQuery(db_hhsaw, 
-                                           "SELECT COUNT (*) FROM claims.stage_xwalk_apde_ids"))
+                                           "SELECT COUNT (*) FROM amatheson.hudhears_xwalk_ids"))
 if(stage.count != nrow(names_final))
   stop("Mismatching row count, error writing or reading data")      
 

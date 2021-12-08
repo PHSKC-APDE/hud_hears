@@ -40,14 +40,15 @@ DBI::dbExecute(db_hhsaw,
           FROM amatheson.hudhears_xwalk_ids
           WHERE id_mcaid IS NOT NULL")
 
+
 ## ESD ID xwalk ----
 # First drop the existing table
 try(DBI::dbRemoveTable(db_hhsaw, DBI::Id(schema = "esd", table = "hudhears_id_xwalk")))
 
 DBI::dbExecute(db_hhsaw,
-               "SELECT DISTINCT id_hudhears, customer_key INTO esd.hudhears_id_xwalk
+               "SELECT DISTINCT id_hudhears, customerkey INTO esd.hudhears_id_xwalk
                FROM amatheson.hudhears_xwalk_ids
-               WHERE customer_key IS NOT NULL")
+               WHERE customerkey IS NOT NULL")
 
 
 ## PHA ID xwalk ----
@@ -67,34 +68,6 @@ dbExecute(db_hhsaw,
           (SELECT DISTINCT id_kc_pha, true_exit FROM pha.stage_pha_exit_timevar
           WHERE true_exit = 1 AND possible_false_exit = 0) b
           ON a.id_kc_pha = b.id_kc_pha")
-
-
-
-
-
-
-# HOMELESS TABLE ----
-# Find people in PHA who matched to the integrated data hub IDs and are in the 
-# table that tracks homelessness status
-
-# Try to drop first 
-try(DBI::dbRemoveTable(db_hhsaw, DBI::Id(schema = "hudhears", table = "pha_homeless_status")))
-
-dbExecute(db_hhsaw,
-          "SELECT a.id_hudhears, h.start_date, h.housing_status, h.status_code, h.sourcesystemnm
-          INTO hudhears.pha_homeless_status
-          FROM
-          (SELECT DISTINCT id_hudhears FROM amatheson.hudhears_xwalk_ids
-            WHERE id_kc_pha IS NOT NULL) a
-          INNER JOIN
-          (SELECT DISTINCT id_hudhears, id_kcmaster FROM amatheson.hudhears_xwalk_ids
-            WHERE id_kcmaster IS NOT NULL) b
-          ON a.id_hudhears = b.id_hudhears
-          INNER JOIN
-          (SELECT DISTINCT masterclientkey, masterclientcd FROM dwhealth.v_client_xref_im) x
-          ON b.id_kcmaster = x.masterclientcd
-          INNER JOIN dwhealth.v_housing_status_im h
-          ON x.masterclientkey = h.masterclientkey")
 
 
 # NON-EXIT MATCHED TABLE ----
@@ -210,6 +183,30 @@ dbWriteTable(db_hhsaw,
 # Add indices
 dbExecute(db_hhsaw, "CREATE CLUSTERED COLUMNSTORE INDEX hudhears_control_match_long_idx 
           ON hudhears.control_match_long")
+
+
+# HOMELESS TABLE ----
+# Find people in PHA who matched to the integrated data hub IDs and are in the 
+# table that tracks homelessness status
+
+# Try to drop first 
+try(DBI::dbRemoveTable(db_hhsaw, DBI::Id(schema = "hudhears", table = "pha_homeless_status")))
+
+dbExecute(db_hhsaw,
+          "SELECT a.id_hudhears, h.start_date, h.housing_status, h.status_code, h.sourcesystemnm
+          INTO hudhears.pha_homeless_status
+          FROM
+          (SELECT DISTINCT id_hudhears FROM amatheson.hudhears_xwalk_ids
+            WHERE id_kc_pha IS NOT NULL) a
+          INNER JOIN
+          (SELECT DISTINCT id_hudhears, id_kcmaster FROM amatheson.hudhears_xwalk_ids
+            WHERE id_kcmaster IS NOT NULL) b
+          ON a.id_hudhears = b.id_hudhears
+          INNER JOIN
+          (SELECT DISTINCT masterclientkey, masterclientcd FROM dwhealth.v_client_xref_im) x
+          ON b.id_kcmaster = x.masterclientcd
+          INNER JOIN dwhealth.v_housing_status_im h
+          ON x.masterclientkey = h.masterclientkey")
 
 
 # COVARIATE TABLE (DON'T RUN UNTIL NON-EXIT TABLES MADE) ----

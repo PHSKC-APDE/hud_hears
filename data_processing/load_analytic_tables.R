@@ -28,7 +28,29 @@ db_hhsaw <- DBI::dbConnect(odbc::odbc(),
                            Authentication = "ActiveDirectoryPassword")
 
 
-# PHA ID XWALK ----
+# ID XWALK TABLES ----
+# Claims/Medicaid ID xwalk ----
+# Make a cross-walk view of id_hudhears and id_medicaid
+
+# First drop the existing table
+try(DBI::dbRemoveTable(db_hhsaw, DBI::Id(schema = "claims", table = "hudhears_id_xwalk")))
+
+DBI::dbExecute(db_hhsaw,
+               "SELECT DISTINCT id_hudhears, id_mcaid INTO claims.hudhears_id_xwalk
+          FROM amatheson.hudhears_xwalk_ids
+          WHERE id_mcaid IS NOT NULL")
+
+## ESD ID xwalk ----
+# First drop the existing table
+try(DBI::dbRemoveTable(db_hhsaw, DBI::Id(schema = "esd", table = "hudhears_id_xwalk")))
+
+DBI::dbExecute(db_hhsaw,
+               "SELECT DISTINCT id_hudhears, customer_key INTO esd.hudhears_id_xwalk
+               FROM amatheson.hudhears_xwalk_ids
+               WHERE customer_key IS NOT NULL")
+
+
+## PHA ID xwalk ----
 # Make a cross-walk view of id_hudhears and id_kc_pha and set a flag for people who
 # had an exit
 
@@ -47,16 +69,7 @@ dbExecute(db_hhsaw,
           ON a.id_kc_pha = b.id_kc_pha")
 
 
-# MEDICAID ID XWALK ----
-# Make a cross-walk view of id_hudhears and id_medicaid
 
-# First drop the existing table
-try(DBI::dbRemoveTable(db_hhsaw, DBI::Id(schema = "claims", table = "hudhears_id_xwalk")))
-
-DBI::dbExecute(db_hhsaw,
-          "SELECT DISTINCT id_hudhears, id_mcaid INTO claims.hudhears_id_xwalk
-          FROM amatheson.hudhears_xwalk_ids
-          WHERE id_mcaid IS NOT NULL")
 
 
 

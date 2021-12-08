@@ -151,7 +151,7 @@ control_match_long <- control_match %>%
   distinct()
 
 
-# Add in id_hudhears
+# Add in id_hudhears and hh_id_kc_pha (makes joining easier later)
 if (!exists("pha_id_xwalk")) {
   pha_id_xwalk <- dbGetQuery(db_hhsaw, "SELECT * FROM hudhears.pha_id_xwalk") 
 }
@@ -159,6 +159,29 @@ if (!exists("pha_id_xwalk")) {
 control_match_long <- control_match_long %>%
   left_join(., distinct(pha_id_xwalk, id_hudhears, id_kc_pha), by = "id_kc_pha") %>%
   select(id_hudhears, id_kc_pha, id_type, exit_uid, exit_date)
+
+
+control_match_long <- sqldf("SELECT a.*, b.hh_id_kc_pha
+               FROM
+               (SELECT id_hudhears, id_kc_pha, id_type, exit_uid, exit_date
+                 FROM control_match_long
+                 WHERE id_type = 'id_exit') a
+               LEFT JOIN
+               (SELECT DISTINCT id_kc_pha, hh_id_kc_pha, act_date 
+                 FROM timevar_exit) b
+               ON a.id_kc_pha = b.id_kc_pha AND a.exit_date = b.act_date
+               UNION 
+               SELECT c.*, d.hh_id_kc_pha
+               FROM
+               (SELECT id_hudhears, id_kc_pha, id_type, exit_uid, exit_date
+                 FROM control_match_long
+                 WHERE id_type = 'id_control') c
+               LEFT JOIN
+               (SELECT DISTINCT id_kc_pha, hh_id_kc_pha, from_date, to_date 
+                 FROM timevar_exit) d
+               ON c.id_kc_pha = d.id_kc_pha AND 
+               c.exit_date >= d.from_date AND c.exit_date <= d.to_date")
+
 
 # Load to SQL
 dbWriteTable(db_hhsaw, 
@@ -171,7 +194,9 @@ dbWriteTable(db_hhsaw,
              value = control_match_long,
              overwrite = T)
 
-
+# Add indices
+dbExecute(db_hhsaw, "CREATE CLUSTERED COLUMNSTORE INDEX hudhears_control_match_long_idx 
+          ON hudhears.control_match_long")
 
 
 # COVARIATE TABLE (DON'T RUN UNTIL NON-EXIT TABLES MADE) ----
@@ -191,10 +216,49 @@ if (!exists("control_match_long")) {
 }
 
 
+## Demographics ----
+demogs <- dbGetQuery(db_hhsaw,
+                     "SELECT a.*, b.dob, b.admit_date, b.gender_me,
+                     b.race_me, b.race_eth_me
+                     FROM
+                     (SELECT id_hudhears, id_kc_pha, exit_date
+                       FROM hudhears.control_match_long) a
+                     LEFT JOIN
+                     (SELECT id_kc_pha, dob, admit_date, gender_me, race_me, race_eth_me
+                       FROM pha.final_demo) b
+                     ON a.id_kc_pha = b.id_kc_pha")
+
+# Set up age and time in housing at exit 
+demogs <- demogs %>%
+  mutate(age_at_exit = floor(interval(start = dob, end = exit_date) / years(1)),
+         housing_time_at_exit = floor(interval(start = admit_date, end = exit_date) / years(1)))
+
+
 ## Household demographics ----
+# Join to pre-populated hh_demogs table
+# This table summarizes households by week so need to join to the week prior to exit date
+# However, need to get the hh_id_kc_pha for exits from the exit_timevar table because sometimes
+# the exit is after a person's last to_date (and so wouldn't match in the normal timevar table)
 
-
-
+hh_demogs <- dbGetQuery(db_hhsaw,
+                        "SELECT a.*, b.agency, b.major_prog, b.subsidy_type, b.prog_type, 
+                        b.operator_type, b.vouch_type_final, b.portfolio_final,
+                        b.geo_tractce10, b.hh_size, b.hh_senior, b.hh_disability, 
+                        b.n_child, b.n_adult, b.n_senior, b.n_disability, b.single_caregiver
+                        FROM
+                        (SELECT x.*, 
+                          (SELECT TOP 1 date FROM pha.stage_hh_demogs_weekly y
+                           WHERE y.hh_id_kc_pha = x.hh_id_kc_pha AND y.date <= x.exit_date
+                           ORDER BY y.date desc) AS hh_demog_date		
+                          FROM
+                          (SELECT * FROM hudhears.control_match_long) x) a
+                        LEFT JOIN
+                        (SELECT hh_id_kc_pha, date, agency, major_prog, subsidy_type, 
+                          prog_type, operator_type, vouch_type_final, portfolio_final,
+                          geo_tractce10, hh_size, hh_senior, hh_disability, n_child, n_adult, n_senior, n_disability, single_caregiver
+                          FROM pha.stage_hh_demogs_weekly) b
+                        ON a.hh_id_kc_pha = b.hh_id_kc_pha AND a.hh_demog_date = b.date
+                        order by a.exit_uid, a.id_type, a.id_kc_pha")
 
 
 ## Medicaid eligibility ----
@@ -306,11 +370,24 @@ mcaid_visits_after <- dbGetQuery(db_hhsaw,
 
 ## Final table ----
 covariate <- control_match_long %>%
+  arrange(exit_uid, id_type, id_hudhears) %>%
+  # Join demogs and hh_demog on id_kc_pha as well because there are two IDs that 
+  # point to the same id_hudhears, possibly a false positive match
+  left_join(., select(demogs, id_hudhears, id_kc_pha, exit_date, gender_me, race_eth_me, 
+                      age_at_exit, housing_time_at_exit),
+            by = c("id_hudhears", "id_kc_pha", "exit_date")) %>%
+  left_join(., select(hh_demogs, id_hudhears, id_kc_pha, exit_date, hh_demog_date:single_caregiver),
+            by = c("id_hudhears", "id_kc_pha", "exit_date")) %>%
   left_join(., select(mcaid_elig_prior, id_hudhears, exit_date, full_cov_prior), 
             by = c("id_hudhears", "exit_date")) %>%
   left_join(., select(mcaid_elig_after, id_hudhears, exit_date, full_cov_after), 
             by = c("id_hudhears", "exit_date")) %>%
   left_join(., mcaid_visits_prior, by = c("id_hudhears", "exit_date")) %>%
-  left_join(., mcaid_visits_after, by = c("id_hudhears", "exit_date")) 
+  left_join(., mcaid_visits_after, by = c("id_hudhears", "exit_date"))
 
 
+# Load to SQL
+dbWriteTable(db_hhsaw,
+             name = DBI::Id(schema = "hudhears", table = "control_match_covariate"),
+             value = covariate,
+             overwrite = T)

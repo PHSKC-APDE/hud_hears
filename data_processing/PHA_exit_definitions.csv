@@ -1,116 +1,116 @@
-agency,exit_reason,exit_category
-KCHA,13 - S8 Cross Absorption,Neutral
-KCHA,14 - S8 Absorption,Neutral
-KCHA,30 - Homeownership,Positive
-KCHA,31 - Moved to Non-Subsidized Rental,Positive
-KCHA,32 - S8 Over Income,Positive
-KCHA,33 - Needed Housing with Higher Level of Services,Neutral
-KCHA,35 - Transitional Housing Graduate to KCHA Managed Units,Neutral
-KCHA,36 - Transitional Housing Graduate to any Section 8 Voucher,Neutral
-KCHA,37 - Trans Grad into KCHA PBA,Neutral
-KCHA,38 - Transitional Housing Graduate to Non-Subsidized Rental,Positive
-KCHA,39 - Transitional Housing Graduate to Other Subsidized Rental,Neutral
-KCHA,40 - Transitional Housing Non-Graduate Early Program Exit,Neutral
-KCHA,41 - Deceased,Neutral
-KCHA,42 - Changed Subsidy Program Type,Neutral
-KCHA,45 - S8 Incoming Portability Move Out,Neutral
-KCHA,46 - Moved in w/Family/Friends,Neutral
-KCHA,47 - Subsidy in Jeopardy Client Choice,Negative
-KCHA,49 - S8 Landlord Eviction,Negative
-KCHA,50 - Paperwork Violation,Negative
-KCHA,51 - Inspection/Damages,Negative
-KCHA,52 - Unreported Income,Negative
-KCHA,53 - Criminal Activity,Negative
-KCHA,54 - Unauthorized Live In,Negative
-KCHA,55 - Client Location Unknown/Abandoned Unit,Negative
-KCHA,55 - Loc Unknown/Abandon Unit,Negative
-KCHA,56 - Absence - Incarceration,Negative
-KCHA,57 - Absence Treatment/Hospital,Negative
-KCHA,58 - S8 Port Out Termination,Neutral
-KCHA,59 - Non Payment of Rent,Negative
-KCHA,60 - S8 PB Failed Social Services Program,Negative
-KCHA,61 - S8 Term Limit Program,Neutral
-KCHA,63 - Moved to Non-KCHA Subsidized Rental,Neutral
-KCHA,64 - S8 Voucher Expired,Negative
-KCHA,69 - S8 Voucher Expired - Ported Out,Negative
-KCHA,70 - Non Payment of Retro Rent,Negative
-KCHA,99 - S8 Sponsor-based Provider Based Move Out,Neutral
-KCHA,Client would not disclose reason,Neutral
-KCHA,PM Move to KCHA Section 8 Voucher,Neutral
-KCHA,No required information,Neutral
-SHA,Unknown - Client would not disclose reason,Neutral
-SHA,Deceased,Neutral
-SHA,PB/MR moved out location unknown,Neutral
-SHA,Noncompliance - Criminal Activity,Negative
-SHA,Voluntary Self-Termination,Neutral
-SHA,Moved - Changed Subsidy Program Type,Neutral
-SHA,PB/MR moved to non-time limited subsidized housing,Neutral
-SHA,Vacated Mod Rehab/Project Based Unit,Neutral
-SHA,Moved - Non-subsidized Rental,Positive
-SHA,Failure to Complete Re-examination,Negative
-SHA,PB/MR moved to non-time limited market rate,Positive
-SHA,Moved - w/Family/Friends,Neutral
-SHA,Failure to Provide SHA-requested Information,Negative
-SHA,Voucher Expired,Negative
-SHA,Absence - Extended Leave,Negative
-SHA,Graduated - 180 days $50 or less HAP,Positive
-SHA,Serious/Repeated Lease Violations (Criminal),Negative
-SHA,Noncompliance - Citizenship/Immigration,Negative
-SHA,Other Violation of Participant Obligations,Negative
-SHA,Expired - Voucher,Negative
-SHA,180 days $50 or less HAP,Positive
-SHA,Fraud - Household Composition,Negative
-SHA,Failure to Complete HQS Inspection,Negative
-SHA,180 days Zero HAP,Positive
-SHA,Fraud - Household Income,Negative
-SHA,More than 60 days absent from the unit,Negative
-SHA,FUP Youth 18 Month Expiration,Neutral
-SHA,Moved - Needed a Higher Level of Services,Neutral
-SHA,PB/MR moved to hospital/assisted living,Neutral
-SHA,PB/MR moved due to incarceration,Negative
-SHA,"PB/MR moved to temporary housing (family,friends)",Neutral
-SHA,Lease Violation - Landlord Eviction,Negative
-SHA,Serious/Repeated Lease Violations (Non-criminal),Negative
-SHA,180 Days Away From Assisted Unit,Negative
-SHA,Moved - Homeownership,Positive
-SHA,Ineligible - Citizenship/Immigration,Neutral
-SHA,Noncompliance - Paperwork Violation,Negative
-SHA,Moved - Shelter,Negative
-SHA,PB/MR moved to transitional housing program,Neutral
-SHA,HQS Breach,Negative
-SHA,PB/MR moved to shelter,Negative
-SHA,Payment Plan Non-Compliance/Debt to SHA,Negative
-SHA,Absence - Incarceration,Negative
-SHA,Absence - Treatment/Hospital,Negative
-SHA,Lease Violation - Non-Criminal,Negative
-SHA,Noncompliance - Payment Plan/Debt to SHA,Negative
-SHA,Noncompliance - HQS,Negative
-SHA,Criminal Activity,Negative
-SHA,Noncompliance - Program Partnership,Negative
-SHA,Moved - Transitional Housing Program,Negative
-SHA,Expired - Ported Out,Neutral
-SHA,Expired - Term Limit Program,Neutral
-SHA,Fraud - Other,Negative
-SHA,Lease Violation - Criminal,Negative
-SHA,Unknown - Port Out Termination,Neutral
-SHA,OTHER,Neutral
-SHA,RENTED  PRIVATELY/NO SUBSIDY,Positive
-SHA,DID NOT DISCLOSE,Neutral
-SHA,OTHER SUBSIDIZED HSG/HCV,Neutral
-SHA,LEASE ENFORCEMENT,Negative
-SHA,EVICT-JUDGMT/PHYSICAL,Negative
-SHA,ABANDONMENT,Negative
-SHA,UNIT/PROPERTY QUALITY,Negative
-SHA,DECEASED,Neutral
-SHA,HEALTH,Neutral
-SHA,PURCHASED HOME,Positive
-SHA,NO LONGER USED 9/14/16 (OTHER),Neutral
-SHA,NEIGHBORHOOD QUALITY,Negative
-SHA,LOCATION,Negative
-SHA,DOMESTIC VIOLENCE,Negative
-SHA,EVICT-JUDGMT/PHYSICAL-OTHER,Negative
-SHA,RENT TOO HIGH,Negative
-SHA,EVICT-JUDGMT/PHYSICAL-CRIMINAL,Negative
-SHA,EVICTION-ABANDONMENT,Negative
-SHA,EVICTION-NON PAY,Negative
-SHA,MUTUAL TERMINATION,Neutral
+agency,exit_reason,exit_reason_clean,exit_category
+KCHA,13 - S8 Cross Absorption,S8 Cross Absorption,Neutral
+KCHA,14 - S8 Absorption,S8 Absorption,Neutral
+KCHA,30 - Homeownership,Homeownership,Positive
+KCHA,31 - Moved to Non-Subsidized Rental,Moved to Non-Subsidized Rental,Positive
+KCHA,32 - S8 Over Income,S8 Over Income,Positive
+KCHA,33 - Needed Housing with Higher Level of Services,Moved - Needed a Higher Level of Services,Neutral
+KCHA,35 - Transitional Housing Graduate to KCHA Managed Units,Transitional Housing Graduate to KCHA Managed Units,Neutral
+KCHA,36 - Transitional Housing Graduate to any Section 8 Voucher,Transitional Housing Graduate to any Section 8 Voucher,Neutral
+KCHA,37 - Trans Grad into KCHA PBA,Transitional Housing Graduate to KCHA PBA,Neutral
+KCHA,38 - Transitional Housing Graduate to Non-Subsidized Rental,Transitional Housing Graduate to Non-Subsidized Rental,Positive
+KCHA,39 - Transitional Housing Graduate to Other Subsidized Rental,Transitional Housing Graduate to Other Subsidized Rental,Neutral
+KCHA,40 - Transitional Housing Non-Graduate Early Program Exit,Transitional Housing Non-Graduate Early Program Exit,Neutral
+KCHA,41 - Deceased,Deceased,Neutral
+KCHA,42 - Changed Subsidy Program Type,Moved - Changed Subsidy Program Type,Neutral
+KCHA,45 - S8 Incoming Portability Move Out,S8 Incoming Portability Move Out,Neutral
+KCHA,46 - Moved in w/Family/Friends,Moved in w/Family/Friends,Neutral
+KCHA,47 - Subsidy in Jeopardy Client Choice,Subsidy in Jeopardy Client Choice,Negative
+KCHA,49 - S8 Landlord Eviction,Landlord Eviction,Negative
+KCHA,50 - Paperwork Violation,Noncompliance - Paperwork Violation,Negative
+KCHA,51 - Inspection/Damages,Inspection/Damages,Negative
+KCHA,52 - Unreported Income,Fraud - Household Income,Negative
+KCHA,53 - Criminal Activity,Noncompliance - Criminal Activity,Negative
+KCHA,54 - Unauthorized Live In,Fraud - Household Composition,Negative
+KCHA,55 - Client Location Unknown/Abandoned Unit,Client Location Unknown/Abandoned Unit,Negative
+KCHA,55 - Loc Unknown/Abandon Unit,Client Location Unknown/Abandoned Unit,Negative
+KCHA,56 - Absence - Incarceration,Absence - Incarceration,Negative
+KCHA,57 - Absence Treatment/Hospital,Absence Treatment/Hospital,Negative
+KCHA,58 - S8 Port Out Termination,Port Out Termination,Neutral
+KCHA,59 - Non Payment of Rent,Non Payment of Rent,Negative
+KCHA,60 - S8 PB Failed Social Services Program,S8 PB Failed Social Services Program,Negative
+KCHA,61 - S8 Term Limit Program,Expired - Term Limit Program,Neutral
+KCHA,63 - Moved to Non-KCHA Subsidized Rental,Moved to Non-KCHA Subsidized Rental,Neutral
+KCHA,64 - S8 Voucher Expired,Voucher Expired,Negative
+KCHA,69 - S8 Voucher Expired - Ported Out,Expired - Ported Out,Negative
+KCHA,70 - Non Payment of Retro Rent,Non Payment of Retro Rent,Negative
+KCHA,99 - S8 Sponsor-based Provider Based Move Out,S8 Sponsor-based Provider Based Move Out,Neutral
+KCHA,Client would not disclose reason,Client would not disclose reason,Neutral
+KCHA,PM Move to KCHA Section 8 Voucher,PM Move to KCHA Section 8 Voucher,Neutral
+KCHA,No required information,Failed to provide information,Neutral
+SHA,Unknown - Client would not disclose reason,Client would not disclose reason,Neutral
+SHA,Deceased,Deceased,Neutral
+SHA,PB/MR moved out location unknown,PB/MR moved out location unknown,Neutral
+SHA,Noncompliance - Criminal Activity,Noncompliance - Criminal Activity,Negative
+SHA,Voluntary Self-Termination,Voluntary Self-Termination,Neutral
+SHA,Moved - Changed Subsidy Program Type,Moved - Changed Subsidy Program Type,Neutral
+SHA,PB/MR moved to non-time limited subsidized housing,PB/MR moved to non-time limited subsidized housing,Neutral
+SHA,Vacated Mod Rehab/Project Based Unit,Vacated PB/MR Unit,Neutral
+SHA,Moved - Non-subsidized Rental,Moved to Non-Subsidized Rental,Positive
+SHA,Failure to Complete Re-examination,Failure to Complete Re-examination,Negative
+SHA,PB/MR moved to non-time limited market rate,PB/MR moved to non-time limited market rate,Positive
+SHA,Moved - w/Family/Friends,Moved in w/Family/Friends,Neutral
+SHA,Failure to Provide SHA-requested Information,Failed to provide information,Negative
+SHA,Voucher Expired,Voucher Expired,Negative
+SHA,Absence - Extended Leave,Absence - Extended Leave,Negative
+SHA,Graduated - 180 days $50 or less HAP,Graduated - 180 days $50 or less HAP,Positive
+SHA,Serious/Repeated Lease Violations (Criminal),Serious/Repeated Lease Violations (Criminal),Negative
+SHA,Noncompliance - Citizenship/Immigration,Noncompliance - Citizenship/Immigration,Negative
+SHA,Other Violation of Participant Obligations,Other Violation of Participant Obligations,Negative
+SHA,Expired - Voucher,Voucher Expired,Negative
+SHA,180 days $50 or less HAP,180 days $50 or less HAP,Positive
+SHA,Fraud - Household Composition,Fraud - Household Composition,Negative
+SHA,Failure to Complete HQS Inspection,Failure to Complete HQS Inspection,Negative
+SHA,180 days Zero HAP,180 days Zero HAP,Positive
+SHA,Fraud - Household Income,Fraud - Household Income,Negative
+SHA,More than 60 days absent from the unit,More than 60 days absent from the unit,Negative
+SHA,FUP Youth 18 Month Expiration,FUP Youth 18 Month Expiration,Neutral
+SHA,Moved - Needed a Higher Level of Services,Moved - Needed a Higher Level of Services,Neutral
+SHA,PB/MR moved to hospital/assisted living,PB/MR moved to hospital/assisted living,Neutral
+SHA,PB/MR moved due to incarceration,PB/MR moved due to incarceration,Negative
+SHA,"PB/MR moved to temporary housing (family,friends)","PB/MR moved to temporary housing (family,friends)",Neutral
+SHA,Lease Violation - Landlord Eviction,Landlord Eviction,Negative
+SHA,Serious/Repeated Lease Violations (Non-criminal),Serious/Repeated Lease Violations (Non-criminal),Negative
+SHA,180 Days Away From Assisted Unit,180 Days Away From Assisted Unit,Negative
+SHA,Moved - Homeownership,Homeownership,Positive
+SHA,Ineligible - Citizenship/Immigration,Ineligible - Citizenship/Immigration,Neutral
+SHA,Noncompliance - Paperwork Violation,Noncompliance - Paperwork Violation,Negative
+SHA,Moved - Shelter,Moved - Shelter,Negative
+SHA,PB/MR moved to transitional housing program,PB/MR moved to transitional housing program,Neutral
+SHA,HQS Breach,HQS Breach,Negative
+SHA,PB/MR moved to shelter,PB/MR moved to shelter,Negative
+SHA,Payment Plan Non-Compliance/Debt to SHA,Noncompliance - Payment Plan/Debt to SHA,Negative
+SHA,Absence - Incarceration,Absence - Incarceration,Negative
+SHA,Absence - Treatment/Hospital,Absence - Treatment/Hospital,Negative
+SHA,Lease Violation - Non-Criminal,Lease Violation - Non-Criminal,Negative
+SHA,Noncompliance - Payment Plan/Debt to SHA,Noncompliance - Payment Plan/Debt to SHA,Negative
+SHA,Noncompliance - HQS,Noncompliance - HQS,Negative
+SHA,Criminal Activity,Criminal Activity,Negative
+SHA,Noncompliance - Program Partnership,Noncompliance - Program Partnership,Negative
+SHA,Moved - Transitional Housing Program,Moved - Transitional Housing Program,Negative
+SHA,Expired - Ported Out,Expired - Ported Out,Neutral
+SHA,Expired - Term Limit Program,Expired - Term Limit Program,Neutral
+SHA,Fraud - Other,Fraud - Other,Negative
+SHA,Lease Violation - Criminal,Lease Violation - Criminal,Negative
+SHA,Unknown - Port Out Termination,Port Out Termination,Neutral
+SHA,OTHER,Other,Neutral
+SHA,RENTED  PRIVATELY/NO SUBSIDY,Moved to Non-Subsidized Rental,Positive
+SHA,DID NOT DISCLOSE,Client would not disclose reason,Neutral
+SHA,OTHER SUBSIDIZED HSG/HCV,Other subsidized HSG/HCV,Neutral
+SHA,LEASE ENFORCEMENT,Lease enforcement,Negative
+SHA,EVICT-JUDGMT/PHYSICAL,Eviction - judgement/physical,Negative
+SHA,ABANDONMENT,Client Location Unknown/Abandoned Unit,Negative
+SHA,UNIT/PROPERTY QUALITY,Unit/property quality,Negative
+SHA,DECEASED,Deceased,Neutral
+SHA,HEALTH,Health,Neutral
+SHA,PURCHASED HOME,Homeownership,Positive
+SHA,NO LONGER USED 9/14/16 (OTHER),No longer used as of 2016-09-14 (other),Neutral
+SHA,NEIGHBORHOOD QUALITY,Neighborhood quality,Negative
+SHA,LOCATION,Location,Negative
+SHA,DOMESTIC VIOLENCE,Domestive violence,Negative
+SHA,EVICT-JUDGMT/PHYSICAL-OTHER,Eviction - judgement/physical - other,Negative
+SHA,RENT TOO HIGH,Rent too high,Negative
+SHA,EVICT-JUDGMT/PHYSICAL-CRIMINAL,Eviction - judgement/physical - criminal,Negative
+SHA,EVICTION-ABANDONMENT,Eviction - abandonment,Negative
+SHA,EVICTION-NON PAY,Eviction - non-payment,Negative
+SHA,MUTUAL TERMINATION,Mutual termination,Neutral

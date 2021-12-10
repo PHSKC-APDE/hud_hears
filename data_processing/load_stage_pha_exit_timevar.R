@@ -201,6 +201,11 @@ pha_timevar <- dbGetQuery(db_hhsaw, "SELECT * FROM pha.final_timevar")
 ## PHA identities ----
 names_existing <- dbGetQuery(db_hhsaw, "SELECT * FROM pha.final_identities")
 
+## HUD HEARS identities ----
+hudhears_ids <- dbGetQuery(db_hhsaw, "SELECT DISTINCT id_hudhears, id_kc_pha 
+                           FROM amatheson.hudhears_xwalk_ids
+                           WHERE id_kc_pha IS NOT NULL")
+
 
 ## Exit data ----
 pha_exit <- dbGetQuery(db_hhsaw, "SELECT * FROM pha.stage_pha_exit") %>%
@@ -881,16 +886,31 @@ timevar_exit_final <- timevar_exit_final %>%
   left_join(., select(exit_def, exit_reason, exit_reason_clean, exit_category), by = "exit_reason")
 
 
+## Add in HUD HEARS Study ID ----
+timevar_exit_final <- timevar_exit_final %>%
+  left_join(., hudhears_ids, by = "id_kc_pha")
+  
+# Because some (~250) id_kc_pha/exit_date IDs match to a single id_hudhears, need to select which 
+#  row to use for demographics
+set.seed(98104)
+timevar_exit_final <- timevar_exit_final %>%
+  mutate(chooser = runif(nrow(timevar_exit_final), 0, 1)) %>%
+  group_by(id_hudhears) %>%
+  mutate(chooser_max = max(chooser)) %>%
+  ungroup()
+
+
 ## Reorder columns ----
 # Also replace Infinite values
 timevar_exit_final <- timevar_exit_final %>%
   mutate(activity_mismatch = ifelse(is.infinite(activity_mismatch), NA, activity_mismatch)) %>%
-  select(id_kc_pha, hh_id_long, hh_id_kc_pha, agency, from_date, to_date, period, period_gap, cov_time, 
+  select(id_hudhears, id_kc_pha, hh_id_long, hh_id_kc_pha, agency, from_date, to_date, period, period_gap, cov_time, 
          max_in_period, max_in_period_flag, in_range, ever_in_range, activity_mismatch, activity_gap_max, 
          exit_cnt, exit_year, act_date, act_date_mismatch, 
          true_exit, exit_reason, exit_reason_clean, exit_category_pha, exit_category, 
          pha_source, disability, major_prog, subsidy_type, prog_type, operator_type, vouch_type_final, 
-         geo_hash_clean, geo_kc_area, portfolio_final) %>%
+         geo_hash_clean, geo_kc_area, portfolio_final,
+         chooser, chooser_max) %>%
   distinct() %>%
   mutate(last_run = Sys.time())
 

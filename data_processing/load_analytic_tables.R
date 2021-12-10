@@ -66,7 +66,7 @@ dbExecute(db_hhsaw,
           WHERE id_kc_pha IS NOT NULL) a 
           LEFT JOIN
           (SELECT DISTINCT id_kc_pha, true_exit FROM pha.stage_pha_exit_timevar
-          WHERE true_exit = 1 AND possible_false_exit = 0) b
+          WHERE true_exit = 1) b
           ON a.id_kc_pha = b.id_kc_pha")
 
 
@@ -74,12 +74,23 @@ dbExecute(db_hhsaw,
 # Set up a set of people who did not exit to serve as controls for aim 2
 # Need to do this before making the covariate table 
 
-# Bring in complete pha_timevar_exit table and go from there
-timevar_exit <- dbGetQuery(db_hhsaw, "SELECT * FROM pha.stage_pha_exit_timevar")
+# Bring in complete pha_exit_timevar table and go from there
+exit_timevar <- dbGetQuery(db_hhsaw, 
+                           "SELECT a.*, c.geo_tractce10 FROM
+                           (SELECT * FROM pha.stage_pha_exit_timevar) a
+                           LEFT JOIN
+                           (SELECT DISTINCT geo_hash_clean, geo_hash_geocode FROM ref.address_clean) b
+                           ON a.geo_hash_clean = b.geo_hash_clean
+                           LEFT JOIN
+                           (SELECT DISTINCT geo_hash_geocode, geo_tractce10 FROM ref.address_geocode) c
+                           ON b.geo_hash_geocode = c.geo_hash_geocode")
+
 
 # Set up list of IDs, exits, and dates
-exits <- timevar_exit %>% 
-  filter(true_exit == 1 & act_date >= "2012-01-01" & act_date <= "2018-12-31" & possible_false_exit == F) %>%
+exits <- exit_timevar %>% 
+  filter(true_exit == 1 & 
+           ((agency == "SHA" & act_date >= "2012-01-01" & act_date <= "2018-12-31") | 
+              (agency == "KCHA" & act_date >= "2016-01-01" & act_date <= "2018-12-31"))) %>%
   distinct(id_kc_pha, act_date) %>%
   # Take the most recent exit for the ~260 people with multiple exits
   arrange(id_kc_pha, act_date) %>%
@@ -89,7 +100,7 @@ exits <- timevar_exit %>%
 # Set up a list of controls
 # This will be everyone at first (including people who eventually exit) 
 # but as controls are sampled they will be removed from this data frame
-controls <- timevar_exit %>% select(id_kc_pha, from_date, to_date, period, true_exit, act_date) %>%
+controls <- exit_timevar %>% select(id_kc_pha, from_date, to_date, period, true_exit, act_date) %>%
   # Add in the max date by a person's period in housing to make things easier
   group_by(id_kc_pha, period) %>%
   mutate(max_period_date = max(to_date)) %>%
@@ -154,7 +165,7 @@ control_match_long <- sqldf("SELECT a.*, b.hh_id_kc_pha
                  WHERE id_type = 'id_exit') a
                LEFT JOIN
                (SELECT DISTINCT id_kc_pha, hh_id_kc_pha, act_date 
-                 FROM timevar_exit) b
+                 FROM exit_timevar) b
                ON a.id_kc_pha = b.id_kc_pha AND a.exit_date = b.act_date
                UNION 
                SELECT c.*, d.hh_id_kc_pha
@@ -164,7 +175,7 @@ control_match_long <- sqldf("SELECT a.*, b.hh_id_kc_pha
                  WHERE id_type = 'id_control') c
                LEFT JOIN
                (SELECT DISTINCT id_kc_pha, hh_id_kc_pha, from_date, to_date 
-                 FROM timevar_exit) d
+                 FROM exit_timevar) d
                ON c.id_kc_pha = d.id_kc_pha AND 
                c.exit_date >= d.from_date AND c.exit_date <= d.to_date")
 
@@ -244,6 +255,22 @@ demogs <- demogs %>%
          housing_time_at_exit = floor(interval(start = admit_date, end = exit_date) / years(1)))
 
 
+## Also use individual time-varying characteristics from pha.final_timevar because
+#   not all heads of household are captured in the head of household table
+#   (usually when a person was HoH for one day)
+if (!exists("exit_timevar")) {
+  exit_timevar <- dbGetQuery(db_hhsaw, 
+                             "SELECT a.*, c.geo_tractce10 FROM
+                           (SELECT * FROM pha.stage_pha_exit_timevar) a
+                           LEFT JOIN
+                           (SELECT DISTINCT geo_hash_clean, geo_hash_geocode FROM ref.address_clean) b
+                           ON a.geo_hash_clean = b.geo_hash_clean
+                           LEFT JOIN
+                           (SELECT DISTINCT geo_hash_geocode, geo_tractce10 FROM ref.address_geocode) c
+                           ON b.geo_hash_geocode = c.geo_hash_geocode")
+}
+
+
 ## Household demographics ----
 # Join to pre-populated hh_demogs table
 # This table summarizes households by week so need to join to the week prior to exit date
@@ -308,7 +335,8 @@ mcaid_elig_prior <- sqldf("SELECT a.*, b.from_date, b.to_date, b.dual, b.full_be
   group_by(id_hudhears, exit_date) %>%
   summarise(full_cov_days = sum(full_coverage)) %>%
   ungroup() %>%
-  mutate(full_cov_prior = full_cov_days >= 11/12 * 365)
+  mutate(full_cov_11_prior = full_cov_days >= 11/12 * 365,
+         full_cov_7_prior = full_cov_days >= 7/12 * 365)
 
 
 # Join and keep Mcaid rows that partially overlap in the past
@@ -328,7 +356,8 @@ mcaid_elig_after <- sqldf("SELECT a.*, b.from_date, b.to_date, b.dual, b.full_be
   group_by(id_hudhears, exit_date) %>%
   summarise(full_cov_days = sum(full_coverage)) %>%
   ungroup() %>%
-  mutate(full_cov_after = full_cov_days >= 11/12 * 365)
+  mutate(full_cov_11_after = full_cov_days >= 11/12 * 365,
+         full_cov_7_after = full_cov_days >= 11/12 * 365)
 
 
 ## Medicaid ED visits and hospitalizations ----
@@ -388,9 +417,24 @@ covariate <- control_match_long %>%
             by = c("id_hudhears", "id_kc_pha", "exit_date")) %>%
   left_join(., select(hh_demogs, id_hudhears, id_kc_pha, exit_date, hh_demog_date:single_caregiver),
             by = c("id_hudhears", "id_kc_pha", "exit_date")) %>%
-  left_join(., select(mcaid_elig_prior, id_hudhears, exit_date, full_cov_prior), 
+  # Use individual-level time-varying demogs to fill in gaps in HH-level
+  # Usually happens when an exiting person becomes their own HoH for a day or so
+  left_join(., filter(exit_timevar, chooser == chooser_max) %>%
+              select(id_hudhears, id_kc_pha, act_date, agency, 
+                      major_prog:vouch_type_final, portfolio_final, geo_tractce10),
+            by = c("id_hudhears", "id_kc_pha", "exit_date" = "act_date")) %>%
+  mutate(agency = coalesce(agency.x, agency.y),
+         major_prog = coalesce(major_prog.x, major_prog.y),
+         subsidy_type = coalesce(subsidy_type.x, subsidy_type.y),
+         prog_type = coalesce(prog_type.x, prog_type.y),
+         operator_type = coalesce(operator_type.x, operator_type.y),
+         vouch_type_final = coalesce(vouch_type_final.x, vouch_type_final.y),
+         portfolio_final = coalesce(portfolio_final.x, portfolio_final.y),
+         geo_tractce10 = coalesce(geo_tractce10.x, geo_tractce10.y)) %>%
+  select(id_hudhears:hh_demog_date, agency:geo_tractce10, hh_size:single_caregiver) %>%
+  left_join(., select(mcaid_elig_prior, id_hudhears, exit_date, full_cov_11_prior, full_cov_7_prior), 
             by = c("id_hudhears", "exit_date")) %>%
-  left_join(., select(mcaid_elig_after, id_hudhears, exit_date, full_cov_after), 
+  left_join(., select(mcaid_elig_after, id_hudhears, exit_date, full_cov_11_after, full_cov_7_after), 
             by = c("id_hudhears", "exit_date")) %>%
   left_join(., mcaid_visits_prior, by = c("id_hudhears", "exit_date")) %>%
   left_join(., mcaid_visits_after, by = c("id_hudhears", "exit_date"))

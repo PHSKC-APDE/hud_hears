@@ -77,7 +77,8 @@ dbExecute(db_hhsaw,
 # Bring in complete pha_exit_timevar table and go from there
 exit_timevar <- dbGetQuery(db_hhsaw, 
                            "SELECT a.*, c.geo_tractce10 FROM
-                           (SELECT * FROM pha.stage_pha_exit_timevar) a
+                           (SELECT * FROM pha.stage_pha_exit_timevar
+                           WHERE chooser = chooser_max) a
                            LEFT JOIN
                            (SELECT DISTINCT geo_hash_clean, geo_hash_geocode FROM ref.address_clean) b
                            ON a.geo_hash_clean = b.geo_hash_clean
@@ -239,20 +240,21 @@ if (!exists("control_match_long")) {
 
 ## Demographics ----
 demogs <- dbGetQuery(db_hhsaw,
-                     "SELECT a.*, b.dob, b.admit_date, b.gender_me,
+                     "SELECT a.*, b.dob, b.admit_date, b.gender_me, b.race_latino,
                      b.race_me, b.race_eth_me
                      FROM
                      (SELECT id_hudhears, id_kc_pha, exit_date
                        FROM hudhears.control_match_long) a
                      LEFT JOIN
-                     (SELECT id_kc_pha, dob, admit_date, gender_me, race_me, race_eth_me
+                     (SELECT id_kc_pha, dob, admit_date, gender_me, race_me, race_eth_me, race_latino
                        FROM pha.final_demo) b
                      ON a.id_kc_pha = b.id_kc_pha")
 
 # Set up age and time in housing at exit 
 demogs <- demogs %>%
   mutate(age_at_exit = floor(interval(start = dob, end = exit_date) / years(1)),
-         housing_time_at_exit = floor(interval(start = admit_date, end = exit_date) / years(1)))
+         housing_time_at_exit = floor(interval(start = admit_date, end = exit_date) / years(1)),
+         race_eth_me = ifelse(race_latino == 1, "Latino", race_eth_me))
 
 
 ## Also use individual time-varying characteristics from pha.final_timevar because
@@ -261,7 +263,8 @@ demogs <- demogs %>%
 if (!exists("exit_timevar")) {
   exit_timevar <- dbGetQuery(db_hhsaw, 
                              "SELECT a.*, c.geo_tractce10 FROM
-                           (SELECT * FROM pha.stage_pha_exit_timevar) a
+                           (SELECT * FROM pha.stage_pha_exit_timevar
+                           WHERE chooser = chooser_max) a
                            LEFT JOIN
                            (SELECT DISTINCT geo_hash_clean, geo_hash_geocode FROM ref.address_clean) b
                            ON a.geo_hash_clean = b.geo_hash_clean
@@ -357,7 +360,7 @@ mcaid_elig_after <- sqldf("SELECT a.*, b.from_date, b.to_date, b.dual, b.full_be
   summarise(full_cov_days = sum(full_coverage)) %>%
   ungroup() %>%
   mutate(full_cov_11_after = full_cov_days >= 11/12 * 365,
-         full_cov_7_after = full_cov_days >= 11/12 * 365)
+         full_cov_7_after = full_cov_days >= 7/12 * 365)
 
 
 ## Medicaid ED visits and hospitalizations ----

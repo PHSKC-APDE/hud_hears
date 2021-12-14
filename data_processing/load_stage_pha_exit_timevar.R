@@ -895,9 +895,11 @@ timevar_exit_final <- timevar_exit_final %>%
 set.seed(98104)
 timevar_exit_final <- timevar_exit_final %>%
   mutate(chooser = runif(nrow(timevar_exit_final), 0, 1)) %>%
-  group_by(id_hudhears) %>%
+  group_by(id_hudhears, act_date) %>%
   mutate(chooser_max = max(chooser)) %>%
-  ungroup()
+  ungroup() %>%
+  # If no act_date, just set chooser_max to chooser
+  mutate(chooser_max = ifelse(is.na(act_date), chooser, chooser_max))
 
 
 ## Reorder columns ----

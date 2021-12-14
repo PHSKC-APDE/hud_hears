@@ -115,6 +115,7 @@ source_count_summ %>% group_by(BHDATA, MEDICAID, esd, HMIS_CLIENT, HCHN) %>%
 # Need to pick which demogs to use
 # Randomly select one
 pha_match_demogs <- pha_demo %>%
+  mutate(race_eth_me = ifelse(race_latino == 1, "Latino", race_eth_me)) %>%
   left_join(., select(source_count, id_hudhears, sources, id_kc_pha), by = "id_kc_pha") %>%
   filter(!is.na(id_hudhears))
 set.seed(98104)

@@ -84,29 +84,36 @@ exit_timevar %>%
   distinct(hh_id_kc_pha, act_date) %>%
   summarise(cnt = n())
 
-# See how many individuals have an exit
+# See how many individuals have an exit and how many are true exits
 exit_timevar %>%
   filter(!is.na(act_date)) %>%
-  distinct(id_hudhears, true_exit, act_date) %>%
+  summarise(cnt = n_distinct(id_hudhears))
+
+exit_timevar %>%
+  filter(!is.na(act_date)) %>%
+  distinct(id_hudhears, true_exit) %>%
   group_by(true_exit) %>%
-  summarise(cnt = n()) %>%
-  ungroup() %>%
-  mutate(tot = sum(cnt),
-         pct = round(cnt/tot*100, 1))
+  summarise(cnt = n())
 
 
-# See how many individuals have an exit in the study period
+# See how many individuals have a true exit in the study period
 exit_timevar %>%
   filter(!is.na(act_date) & 
            ((agency == "SHA" & act_date >= "2012-01-01" & act_date <= "2018-12-31") |
               (agency == "KCHA" & act_date >= "2016-01-01" & act_date <= "2018-12-31"))
          ) %>%
-  distinct(id_hudhears, true_exit, act_date) %>%
-  group_by(true_exit) %>%
-  summarise(cnt = n()) %>%
-  ungroup() %>%
-  mutate(tot = sum(cnt),
-         pct = round(cnt/tot*100, 1))
+  filter(true_exit == 1) %>%
+  summarise(cnt = n_distinct(id_hudhears))
+
+# See how many true exits in the study period
+exit_timevar %>%
+  filter(!is.na(act_date) & 
+           ((agency == "SHA" & act_date >= "2012-01-01" & act_date <= "2018-12-31") |
+              (agency == "KCHA" & act_date >= "2016-01-01" & act_date <= "2018-12-31"))
+  ) %>%
+  filter(true_exit == 1) %>%
+  distinct(id_hudhears, act_date) %>%
+  summarise(cnt = n())
 
 
 
@@ -545,14 +552,14 @@ exit_demogs_sum %>%
   filter(category == "agegrp" & !is.na(group) & exit == 1) %>%
   ggplot(aes(fill = exit_category, y = n_supp, x = exit_year)) +
   geom_bar(position = "fill", stat = "identity", colour = "black") +
-  geom_text(position = position_fill(vjust = 0.5), size = 2, show.legend = F,
+  geom_text(position = position_fill(vjust = 0.5), size = 3, show.legend = F,
             aes(group = exit_category, label = paste0(pct_supp, "%"),
                 color = exit_category)) +
   scale_color_manual(values = label_col) +
-  geom_text(aes(x = exit_year, y = 1.03, label = year_tot_label), vjust = 0, size = 2) +
+  geom_text(aes(x = exit_year, y = 1.03, label = year_tot_label), vjust = 0, size = 2.8) +
   scale_fill_viridis(discrete = T) +
-  scale_y_continuous(labels = scales::percent) +
-  coord_cartesian(ylim = c(0, 1.05)) +
+  scale_y_continuous(labels = scales::percent, breaks = seq(0, 1, by = 0.25)) +
+  coord_cartesian(ylim = c(0, 1.1)) +
   theme_ipsum(axis_text_size = 10) +
   labs(title = "Proportion of exit types by year and age group",
        x = "Year",
@@ -566,16 +573,37 @@ exit_demogs_sum_nodeath %>%
   filter(category == "agegrp" & !is.na(group) & exit == 1) %>%
   ggplot(aes(fill = exit_category, y = n_supp, x = exit_year)) +
   geom_bar(position = "fill", stat = "identity", colour = "black") +
-  geom_text(position = position_fill(vjust = 0.5), size = 2, show.legend = F,
+  geom_text(position = position_fill(vjust = 0.5), size = 3, show.legend = F,
             aes(group = exit_category, label = paste0(pct_supp, "%"),
                 color = exit_category)) +
   scale_color_manual(values = label_col) +
-  geom_text(aes(x = exit_year, y = 1.03, label = year_tot_label), vjust = 0, size = 2) +
+  geom_text(aes(x = exit_year, y = 1.03, label = year_tot_label), vjust = 0, size = 3) +
+  scale_fill_viridis(discrete = T) +
+  scale_y_continuous(labels = scales::percent, breaks = seq(0, 1, by = 0.25)) +
+  coord_cartesian(ylim = c(0, 1.1)) +
+  theme_ipsum(axis_text_size = 10) +
+  labs(title = "Proportion of exit types by year and age group (excluding deaths)",
+       x = "Year",
+       y = "Percent of exits",
+       caption = "NB. KCHA exit data is incomplete prior to October 2015",
+       fill = "Exit category") +
+  facet_grid(group ~ agency, scales = "free_x")
+
+
+exit_demogs_sum_nodeath %>%
+  filter(category == "major_prog" & !is.na(group) & exit == 1) %>%
+  ggplot(aes(fill = exit_category, y = n_supp, x = exit_year)) +
+  geom_bar(position = "fill", stat = "identity", colour = "black") +
+  geom_text(position = position_fill(vjust = 0.5), size = 3, show.legend = F,
+            aes(group = exit_category, label = paste0(pct_supp, "%"),
+                color = exit_category)) +
+  scale_color_manual(values = label_col) +
+  geom_text(aes(x = exit_year, y = 1.03, label = year_tot_label), vjust = 0, size = 3) +
   scale_fill_viridis(discrete = T) +
   scale_y_continuous(labels = scales::percent) +
   coord_cartesian(ylim = c(0, 1.05)) +
   theme_ipsum(axis_text_size = 10) +
-  labs(title = "Proportion of exit types by year and age group (excluding deaths)",
+  labs(title = "Proportion of exit types by year and program type (excluding deaths)",
        x = "Year",
        y = "Percent of exits",
        caption = "NB. KCHA exit data is incomplete prior to October 2015",

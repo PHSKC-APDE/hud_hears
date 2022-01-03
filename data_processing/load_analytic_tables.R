@@ -435,6 +435,53 @@ mcaid_ccw_summ <- mcaid_ccw %>%
          ccw_flag = ifelse(ccw_cnt >= 2, 1L, 0L))
 
 
+
+## Medicaid well-child visits ----
+wc_visits_prior <- dbGetQuery(db_hhsaw,
+                                 "SELECT x.id_hudhears, x.exit_date, COUNT(x.wc_visit) AS wc_cnt_prior
+                           FROM
+                           (SELECT DISTINCT a.id_hudhears, a.exit_date, c.wc_visit
+                             FROM
+                             (SELECT DISTINCT id_hudhears, exit_date 
+                               FROM hudhears.control_match_long) a
+                             LEFT JOIN
+                             (SELECT DISTINCT id_hudhears, id_mcaid 
+                               FROM claims.hudhears_id_xwalk) b
+                             ON a.id_hudhears = b.id_hudhears
+                             LEFT JOIN
+                             (SELECT DISTINCT id_mcaid, first_service_date, 1 AS wc_visit 
+                               FROM claims.final_mcaid_claim_header
+                               WHERE clm_type_mcaid_id = 27) c
+                             ON b.id_mcaid = c.id_mcaid AND
+                             c.first_service_date <= a.exit_date AND 
+                             c.first_service_date >= DATEADD(year, -1, a.exit_date)
+                           ) x
+                           GROUP BY x.id_hudhears, x.exit_date")
+
+
+wc_visits_after <- dbGetQuery(db_hhsaw,
+                              "SELECT x.id_hudhears, x.exit_date, COUNT(x.wc_visit) AS wc_cnt_after
+                           FROM
+                           (SELECT DISTINCT a.id_hudhears, a.exit_date, c.wc_visit
+                             FROM
+                             (SELECT DISTINCT id_hudhears, exit_date 
+                               FROM hudhears.control_match_long) a
+                             LEFT JOIN
+                             (SELECT DISTINCT id_hudhears, id_mcaid 
+                               FROM claims.hudhears_id_xwalk) b
+                             ON a.id_hudhears = b.id_hudhears
+                             LEFT JOIN
+                             (SELECT DISTINCT id_mcaid, first_service_date, 1 AS wc_visit 
+                               FROM claims.final_mcaid_claim_header
+                               WHERE clm_type_mcaid_id = 27) c
+                             ON b.id_mcaid = c.id_mcaid AND
+                             c.first_service_date >= a.exit_date AND 
+                             c.first_service_date <= DATEADD(year, 1, a.exit_date)
+                           ) x
+                           GROUP BY x.id_hudhears, x.exit_date")
+
+
+
 ## Final table ----
 covariate <- control_match_long %>%
   arrange(exit_uid, id_type, id_hudhears) %>%
@@ -475,7 +522,11 @@ covariate <- control_match_long %>%
             by = c("id_hudhears", "exit_date")) %>%
   left_join(., mcaid_visits_prior, by = c("id_hudhears", "exit_date")) %>%
   left_join(., mcaid_visits_after, by = c("id_hudhears", "exit_date")) %>%
-  left_join(., mcaid_ccw_summ, by = c("id_hudhears", "exit_date")) 
+  left_join(., mcaid_ccw_summ, by = c("id_hudhears", "exit_date")) %>%
+  left_join(., wc_visits_prior, by = c("id_hudhears", "exit_date")) %>%
+  left_join(., wc_visits_after, by = c("id_hudhears", "exit_date"))
+  
+  
 
 
 # Load to SQL

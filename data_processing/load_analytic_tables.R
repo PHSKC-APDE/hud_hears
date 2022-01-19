@@ -314,8 +314,10 @@ control_match_id_mcaid <- dbGetQuery(db_hhsaw,
                                    (SELECT DISTINCT id_hudhears, id_mcaid
                                      FROM claims.hudhears_id_xwalk) b
                                    ON a.id_hudhears = b.id_hudhears") %>%
-  mutate(exit_1yr_prior = exit_date - years(1) + days(1),
-         exit_1yr_after = exit_date + years(1) - days(1))
+  mutate(exit_1yr_prior = case_when(month(exit_date) == 2 & day(exit_date) == 29 ~ exit_date + days(1) - years(1),
+                                    TRUE ~ exit_date - years(1) + days(1)),
+         exit_1yr_after = case_when(month(exit_date) == 2 & day(exit_date) == 29 ~ exit_date + days(1) + years(1),
+                                    TRUE ~ exit_date + years(1) - days(1)))
 
 mcaid_elig <- claims::elig_timevar_collapse(db_hhsaw, server = "hhsaw", source = "mcaid",
                                             full_benefit = T, dual = T,
@@ -525,8 +527,6 @@ covariate <- control_match_long %>%
   left_join(., mcaid_ccw_summ, by = c("id_hudhears", "exit_date")) %>%
   left_join(., wc_visits_prior, by = c("id_hudhears", "exit_date")) %>%
   left_join(., wc_visits_after, by = c("id_hudhears", "exit_date"))
-  
-  
 
 
 # Load to SQL

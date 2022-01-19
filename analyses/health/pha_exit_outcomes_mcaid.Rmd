@@ -1,6 +1,6 @@
 ---
 title: "Health-related outcomes following exit from public housing assistance"
-author: "Alastair Matheson, Andy Chan, Annie Pennuci, Tyler Shannon, Amy Laurent"
+author: "Alastair Matheson, Andy Chan, Danny Colombara, Annie Pennuci, Tyler Shannon, Amy Laurent"
 date: "2022-01-04"
 output: word_document
 ---
@@ -13,7 +13,8 @@ knitr::opts_chunk$set(echo = TRUE)
 # options(scipen = 6, digits = 4, warning.length = 8170)
 # 
 # if (!require("pacman")) {install.packages("pacman")}
-# pacman::p_load(tidyverse, odbc, glue, data.table)
+# pacman::p_load(tidyverse, odbc, glue, data.table, ggplot2, viridis, hrbrthemes,
+               # knitr, rmarkdown, flextable)
 # 
 # # Connect to HHSAW
 # db_hhsaw <- DBI::dbConnect(odbc::odbc(),
@@ -39,25 +40,39 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ## Background
-Housing is a fundamental determinant of health, providing physical shelter and stability that allows for addressing health needs. Housing costs, including rents have increased substantially in recent years, especially in rapidly growing urban areas. Federal subsidies enable low-income families to afford housing but only 20-25% of eligible household receive subsidies. One solution is to support individuals to become economically self-sufficient and no longer require housing assistance, thus making limited resources available for others. However, little is known about outcomes following exit from housing assistance. We used a linked data set to examine health outcomes following exit from housing assistance, comparing positive and negative exits.
+Housing is a fundamental determinant of health, but housing costs have increased substantially in recent years. Federal subsidies enable only 20-25% of eligible low-income households to afford housing. One way to increase access is to support economic self-sufficiency so housing assistance is no longer required. However, little is known about outcomes after exit from housing assistance. Through an existing collaboration between public health and public housing, we sought to address this knowledge gap by comparing health outcomes following positive and negative housing exits.
 
 ## Methods
-We used probabilistic matching to link several data sets, including public housing and Medicaid claims data, that cover King County residents. We categorized exits from housing as positive (e.g., income increase), negative (e.g., eviction), or neutral (e.g., moving in with family/friends). Our analysis looked at ED visits, hospitalizations, and well-child visits (among 2--6-year-olds) in the 12 months following exit. We used logistic regression to compare outcomes for those with positive vs. negative exits, adjusting for individual and household demographics, type of housing assistance, and health status (prior ED visits/hospitalizations, chronic conditions). We stratified results for well-child checks to test for effect modification.
+We used probabilistic matching to link public housing and Medicaid claims datasets in King County, WA. We categorized exits from housing as positive (e.g., income increase), negative (e.g., eviction), or neutral (e.g., moving in with family/friends). Our analysis looked at ED visits, hospitalizations, and well-child visits (among 2–6-year-olds) in the 12 months following exit. We used logistic regression to compare outcomes for those with positive vs. negative exits, adjusting for individual and household demographics, type of housing assistance, and health status (prior ED visits/hospitalizations, chronic conditions). We stratified results for well-child checks to test for effect modification.
 
 ## Results
-There were `r nrow(exit_nodeath[exit_nodeath$exit_category == "Negative", ])` negative and `r nrow(exit_nodeath[exit_nodeath$exit_category == "Positive", ])` positive exits between 2012 and 2018. Of the `r nrow(exit_nodeath[exit_nodeath$exit_category != "Neutral", ])` people exiting, `r nrow(exit_nodeath[exit_nodeath$exit_category != "Nuetral" & exit_nodeath$full_cov_7_prior == 1  & exit_nodeath$full_cov_7_after == 1, ])` (`r round(nrow(exit_nodeath[exit_nodeath$exit_category != "Nuetral" & exit_nodeath$full_cov_7_prior == 1  & exit_nodeath$full_cov_7_after == 1, ])/nrow(exit_nodeath[exit_nodeath$exit_category != "Neutral", ])*100, 1)`%) had full Medicaid coverage 12 months either side of the exit date and were included in the analysis.
+Of the `r nrow(exit_nodeath[exit_nodeath$exit_category != "Neutral", ])` people exiting King County and Seattle Housing Authorities between 2012 and 2018, `r nrow(exit_nodeath[exit_nodeath$exit_category != "Nuetral" & exit_nodeath$full_cov_7_prior == 1  & exit_nodeath$full_cov_7_after == 1, ])` (`r round(nrow(exit_nodeath[exit_nodeath$exit_category != "Nuetral" & exit_nodeath$full_cov_7_prior == 1  & exit_nodeath$full_cov_7_after == 1, ])/nrow(exit_nodeath[exit_nodeath$exit_category != "Neutral", ])*100, 1)`%) had full Medicaid coverage 12 months either side of the exit date and were included in the analysis.
 
 Those with a positive exit were `r ifelse(ed_adj_results[2, 1] < 1, "less", "more")` likely to have 1+ ED visits (OR = `r sprintf("%.2f", ed_adj_results[2, 1])`, 95% CI: `r sprintf("%.2f", ed_adj_results[2, 2])`-`r sprintf("%.2f", ed_adj_results[2, 3])`, `r ifelse(ed_adj_p < 0.01, "p<0.01", ifelse(ed_adj_p < 0.05, "p<0.05", paste0("p=", sprintf("%.2f", ed_adj_p))))`) and `r ifelse(hosp_adj_results[2, 1] < 1, "less", "more")` likely to have 1+ hospitalizations (OR = `r sprintf("%.2f", hosp_adj_results[2, 1])`, 95% CI: `r sprintf("%.2f", hosp_adj_results[2, 2])`-`r sprintf("%.2f", hosp_adj_results[2, 3])`, `r ifelse(hosp_adj_p < 0.01, "p<0.01", ifelse(hosp_adj_p < 0.05, "p<0.05", paste0("p=", sprintf("%.2f", hosp_adj_p))))`) following exit than those with a negative exit, after adjusting for demographics and prior ED visits/hospitalizations.
 
-Among those with a well-child check in the 12 months prior to exit, a positive exit was not significantly associated with a well-child check after exit (p=`r sprintf("%.2f", wc_strat_wc_p)`). Among those without a recent well-child check, a positive exit was `r ifelse(wc_strat_no_wc_results[2, 1] < 1, "less", "more")` likely to lead to a well-child check after exiting than a negative exit (OR = `r sprintf("%.2f", wc_strat_no_wc_results[2, 1])`, 95% CI: `r sprintf("%.2f", wc_strat_no_wc_results[2, 2])`-`r sprintf("%.2f", wc_strat_no_wc_results[2, 3])`, `r ifelse(wc_strat_no_wc_p < 0.01, "p<0.01", ifelse(wc_strat_no_wc_p < 0.05, "p<0.05", paste0("p=", sprintf("%.2f", wc_strat_no_wc_p))))`)
+Among those with a well-child check in the 12 months prior to exit, a positive exit was not significantly associated with a well-child check after exit (p=`r sprintf("%.2f", wc_strat_wc_p)`). Among those without a recent well-child check, a positive exit was `r ifelse(wc_strat_no_wc_results[2, 1] < 1, "less", "more")` likely to lead to a well-child check after exiting than a negative exit (OR = `r sprintf("%.2f", wc_strat_no_wc_results[2, 1])`, 95% CI: `r sprintf("%.2f", wc_strat_no_wc_results[2, 2])`-`r sprintf("%.2f", wc_strat_no_wc_results[2, 3])`, `r ifelse(wc_strat_no_wc_p < 0.01, "p<0.01", ifelse(wc_strat_no_wc_p < 0.05, "p<0.05", paste0("p=", sprintf("%.2f", wc_strat_no_wc_p))))`).
 
 ## Conclusion
-The reasons for exiting housing assistance matter in terms of subsequent health impacts; positive exits are more likely to precede positive health outcomes like reduced ED visits and increased well-child checks than negative exits. A policy goal of moving people off of housing assistance to allow others to receive support may have unintended negative consequences.
+The reasons for exiting housing assistance matter in terms of subsequent health impacts; positive exits are more likely to precede certain positive health outcomes than negative exits. Policies and programs supporting positive transitions off housing assistance and preventing negative exits could improve longer-term outcomes for low-income households.
 
 
 ## Disclaimer
-This data product has not yet been reviewed or approved by Health Care Authority.
+This data product has not yet been reviewed or approved by the WA Health Care Authority.
 
 
-## Tables and regression output (will not be submitted)
+<!-- ## Tables and regression output (will not be submitted) -->
+
+<!-- ### ED visits -->
+<!-- ```{r ed, echo=FALSE} -->
+<!-- ed_adj_results %>% flextable() %>%  -->
+<!--   align(part = "all") %>% # left align -->
+<!--   set_caption(caption = "Table 1: Adjusted ED visit results") %>%  -->
+<!--   font(fontname = "Calibri (Body)", part = "all") %>%  -->
+<!--   fontsize(size = 10, part = "body") %>%  -->
+<!--   # add footer if you want -->
+<!--   # add_footer_row(values = "* p < 0.05. ** p < 0.01. *** p < 0.001.",  -->
+<!--   #                colwidths = 4) %>%  -->
+<!--   theme_booktabs() %>% # default theme -->
+<!--   autofit() -->
+<!-- ``` -->
 

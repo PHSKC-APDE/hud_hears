@@ -16,7 +16,7 @@ options(scipen = 6, digits = 4, warning.length = 8170)
 
 if (!require("pacman")) {install.packages("pacman")}
 pacman::p_load(tidyverse, odbc, glue, data.table, ggplot2, viridis, hrbrthemes,
-               knitr, kableExtra, rmarkdown)
+               knitr, rmarkdown, flextable)
 
 # Connect to HHSAW
 db_hhsaw <- DBI::dbConnect(odbc::odbc(),
@@ -167,7 +167,11 @@ ed_adj <- glm(ed_any_after ~ exit_pos + gender_me + race_eth_me + agegrp + los +
 
 summary(ed_adj)
 ed_adj_p <- summary(ed_adj)[["coefficients"]][2, 4]
-ed_adj_results <- exp(cbind(OR = coef(ed_adj), confint(ed_adj)))
+ed_adj_results <- data.frame(Category = names(coef(ed_adj)), 
+                             OR = exp(coef(ed_adj)), 
+                             exp(confint(ed_adj)), 
+                             p_value = summary(ed_adj)[["coefficients"]][, 4]) %>%
+  rename(ci_lb = X2.5.., ci_ub = X97.5..)
 
 
 ## Hospitalizations visits ----
@@ -186,7 +190,7 @@ hosp_adj <- glm(hosp_any_after ~ exit_pos + gender_me + race_eth_me + agegrp + l
 
 summary(hosp_adj)
 hosp_adj_p <- summary(hosp_adj)[["coefficients"]][2, 4]
-hosp_adj_results <- exp(cbind(OR = coef(hosp_adj), confint(hosp_adj)))
+hosp_adj_results <- cbind(OR = exp(coef(hosp_adj)), exp(confint(hosp_adj)), p_value = summary(hosp_adj)[["coefficients"]][, 4])
 
 
 ## Well-child visits ----
@@ -206,31 +210,32 @@ wc_adj <- glm(wc_cnt_after ~ exit_pos + gender_me + race_eth_me + los +
 
 summary(wc_adj)
 wc_adj_p <- summary(wc_adj)[["coefficients"]][2, 4]
-wc_adj_results <- exp(cbind(OR = coef(wc_adj), confint(wc_adj)))
+wc_adj_results <- cbind(OR = exp(coef(wc_adj)), exp(confint(wc_adj)), p_value = summary(wc_adj)[["coefficients"]][, 4])
 
 
 ### Stratified ----
 wc_strat_wc <- glm(wc_cnt_after ~ exit_pos + gender_me + race_eth_me + los + 
-                major_prog + hh_size + single_caregiver + hh_disability + 
-                wc_cnt_prior + ccw_flag, 
+                major_prog + hh_size + single_caregiver + hh_disability + ccw_flag, 
               data = model_data_mcaid[between(model_data_mcaid$age_at_exit, 2, 6) & 
                                         model_data_mcaid$wc_cnt_prior == 1, ], 
               family = "binomial")
 
 summary(wc_strat_wc)
 wc_strat_wc_p <- summary(wc_strat_wc)[["coefficients"]][2, 4]
-wc_strat_wc_results <- exp(cbind(OR = coef(wc_strat_wc), confint(wc_strat_wc)))
+wc_strat_wc_results <- cbind(OR = exp(coef(wc_strat_wc)), exp(confint(wc_strat_wc)), 
+                             p_value = summary(wc_strat_wc)[["coefficients"]][, 4])
+
 
 wc_strat_no_wc <- glm(wc_cnt_after ~ exit_pos + gender_me + race_eth_me + los + 
-                     major_prog + hh_size + single_caregiver + hh_disability + 
-                     wc_cnt_prior + ccw_flag, 
+                     major_prog + hh_size + single_caregiver + hh_disability + ccw_flag, 
                    data = model_data_mcaid[between(model_data_mcaid$age_at_exit, 2, 6) & 
                                              model_data_mcaid$wc_cnt_prior == 0, ], 
                    family = "binomial")
 
 summary(wc_strat_no_wc)
 wc_strat_no_wc_p <- summary(wc_strat_no_wc)[["coefficients"]][2, 4]
-wc_strat_no_wc_results <- exp(cbind(OR = coef(wc_strat_no_wc), confint(wc_strat_no_wc)))
+wc_strat_no_wc_results <- cbind(OR = exp(coef(wc_strat_no_wc)), exp(confint(wc_strat_no_wc)), 
+                                p_value = summary(wc_strat_no_wc)[["coefficients"]][, 4])
 
 
 

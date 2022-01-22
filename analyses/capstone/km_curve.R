@@ -37,15 +37,15 @@ tth_data<- setDT(DBI::dbGetQuery(conn = db_hhsaw, "SELECT * FROM [hudhears].[cap
 tth_data<- tth_data %>% mutate(surv_object= Surv(time=tt_homeless, event=event))
 
 # Create survival curve by exit type
-fit_exit_type<- survfit(surv_object ~ exit_category, data=tth_data)
+fit_exit_type<- survfit(surv_object ~ exit_category, data=tth_data, conf.type="log-log")
 
 # Create plot of Kaplan-Meier survival curve by exit type
 km_exit_type<- ggsurvplot(fit_exit_type, data=tth_data,
                             xlab="Time from Public Housing Exit (Days)",
-                            ylab="Probability of Being Housed",
+                            ylab="Proportion Remaining Housed",
                             title="Kaplan-Meier Estimates of Time from Exit to Homelessness",
                             break.time.by=500,
-                            xlim=c(0,max(tth_data$tt_homeless)),
+                            #xlim=c(0,max(tth_data$tt_homeless)),
                             ylim=c(0,1),
                             conf.int=TRUE,
                             legend.title="Exit Type",

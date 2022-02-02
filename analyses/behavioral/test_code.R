@@ -22,6 +22,12 @@ pacman::p_load(tidyverse, odbc, glue, data.table, lubridate)
 #                            Authentication = "ActiveDirectoryPassword")
 
 #Load some data in to test
+##Control match covariates table
+control_match_covariate <- setDT(DBI::dbGetQuery(conn = db_hhsaw, "SELECT * FROM [hudhears].[control_match_covariate]"))
+
+
+
+##Left join this table with Medicaid ID table
 control_match_id_mcaid <- dbGetQuery(db_hhsaw,
                                      "SELECT a.*, b.id_mcaid
                                      FROM
@@ -36,5 +42,5 @@ ON a.id_hudhears = b.id_hudhears") %>%
 
 control_match_id_mcaid %>% arrange(exit_uid, id_type, id_hudhears) %>% head(12)
 
-##
+
 

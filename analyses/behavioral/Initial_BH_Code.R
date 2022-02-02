@@ -1,14 +1,18 @@
 ##01/21/2022
-#Initial Code--Behavioral Analysis
+# #Initial Code--Behavioral Analysis
+# Making some descriptive tables!
+# 
+# # #Steps
+# # 1) Connect to HHSAW SQL server
+# # 2) Read in appropriate data tables
+#     a) Table that includes full Medicaid coverage for 7 and 11 months with
+#        exits and matched non-exits
+# # 3) Modify Alastair's code to make demographic comparisons
+#     a) Descriptives by exit type
+#     b) Differences in Medicaid coverage by exit type
+#     c) Differences in Medicaid continuation after coverage
 
-# #Steps
-# 1) Connect to HHSAW SQL server
-# 2) Read in appropriate data tables
-# 3) Use cross-walk tables to join tables of interest
-#   a) Study ID to KCID
-#   b) KCID to auth_id file (for crisis events)
-#   c) Also joint with Medicaid ID (If applicable)
-# 4) Demographic comparisons
+  
 
 
 #Connect to HHSAW Server

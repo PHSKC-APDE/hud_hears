@@ -23,7 +23,8 @@ db_hhsaw <- DBI::dbConnect(odbc::odbc(),
                            TrustServerCertificate = "yes",
                            Authentication = "ActiveDirectoryPassword")
 
-#Read in tables of interest
+
+
 
 
 

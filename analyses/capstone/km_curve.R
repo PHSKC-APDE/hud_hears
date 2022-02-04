@@ -6,7 +6,7 @@
 ## Date Created: 1/12/2022
 ## Email:n-tkeating@kingcounty.gov
 ##
-## Notes: Still a work in progress, first attempt
+## Notes: Also produces estimates for probability remaining housed at 365 days after exit (by exit type)
 ##   
 ##
 
@@ -48,14 +48,14 @@ fit_exit_type<- survfit(surv_object ~ exit_category, data=tth_data, conf.type="l
 # Create plot of Kaplan-Meier survival curve by exit type
 km_exit_type<- ggsurvplot(fit_exit_type, data=tth_data,
                             xlab="Time from Public Housing Exit (Days)",
-                            ylab="Proportion Remaining Housed",
+                            ylab="Probability Remaining Housed",
                             title="Kaplan-Meier Estimates of Time from Exit to Homelessness",
                             break.time.by=50,
                             xlim=c(0,max(tth_data$tt_homeless)),
                             ylim=c(0.5,1),
                             conf.int=TRUE,
                             legend.title="Exit Type",
-                            legend.labs= unique(tth_data$exit_category),
+                            legend.labs= na.omit(unique(tth_data$exit_category)),
                             risk.table=TRUE, # risk table added
                             cumevents=TRUE, # cumulative events table added
                             tables.col="strata",
@@ -67,7 +67,7 @@ km_exit_type$table<- km_exit_type$table +
   labs(x="")
 km_exit_type$cumevents<- km_exit_type$cumevents + 
   labs(x="")
-#km_exit_type
+km_exit_type
 #-------------------------------------
 
 

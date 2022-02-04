@@ -47,7 +47,7 @@ control_match_id_mcaid <- dbGetQuery(db_hhsaw,
 (SELECT * FROM hudhears.control_match_long) a
 LEFT JOIN
 (SELECT DISTINCT id_hudhears, id_mcaid
-FROM claims.hudhears_id_xwalk) b
+FROM claims.hudhears_id_xwalk WHERE id_mcaid is not null) b
 ON a.id_hudhears = b.id_hudhears") %>%
   mutate(exit_1yr_prior = exit_date - years(1) + days(1),
          exit_1yr_after = exit_date + years(1) - days(1))
@@ -59,16 +59,10 @@ control_match_id_mcaid %>% arrange(exit_uid, id_type, id_hudhears) %>% head(12)
 ## Observations off by 300
 # Do antijoin to see why this is happening
 
-#First step--change control_match_covariate to long format
-# Make long version of the data for easier joining
-control_match_covariate_long <- control_match_covariate%>%
-  pivot_longer(cols = starts_with("id"), names_to = "id_type", values_to = "id_kc_pha") %>%
-  distinct()
-
-
-
-
-mis_match<- anti_join(control_match_covariate, control_match_id_mcaid, by=c("id_hudhears"))
+mis_match<- anti_join(control_match_id_mcaid, control_match_covariate, by=c("id_hudhears"))
 mis_match2<- as.data.frame(mis_match)
 
 
+
+
+control_match_covariate %>% select(id_hudhears, starts_with("full_")) %>% head() %>% mutate(chk = full_cov_7_prior * full_cov_7_after)

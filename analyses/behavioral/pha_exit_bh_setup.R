@@ -34,7 +34,7 @@ db_hhsaw <- DBI::dbConnect(odbc::odbc(),
 try(DBI::dbExecute(db_hhsaw, "DROP TABLE hudhears.bh_crisis_events"), silent = T)
 
 DBI::dbExecute(db_hhsaw,
-               "SELECT x.id_hudhears, MIN(x.first_event) as first_event, MAX(x.last_event) as last_event 
+               "SELECT x.id_hudhears, b.auth_no, MIN(x.first_event) as first_event, MAX(x.last_event) as last_event 
                INTO hudhears.bh_crisis_events
                FROM
                (SELECT a.id_hudhears, b.program, c.description, b.start_date, d.first_service, d.last_service, 
@@ -45,7 +45,8 @@ DBI::dbExecute(db_hhsaw,
                    WHERE kcid IS NOT NULL) a
                  INNER JOIN
                  (SELECT kcid, auth_no, program, start_date FROM bhrd.au_master
-                   WHERE program IN ('13', '15', '40', '74', '75', '76', '79', '80', '120', '160', '176', 'HL')) b
+                   WHERE program IN ('13', '15', '40', '74', '75', '76', '79', '80', '120', '160', '176', 'HL')
+                      AND status_code in ('TM','AA')) b
                  ON a.kcid = b.kcid
                  LEFT JOIN
                  (SELECT program, description FROM bhrd.sp_program) c
@@ -53,7 +54,7 @@ DBI::dbExecute(db_hhsaw,
                  LEFT JOIN 
                  (SELECT auth_no, MIN(event_date) AS first_service, MAX(event_date) AS last_service 
                    FROM bhrd.ea_cpt_service 
-                   --where source_id NOT IN(3, 6, 7, 8)
+                   WHERE source_id NOT IN(3, 6, 7, 8, 10)
                    GROUP BY auth_no) d
                  ON b.auth_no = d.auth_no
                ) x
@@ -99,3 +100,30 @@ DBI::dbExecute(db_hhsaw,
                ON a.kcid = b.kcid")
 
 
+# OUTPATIENT EVENTS ----
+# Remove table if it exists
+try(DBI::dbExecute(db_hhsaw, "DROP TABLE hudhears.bh_outpatient_events"), silent = T)
+
+DBI::dbExecute(db_hhsaw,
+               "SELECT DISTINCT id.id_hudhears, au.auth_no, au.agency_id, au.program, sp.description,
+               ea.event_date, 1 AS outpatient_event
+               INTO hudhears.bh_outpatient_events
+               FROM
+               (SELECT DISTINCT id_hudhears, kcid FROM amatheson.hudhears_xwalk_ids
+                 WHERE kcid IS NOT NULL) id
+               INNER JOIN
+               bhrd.au_master au
+               ON id.kcid = au.kcid
+               INNER JOIN
+               bhrd.ea_cpt_service ea
+               ON au.auth_no = ea.auth_no
+               LEFT JOIN
+               bhrd.sp_program sp
+               ON au.program = sp.program 
+               WHERE ea.event_date BETWEEN au.start_date AND 
+                IsNull(au.expire_date, DATEADD(day, sp.maximum_length, au.start_date)) -- open authorizations at the time of the event
+               AND sp.action_code in ('A')
+               AND au.status_code in ('TM','AA')
+               AND sp.loc in ('OP') -- outpatient services
+               AND sp.program not in ('13', '15', '40', '74', '75', '76', '79', '80', '120', '160', '176', 'HL') -- exclude program codes considered as crisis events. 
+               AND ea.source_id NOT IN(3, 6, 7, 8, 10) -- exclude system generated services because they do not come from providers")

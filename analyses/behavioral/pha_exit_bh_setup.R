@@ -34,12 +34,9 @@ db_hhsaw <- DBI::dbConnect(odbc::odbc(),
 try(DBI::dbExecute(db_hhsaw, "DROP TABLE hudhears.bh_crisis_events"), silent = T)
 
 DBI::dbExecute(db_hhsaw,
-               "SELECT x.id_hudhears, b.auth_no, MIN(x.first_event) as first_event, MAX(x.last_event) as last_event 
+               "SELECT DISTINCT a.id_hudhears, b.program, b.auth_no, c.description, b.start_date, d.event_date,
+               coalesce(d.event_date, b.start_date) as crisis_date
                INTO hudhears.bh_crisis_events
-               FROM
-               (SELECT a.id_hudhears, b.program, c.description, b.start_date, d.first_service, d.last_service, 
-                 coalesce(first_service, start_date) as first_event,
-                 coalesce(last_service, start_date) as last_event 
                  FROM
                  (SELECT DISTINCT id_hudhears, kcid FROM amatheson.hudhears_xwalk_ids
                    WHERE kcid IS NOT NULL) a
@@ -52,13 +49,9 @@ DBI::dbExecute(db_hhsaw,
                  (SELECT program, description FROM bhrd.sp_program) c
                  ON b.program = c.program
                  LEFT JOIN 
-                 (SELECT auth_no, MIN(event_date) AS first_service, MAX(event_date) AS last_service 
-                   FROM bhrd.ea_cpt_service 
-                   WHERE source_id NOT IN(3, 6, 7, 8, 10)
-                   GROUP BY auth_no) d
-                 ON b.auth_no = d.auth_no
-               ) x
-               GROUP BY x.id_hudhears")
+                 (SELECT DISTINCT auth_no, event_date FROM bhrd.ea_cpt_service 
+                   WHERE source_id NOT IN(3, 6, 7, 8, 10)) d
+                 ON b.auth_no = d.auth_no")
 
 
 # ITA TABLE ----
@@ -88,7 +81,7 @@ DBI::dbExecute(db_hhsaw,
                  CASE when disp.voluntary = 'Y' then 1 else 0 END AS [ITA_REF_VOLUNTARY],
                  CASE when disp.discharge_referral = 'Y' then 1 else 0 END AS [ITA_REF_OUTPATIENT]
                  FROM
-                 (SELECT TOP 10000 * FROM [bhrd].[cc_intake]) cc
+                 (SELECT  * FROM [bhrd].[cc_intake]) cc
                  LEFT JOIN 
                  (SELECT * FROM [bhrd].[ref_ita_disposition]) disp
                  ON cc.disposition = disp.disposition

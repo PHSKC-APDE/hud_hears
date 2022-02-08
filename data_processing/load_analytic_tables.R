@@ -241,37 +241,37 @@ if (!exists("control_match_long")) {
 
 ## Demographics ----
 demogs <- dbGetQuery(db_hhsaw,
-                     "SELECT a.*, b.dob, b.admit_date, b.gender_me, b.race_latino,
-                     b.race_me, b.race_eth_me
+                     "SELECT a.*, b.dob, b.admit_date_all, b.admit_date_kcha, b.admit_date_sha, 
+                     b.gender_me, b.race_latino, b.race_me, b.race_eth_me
                      FROM
                      (SELECT id_hudhears, id_kc_pha, exit_date
                        FROM hudhears.control_match_long) a
                      LEFT JOIN
-                     (SELECT id_kc_pha, dob, admit_date, gender_me, race_me, race_eth_me, race_latino
+                     (SELECT id_kc_pha, dob, admit_date_all, admit_date_kcha, admit_date_sha, 
+                     gender_me, race_me, race_eth_me, race_latino
                        FROM pha.final_demo) b
                      ON a.id_kc_pha = b.id_kc_pha")
 
-# Set up age and time in housing at exit 
+# Set up age and consolidated race/eth 
 demogs <- demogs %>%
   mutate(age_at_exit = floor(interval(start = dob, end = exit_date) / years(1)),
-         housing_time_at_exit = floor(interval(start = admit_date, end = exit_date) / years(1)),
          race_eth_me = ifelse(race_latino == 1, "Latino", race_eth_me))
 
 
-## Also use individual time-varying characteristics from pha.final_timevar because
+## Also use individual time-varying characteristics from pha.final_timevar (via pha_exit_timevar) because
 #   not all heads of household are captured in the head of household table
 #   (usually when a person was HoH for one day)
 if (!exists("exit_timevar")) {
   exit_timevar <- dbGetQuery(db_hhsaw, 
-                             "SELECT a.*, c.geo_tractce10 FROM
+                             "SELECT a.*, d.geo_tractce10 FROM
                            (SELECT * FROM pha.stage_pha_exit_timevar
                            WHERE chooser = chooser_max) a
                            LEFT JOIN
-                           (SELECT DISTINCT geo_hash_clean, geo_hash_geocode FROM ref.address_clean) b
-                           ON a.geo_hash_clean = b.geo_hash_clean
+                           (SELECT DISTINCT geo_hash_clean, geo_hash_geocode FROM ref.address_clean) c
+                           ON a.geo_hash_clean = c.geo_hash_clean
                            LEFT JOIN
-                           (SELECT DISTINCT geo_hash_geocode, geo_tractce10 FROM ref.address_geocode) c
-                           ON b.geo_hash_geocode = c.geo_hash_geocode")
+                           (SELECT DISTINCT geo_hash_geocode, geo_tractce10 FROM ref.address_geocode) d
+                           ON c.geo_hash_geocode = d.geo_hash_geocode")
 }
 
 
@@ -285,7 +285,8 @@ hh_demogs <- dbGetQuery(db_hhsaw,
                         "SELECT a.*, b.agency, b.major_prog, b.subsidy_type, b.prog_type, 
                         b.operator_type, b.vouch_type_final, b.portfolio_final,
                         b.geo_tractce10, b.hh_size, b.hh_senior, b.hh_disability, 
-                        b.n_child, b.n_adult, b.n_senior, b.n_disability, b.single_caregiver
+                        b.n_child, b.n_adult, b.n_senior, b.n_disability, b.single_caregiver, 
+                        b.housing_time_at_exit
                         FROM
                         (SELECT x.*, 
                           (SELECT TOP 1 date FROM pha.stage_hh_demogs_weekly y
@@ -296,7 +297,9 @@ hh_demogs <- dbGetQuery(db_hhsaw,
                         LEFT JOIN
                         (SELECT hh_id_kc_pha, date, agency, major_prog, subsidy_type, 
                           prog_type, operator_type, vouch_type_final, portfolio_final,
-                          geo_tractce10, hh_size, hh_senior, hh_disability, n_child, n_adult, n_senior, n_disability, single_caregiver
+                          geo_tractce10, hh_size, hh_senior, hh_disability, n_child, 
+                          n_adult, n_senior, n_disability, single_caregiver, 
+                          length_period AS housing_time_at_exit
                           FROM pha.stage_hh_demogs_weekly) b
                         ON a.hh_id_kc_pha = b.hh_id_kc_pha AND a.hh_demog_date = b.date
                         order by a.exit_uid, a.id_type, a.id_kc_pha")
@@ -489,16 +492,17 @@ covariate <- control_match_long %>%
   arrange(exit_uid, id_type, id_hudhears) %>%
   # Join demogs and hh_demog on id_kc_pha as well because there are two IDs that 
   # point to the same id_hudhears, possibly a false positive match
-  left_join(., select(demogs, id_hudhears, id_kc_pha, exit_date, gender_me, race_eth_me, 
-                      age_at_exit, housing_time_at_exit),
+  left_join(., select(demogs, id_hudhears, id_kc_pha, exit_date, admit_date_all, 
+                      admit_date_kcha, admit_date_sha, gender_me, race_eth_me, 
+                      age_at_exit),
             by = c("id_hudhears", "id_kc_pha", "exit_date")) %>%
-  left_join(., select(hh_demogs, id_hudhears, id_kc_pha, exit_date, hh_demog_date:single_caregiver),
+  left_join(., select(hh_demogs, id_hudhears, id_kc_pha, exit_date, hh_demog_date:housing_time_at_exit),
             by = c("id_hudhears", "id_kc_pha", "exit_date")) %>%
   # Use individual-level time-varying demogs to fill in gaps in HH-level
   # Usually happens when an exiting person becomes their own HoH for a day or so
   left_join(., filter(exit_timevar, chooser == chooser_max) %>%
               select(id_hudhears, id_kc_pha, act_date, exit_reason_clean, agency, 
-                      major_prog:vouch_type_final, portfolio_final, geo_tractce10),
+                     major_prog:vouch_type_final, portfolio_final, geo_tractce10),
             by = c("id_hudhears", "id_kc_pha", "exit_date" = "act_date")) %>%
   # Make flag for death exit, apply to controls as well
   mutate(exit_death = case_when(is.na(exit_reason_clean) ~ NA_integer_,
@@ -516,8 +520,9 @@ covariate <- control_match_long %>%
          vouch_type_final = coalesce(vouch_type_final.x, vouch_type_final.y),
          portfolio_final = coalesce(portfolio_final.x, portfolio_final.y),
          geo_tractce10 = coalesce(geo_tractce10.x, geo_tractce10.y)) %>%
-  select(id_hudhears:exit_date, exit_death, gender_me:housing_time_at_exit, 
-         hh_id_kc_pha, hh_demog_date, agency:geo_tractce10, hh_size:single_caregiver) %>%
+  select(id_hudhears:exit_date, exit_death, gender_me:age_at_exit,  
+         housing_time_at_exit, hh_id_kc_pha, hh_demog_date, agency:geo_tractce10, 
+         hh_size:single_caregiver) %>%
   left_join(., select(mcaid_elig_prior, id_hudhears, exit_date, full_cov_11_prior, full_cov_7_prior), 
             by = c("id_hudhears", "exit_date")) %>%
   left_join(., select(mcaid_elig_after, id_hudhears, exit_date, full_cov_11_after, full_cov_7_after), 

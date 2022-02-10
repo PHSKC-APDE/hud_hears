@@ -1,18 +1,19 @@
 ## Script name: 01_format.R
 ##
 ## Purpose of script: 
-##    1) Create dataset of study individuals for Biost Capstone HUDHEARS project
-##        - using pha.stage_pha_exit_timevar table
-##        - each filtering step is broken down to obtain flowchart of study individuals
-##    2) Obtain covariates for study individuals (using hudhears.control_match_covariate table)
-##       and obtain homelessness services access records (using hudhears.pha_homeless_status table)
-##    3) Merge covariates and homelessness variables to PHA data by hudhears id (and exit_date)
+##    Step 1) Obtain study population of exits with exit reasons and categories (from pha.stage_pha_exit_timevar),
+##              join covariates (hudhears.control_match_covariate), 
+##              and join homeless status data (from hud.hears.pha_homeless_status)
+##    Step 2)
+
+
+##    Step 3) Join KC-standardized opportunity index scores to data by census tract
 ##
 ## Author: Hantong Hu, Taylor Keating, Zichen Liu, Niki Petrakos
 ## Date Created: 1/6/2022
 ## Email: n-hhu@kingcounty.gov, n-tkeating@kingcounty.gov, n-zliu@kingcounty.gov, n-npetrakos@kingcounty.gov
 ##
-## Notes: Each step of the filtering process is broken down to obtain a flowchart of study individuals
+## Notes:
 ##   
 ##
 
@@ -37,106 +38,59 @@ db_hhsaw <- DBI::dbConnect(odbc::odbc(),
                            Authentication = "ActiveDirectoryPassword")
 
 #--------------------------------------------------
-# 1)
-##### Filtering PHA data to obtain dataset of study participants
-## Note: Each step has been broken apart so that a flowchart of study participants can be made
+### Step 1) Obtain study population, join covariates, and join homeless status data
 
-# Select PHA exit data Table (specific variables)
-# (and for which chooser= chooser_max to take just one row for each id_hudhears/exit_date combo)
-exit_data_full<- 
+#-----
+## 1a) Pull Tables 
+
+# Select PHA exit data Table (and for which chooser= chooser_max to take just one row for each id_hudhears/exit_date combo)
+pha_exit_timevar<- 
   setDT(DBI::dbGetQuery(conn= db_hhsaw, "SELECT id_hudhears, id_kc_pha, exit_year, act_date, 
                         agency, exit_reason_clean, exit_category, true_exit 
                         FROM [pha].[stage_pha_exit_timevar] 
                         WHERE chooser=chooser_max"))
-
-#---
-# 1a) Total Exits
-
-# filter for exits
-exit_data<- exit_data_full %>%
-  filter(!is.na(act_date))
-paste("Total Exits", nrow(exit_data))
-
-#---
-# 1b) Exits in Study Period
-
-## look at number of exits excluded by study period
-#nrow(exit_data %>% filter(agency=="SHA" & (act_date< "2012-01-01" | act_date > "2018-12-31")))
-#nrow(exit_data %>% filter(agency=="KCHA" & (act_date< "2016-01-01" | act_date > "2018-12-31")))
-
-# filter for study period (dates for KCHA and SHA)
-exit_data<- exit_data %>% 
-  filter((agency=="SHA" & act_date >= "2012-01-01" & act_date <= "2018-12-31") |
-           (agency=="KCHA" & act_date >= "2016-01-01" & act_date <= "2018-12-31"))
-paste("Total Exits in study period", nrow(exit_data))
-
-#---
-# 1c) True Exits
-
-# filter for true exits (true_exit==1)  
-#   (i.e., no housing activity within 1 year of the period the exit date falls in 
-#           and the exit date is within 1 year of the max_in_period date)
-exit_data<- exit_data %>% 
-  filter(true_exit==1)
-paste("True Exits", nrow(exit_data))
-
-#---
-# 1d) Unique Exits
-
-# # look at number of people with multiple exits
-# mult_exit_data<- exit_data %>%
-#   arrange(id_kc_pha, act_date) %>%
-#   group_by(id_kc_pha) %>%
-#   mutate(exit_cnt=n(), exit_order=row_number()) %>% ungroup() %>%
-#   filter(exit_cnt > 1)
-# paste("Number of People with Multiple Exits", length(unique(mult_exit_data$id_kc_pha)))
-
-# filter for distinct people (take most recent exit for people with multiple exits)
-exit_data<- exit_data  %>%
-  arrange(id_kc_pha, act_date) %>%
-  group_by(id_kc_pha) %>%
-  mutate(exit_cnt=n(), exit_order = row_number()) %>% ungroup() %>%
-  filter(exit_cnt == exit_order)
-paste("Unique Individual Exits", nrow(exit_data))
-
-#---
-# 1e) Non-Death Exits
-
-# # look at number of deaths
-# nrow(exit_data %>% filter(exit_reason_clean=="Deceased"))
-
-# filter out deaths  (exit_reason_clean= "Deceased")
-exit_data<- exit_data %>%
-  filter(exit_reason_clean != "Deceased" | is.na(exit_reason_clean)==TRUE)
-paste("Non Death Exits", nrow(exit_data))
-
-# now exit_data is study population
-#--------------------------------------------------
-
-
-#--------------------------------------------------
-# 2)
-###### Get covariate table and homeless status table to add to PHA data
 
 # Select Covariate Table and filter for id_type is exit
 covariate_data<- setDT(DBI::dbGetQuery(conn= db_hhsaw, "SELECT id_hudhears, id_type, hh_id_kc_pha, 
                                        exit_date, gender_me, race_eth_me, age_at_exit, 
                                        housing_time_at_exit, agency, major_prog, prog_type, 
                                        geo_tractce10, hh_size, hh_disability, n_disability, single_caregiver 
-                                       FROM [hudhears].[control_match_covariate]"))
-covariate_data<- covariate_data %>% filter(id_type=="id_exit")
+                                       FROM [hudhears].[control_match_covariate]")) %>% 
+  filter(id_type=="id_exit")
 
 # Select Homeless Status Table
 homeless_status_data<- setDT(DBI::dbGetQuery(conn = db_hhsaw, "SELECT id_hudhears, start_date, housing_status, sourcesystemnm 
                                              FROM [hudhears].[pha_homeless_status]"))
-#--------------------------------------------------
 
+#-----
+## 1b) Filter PHA data to obtain dataset of study participants
+# Filter for:
+# i) total exits
+# ii) exits in study period (SHA 01/01/2012-12/31/2018, KCHA 01/01/2016-12/31/2018)
+# iii) true exits (i.e., no housing activity within 1 year of the period the exit date falls in 
+#           and the exit date is within 1 year of the max_in_period date)
+# iv) unique exits (take most recent exit for people with multiple exits)
+# v) non-death exits
 
-#--------------------------------------------------
-# 3)
-##### Joining Data
+exit_data<- pha_exit_timevar %>% 
+  # i) filter for exits
+  filter(!is.na(act_date)) %>% 
+  # ii) filter for study period
+  filter((agency=="SHA" & act_date >= "2012-01-01" & act_date <= "2018-12-31") | 
+           (agency=="KCHA" & act_date >= "2016-01-01" & act_date <= "2018-12-31")) %>%
+  # iii) filter for true exits 
+  filter(true_exit==1) %>% 
+  # iv) filter for unique exits (take most recent exit for people with multiple exits) %>%
+  arrange(id_kc_pha, act_date) %>% 
+  group_by(id_kc_pha) %>%
+  mutate(exit_cnt=n(), exit_order = row_number()) %>% ungroup() %>%
+  filter(exit_cnt == exit_order) %>%
+  # v) filter out deaths  (exit_reason_clean= "Deceased")
+  filter(exit_reason_clean != "Deceased" | is.na(exit_reason_clean)==TRUE) 
 
-# join covariate data to PHA data
+# now exit_data is study population
+#-----
+## 1c) Join covariates and homeless status data to study population
 joined_data<- left_join((exit_data %>% 
                            select(id_hudhears, exit_year, act_date, exit_reason_clean, exit_category) %>%
                            rename(exit_date=act_date)),
@@ -146,18 +100,19 @@ joined_data<- left_join((exit_data %>%
 joined_data<- left_join(joined_data,
                         homeless_status_data,
                         by="id_hudhears")
-#--------------------------------------------------
 
-
-
-#------------------------------------------------------------
-## Write Temporary table to SQL Server
+#-----
+# Write data to SQL table
+message("CAUTION! This will overwrite anything that is already in the table.")
 
 DBI::dbWriteTable(conn = db_hhsaw, 
                   name = DBI::Id(schema = "hudhears", table = "capstone_data_1"), 
                   value = setDF(copy(joined_data)), 
                   append = F, 
                   overwrite = T)
+
+#---------------------------------------
+### Step 2) 
 
 # Header ----
 # Author: Zichen Liu & Danny Colombara
@@ -232,17 +187,9 @@ DBI::dbWriteTable(conn = cxn16,
 
 # the end ----
 
-## Script name: join_opportunity_index.R
-##
-## Purpose of script: Join KC-standardized opportunity index scores by census tracts to the Biostat Capstone data by census tract (for Capstone Hudhears project)
-##
-## Author: Taylor Keating
-## Date Created: 1/19/2022
-## Email:n-tkeating@kingcounty.gov
-##
-## Notes: 
-##   
-##
+#---------------------------------
+### Step 3) 
+# Join KC-standardized opportunity index scores to data by census tract
 
 # SET OPTIONS AND BRING IN PACKAGES ----
 options(scipen = 6, digits = 4, warning.length = 8170)
@@ -267,9 +214,7 @@ db_hhsaw <- DBI::dbConnect(odbc::odbc(),
 # Select table that contains cleaned data for Biost Capstone Hudhears project
 tth_data<- setDT(DBI::dbGetQuery(conn = db_hhsaw, "SELECT * FROM [hudhears].[capstone_data_2]"))
 
-
-
-#-----------------------
+#-----
 # load opportunity index data (version standardized in King County)
 kc_opp_index_data<- read_csv("00_opportunity_index/kc_opp_indices_scaled.csv")
 
@@ -280,7 +225,7 @@ kc_opp_index_data<- kc_opp_index_data %>%
          GEO_TRACT= substr(kc_opp_index_data$GEOID10, 6, 11)) %>%
   select(GEOID10, GEO_STATE, GEO_COUNTY, GEO_TRACT, everything()) %>%
   rename(kc_opp_index_score= OPP_Z)
-#-----------------------
+#-----
 
 # join opportunity index scores to housing data by census tract
 tth_data<- left_join(tth_data,
@@ -291,8 +236,9 @@ tth_data<- left_join(tth_data,
 tth_data %>% filter(is.na(kc_opp_index_score)) %>% summarise(total_missing=n())
 tth_data %>% filter(is.na(kc_opp_index_score)) %>% group_by(geo_tractce10) %>% summarise(missing=n())
 
-#-----------------------
-# write table to SQL database
+#-----
+# Write data to SQL table
+message("CAUTION! This will overwrite anything that is already in the table.")
 
 DBI::dbWriteTable(conn = db_hhsaw, 
                   name = DBI::Id(schema = "hudhears", table = "capstone_data_3"), 

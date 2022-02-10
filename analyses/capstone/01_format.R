@@ -61,12 +61,12 @@ paste("Total Exits", nrow(exit_data))
 # 1b) Exits in Study Period
 
 ## look at number of exits excluded by study period
-#nrow(exit_data %>% filter(agency=="SHA" & (act_date< "2013-01-01" | act_date > "2018-12-31")))
+#nrow(exit_data %>% filter(agency=="SHA" & (act_date< "2012-01-01" | act_date > "2018-12-31")))
 #nrow(exit_data %>% filter(agency=="KCHA" & (act_date< "2016-01-01" | act_date > "2018-12-31")))
 
 # filter for study period (dates for KCHA and SHA)
 exit_data<- exit_data %>% 
-  filter((agency=="SHA" & act_date >= "2013-01-01" & act_date <= "2018-12-31") |
+  filter((agency=="SHA" & act_date >= "2012-01-01" & act_date <= "2018-12-31") |
            (agency=="KCHA" & act_date >= "2016-01-01" & act_date <= "2018-12-31"))
 paste("Total Exits in study period", nrow(exit_data))
 
@@ -219,11 +219,11 @@ df$tt_homeless <- if_else(df$tt_homeless >= max_days, max_days, df$tt_homeless)
 # Write data to SQL table ----
 message("CAUTION! This will overwrite anything that is already in the table.")
 
-# DBI::dbWriteTable(conn = cxn16, 
-#                   name = DBI::Id(schema = "hudhears", table = "capstone_data_2"), 
-#                   value = setDF(copy(df)), 
-#                   append = F, 
-#                   overwrite = T)
+DBI::dbWriteTable(conn = cxn16,
+                  name = DBI::Id(schema = "hudhears", table = "capstone_data_2"),
+                  value = setDF(copy(df)),
+                  append = F,
+                  overwrite = T)
 
 # check.df <- setDT(DBI::dbGetQuery(conn = cxn16, "SELECT * FROM hudhears.capstone_data_2"))
 
@@ -271,7 +271,7 @@ tth_data<- setDT(DBI::dbGetQuery(conn = db_hhsaw, "SELECT * FROM [hudhears].[cap
 
 #-----------------------
 # load opportunity index data (version standardized in King County)
-kc_opp_index_data<- read_csv("kc_opp_indices_scaled.csv")
+kc_opp_index_data<- read_csv("00_opportunity_index/kc_opp_indices_scaled.csv")
 
 # create variables for state, county, and tract identifies
 kc_opp_index_data<- kc_opp_index_data %>%

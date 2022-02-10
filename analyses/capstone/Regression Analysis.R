@@ -1,3 +1,26 @@
+# Set up ----
+rm(list=ls())
+pacman::p_load(data.table, DBI, keyring, glue)
+
+# Uncomment the following line to create a key (run when you change KCIT pwd)
+# When a window pops up, please enter your standard KCIT password
+keyring::key_set(service = "hhsaw", username = "n-npetrakos@kingcounty.gov")
+
+# Create a connection to hhs_analytics_workspace on Azure server 16 ----
+cxn16 <- DBI::dbConnect(odbc::odbc(), 
+                        driver = "ODBC Driver 17 for SQL Server", 
+                        server = "kcitazrhpasqlprp16.azds.kingcounty.gov", 
+                        database = "hhs_analytics_workspace", 
+                        uid = keyring::key_list("hhsaw")[["username"]], 
+                        pwd = keyring::key_get("hhsaw", keyring::key_list("hhsaw")[["username"]]), 
+                        Encrypt = "yes", 
+                        TrustServerCertificate = "yes", 
+                        Authentication = "ActiveDirectoryPassword")
+
+# Select capstone_data_3  ----
+tth_data <- setDT(DBI::dbGetQuery(conn = cxn16, "SELECT * FROM [hudhears].[capstone_data_3]"))
+
+
 ######################## GEE in Step 1 ##########################
 ##################### Cluster in Step 3 #########################
 

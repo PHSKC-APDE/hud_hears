@@ -52,7 +52,7 @@ km_exit_type<- ggsurvplot(fit_exit_type, data=tth_data,
                             title="Kaplan-Meier Estimates of Time from Exit to Homelessness",
                             break.time.by=50,
                             xlim=c(0,max(tth_data$tt_homeless)),
-                            ylim=c(0.5,1),
+                            ylim=c(0.7,1),
                             conf.int=TRUE,
                             legend.title="Exit Type",
                             legend.labs= na.omit(unique(tth_data$exit_category)),
@@ -67,7 +67,11 @@ km_exit_type$table<- km_exit_type$table +
   labs(x="")
 km_exit_type$cumevents<- km_exit_type$cumevents + 
   labs(x="")
+
+
+#png(file="KM_curve_plot.png", width=600, height=800)
 km_exit_type
+#dev.off()
 #-------------------------------------
 
 

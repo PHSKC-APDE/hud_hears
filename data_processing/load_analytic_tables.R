@@ -62,7 +62,7 @@ dbExecute(db_hhsaw,
           "SELECT a.id_hudhears, a.id_kc_pha, b.true_exit 
           INTO hudhears.pha_id_xwalk
           FROM 
-          (SELECT id_hudhears, id_kc_pha FROM amatheson.hudhears_xwalk_ids
+          (SELECT DISTINCT id_hudhears, id_kc_pha FROM amatheson.hudhears_xwalk_ids
           WHERE id_kc_pha IS NOT NULL) a 
           LEFT JOIN
           (SELECT DISTINCT id_kc_pha, true_exit FROM pha.stage_pha_exit_timevar
@@ -501,17 +501,28 @@ covariate <- control_match_long %>%
   # Use individual-level time-varying demogs to fill in gaps in HH-level
   # Usually happens when an exiting person becomes their own HoH for a day or so
   left_join(., filter(exit_timevar, chooser == chooser_max) %>%
-              select(id_hudhears, id_kc_pha, act_date, exit_reason_clean, agency, 
+              select(id_hudhears, id_kc_pha, act_date, agency, 
                      major_prog:vouch_type_final, portfolio_final, geo_tractce10),
-            by = c("id_hudhears", "id_kc_pha", "exit_date" = "act_date")) %>%
-  # Make flag for death exit, apply to controls as well
+            by = c("id_hudhears", "id_kc_pha", "exit_date" = "act_date"))
+
+
+# Note, some controls (~34) have an exit reason because of data issues
+# Pull out exit-related fields from only the exiting person and join back
+# Make flag for death exit
+exit_info <- control_match_long %>%
+  filter(id_type == "id_exit") %>%
+  select(id_hudhears, id_kc_pha, exit_date, exit_uid) %>%
+  left_join(., filter(exit_timevar, chooser == chooser_max) %>%
+              select(id_hudhears, id_kc_pha, act_date, exit_reason_clean),
+            by = c("id_hudhears", "id_kc_pha", "exit_date" = "act_date")) %>%  
   mutate(exit_death = case_when(is.na(exit_reason_clean) ~ NA_integer_,
                                 exit_reason_clean == "Deceased" ~ 1L,
                                 TRUE ~ 0L)) %>%
-  group_by(exit_uid) %>%
-  mutate(exit_death = max(exit_death, na.rm = T)) %>%
-  ungroup() %>%
-  mutate(exit_death = ifelse(is.infinite(exit_death), NA_integer_, exit_death)) %>%
+  select(exit_uid, exit_reason_clean, exit_death)
+
+# Join back to covariate data
+covariate <- covariate %>%
+  left_join(., exit_info, by = "exit_uid") %>%
   mutate(agency = coalesce(agency.x, agency.y),
          major_prog = coalesce(major_prog.x, major_prog.y),
          subsidy_type = coalesce(subsidy_type.x, subsidy_type.y),
@@ -520,7 +531,7 @@ covariate <- control_match_long %>%
          vouch_type_final = coalesce(vouch_type_final.x, vouch_type_final.y),
          portfolio_final = coalesce(portfolio_final.x, portfolio_final.y),
          geo_tractce10 = coalesce(geo_tractce10.x, geo_tractce10.y)) %>%
-  select(id_hudhears:exit_date, exit_death, gender_me:age_at_exit,  
+  select(id_hudhears:exit_date, exit_reason_clean, exit_death, gender_me:age_at_exit,  
          housing_time_at_exit, hh_id_kc_pha, hh_demog_date, agency:geo_tractce10, 
          hh_size:single_caregiver) %>%
   left_join(., select(mcaid_elig_prior, id_hudhears, exit_date, full_cov_11_prior, full_cov_7_prior), 

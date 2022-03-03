@@ -11,9 +11,9 @@
 ## Date Created: 2/7/2022
 ## Email: n-tkeating@kingcounty.gov
 ##
-## Notes: In progress, still updating
-##          - Problem with 2 exit reasons ("Moved to Non-Subsidized Rental" and "Rent too high") while fitting multinomial log reg with GEE 
-##          - Therefore, all runs in this sensitivity analysis are performed used multinomial log reg W/O GEE
+## Notes:
+##    - Problem with 2 exit reasons ("Moved to Non-Subsidized Rental" and "Rent too high") while fitting multinomial log reg with GEE 
+##    - Therefore, all runs in this sensitivity analysis are performed used multinomial log reg W/O GEE
 ##   
 ##
 
@@ -195,13 +195,15 @@ forest_plot_data<- bind_rows(
 ## iii) plot HR Positive vs Neutral
 
 # forest plot for HR positive vs neutral (FULL PLOT)
-png(file="LOO_HR_pos_no_GEE.png", width=1400, height=1200)
+png(file="LOO_HR_pos_no_GEE.png", width=1600, height=1200)
 forest_plot_data %>%
   forestplot::forestplot(labeltext= c(exit_reason_omitted, number_omitted, exit_category),
-             txt_gp= fpTxtGp(label=gpar(cex=1), # label text size might be too large to plot (adjust here to 0.25)
-                             xlab=gpar(cex=1.5),
-                             title=gpar(cex=2),
-                             ticks=gpar(cex=1)),
+             txt_gp= fpTxtGp(label=gpar(cex=1.4), # label text size might be too large to plot (adjust here to 0.25)
+                             xlab=gpar(cex=2),
+                             title=gpar(cex=3),
+                             ticks=gpar(cex=1.5),
+                             summary=gpar(cex=1.8)),
+             xticks=seq(0.00,0.40,by=0.05),
              is.summary= summary,
              mean= HR_pos,
              lower= HR_pos_lower,
@@ -217,14 +219,16 @@ forest_plot_data %>%
 dev.off()
 
 # forest plot for HR positive vs neutral (REMOVING NEGATIVE REASONS)
-png(file="LOO_HR_pos_no_GEE_no_neg.png", width=1400, height=1200)
+png(file="LOO_HR_pos_no_GEE_no_neg.png", width=1600, height=1400)
 forest_plot_data %>% filter((exit_category %in% c("Neutral", "Positive", "Exit Category", "Full Data")) |
                               is.na(exit_category)) %>%
   forestplot::forestplot(labeltext= c(exit_reason_omitted, number_omitted, exit_category),
-                         txt_gp= fpTxtGp(label=gpar(cex=1), # label text size might be too large to plot (adjust here to 0.25)
-                                         xlab=gpar(cex=1.5),
-                                         title=gpar(cex=2),
-                                         ticks=gpar(cex=1)),
+                         txt_gp= fpTxtGp(label=gpar(cex=1.8), # label text size might be too large to plot (adjust here to 0.25)
+                                         xlab=gpar(cex=2),
+                                         title=gpar(cex=3),
+                                         ticks=gpar(cex=1.8),
+                                         summary=gpar(cex=2)),
+                         xticks=seq(0.00,0.40,by=0.05),
                          is.summary= summary,
                          mean= HR_pos,
                          lower= HR_pos_lower,
@@ -235,7 +239,7 @@ forest_plot_data %>% filter((exit_category %in% c("Neutral", "Positive", "Exit C
                          grid= c(forest_plot_data %>% filter(exit_reason_omitted=="Full Data") %>% pull(HR_pos_lower),
                                  forest_plot_data %>% filter(exit_reason_omitted=="Full Data") %>% pull(HR_pos_upper)),
                          hrzl_lines=list("2" = gpar(lwd=1, columns=c(1:3)), 
-                                         "21" = gpar(lwd=240, lineend="butt", columns=c(1:3), col="#99999922"))
+                                         "21" = gpar(lwd=290, lineend="butt", columns=c(1:3), col="#99999922"))
   )
 dev.off()
 
@@ -243,13 +247,15 @@ dev.off()
 ## iv) plot HR Negative vs Neutral
 
 # forest plot for HR negative vs neutral (FULL PLOT)
-png(file="LOO_HR_neg_no_GEE.png", width=1400, height=1200)
+png(file="LOO_HR_neg_no_GEE.png", width=1600, height=1200)
 forest_plot_data %>% 
   forestplot::forestplot(labeltext= c(exit_reason_omitted, number_omitted, exit_category),
-             txt_gp= fpTxtGp(label=gpar(cex=1),  # label text size might be too large to plot (adjust here to 0.25)
-                             xlab=gpar(cex=1.5),
-                             title=gpar(cex=2),
-                             ticks=gpar(cex=1)),
+             txt_gp= fpTxtGp(label=gpar(cex=1.4),  # label text size might be too large to plot (adjust here to 0.25)
+                             xlab=gpar(cex=2),
+                             title=gpar(cex=3),
+                             ticks=gpar(cex=1.5),
+                             summary=gpar(cex=1.8)),
+             xticks=seq(1.50,3.00,by=0.25),
              is.summary= summary,
              mean= HR_neg,
              lower= HR_neg_lower,
@@ -265,14 +271,16 @@ forest_plot_data %>%
 dev.off()
 
 # forest plot for HR negative vs neutral (REMOVING POSITIVE REASONS)
-png(file="LOO_HR_neg_no_GEE_no_pos.png", width=1400, height=1200)
+png(file="LOO_HR_neg_no_GEE_no_pos.png", width=1600, height=1400)
 forest_plot_data %>% filter((exit_category %in% c("Neutral", "Negative", "Exit Category", "Full Data")) |
                               is.na(exit_category)) %>%
   forestplot::forestplot(labeltext= c(exit_reason_omitted, number_omitted, exit_category),
-                         txt_gp= fpTxtGp(label=gpar(cex=1),  # label text size might be too large to plot (adjust here to 0.25)
-                                         xlab=gpar(cex=1.5),
-                                         title=gpar(cex=2),
-                                         ticks=gpar(cex=1)),
+                         txt_gp= fpTxtGp(label=gpar(cex=1.6),  # label text size might be too large to plot (adjust here to 0.25)
+                                         xlab=gpar(cex=2),
+                                         title=gpar(cex=3),
+                                         ticks=gpar(cex=1.8),
+                                         summary=gpar(cex=2)),
+                         xticks=seq(1.50,3.00,by=0.25),
                          is.summary= summary,
                          mean= HR_neg,
                          lower= HR_neg_lower,
@@ -283,7 +291,7 @@ forest_plot_data %>% filter((exit_category %in% c("Neutral", "Negative", "Exit C
                          grid= c(forest_plot_data %>% filter(exit_reason_omitted=="Full Data") %>% pull(HR_neg_lower),
                                  forest_plot_data %>% filter(exit_reason_omitted=="Full Data") %>% pull(HR_neg_upper)),
                          hrzl_lines=list("2" = gpar(lwd=1, columns=c(1:3)), 
-                                         "27" = gpar(lwd= 520, lineend="butt", columns=c(1:3), col="#99999922"))
+                                         "27" = gpar(lwd= 620, lineend="butt", columns=c(1:3), col="#99999922"))
   )
 dev.off()
 

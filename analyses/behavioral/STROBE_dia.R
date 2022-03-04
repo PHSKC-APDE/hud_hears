@@ -131,7 +131,18 @@ ON a.id_hudhears = b.id_hudhears") %>%
   mutate(exit_1yr_prior = exit_date - years(1) + days(1),
          exit_1yr_after = exit_date + years(1) - days(1))
 
-table(control_match_id_mcaid$id_type)
+
+## Observations off by 300
+# Do antijoin to see why this is happening
+
+mis_match<- anti_join(control_match_id_mcaid, control_match_covariate, by=c("id_hudhears"))
+mis_match2<- as.data.frame(mis_match)
+
+#No hudhearsIDs in the 
+
+
+control_match_covariate %>% select(id_hudhears, starts_with("full_")) %>% head() %>% mutate(chk = full_cov_7_prior * full_cov_7_after)
+
 
 
 

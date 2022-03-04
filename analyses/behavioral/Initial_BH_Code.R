@@ -35,9 +35,6 @@ control_match_covariate <- setDT(DBI::dbGetQuery(conn = db_hhsaw, "SELECT * FROM
 
 control_match_long <- setDT(DBI::dbGetQuery(conn = db_hhsaw, "SELECT * FROM [hudhears].[control_match_long]"))
 
-
-control_match_long <- setDT(DBI::dbGetQuery(conn = db_hhsaw, "SELECT * FROM [hudhears].[control_match_long]"))
-
 control_match <- setDT(DBI::dbGetQuery(conn = db_hhsaw, "SELECT * FROM [hudhears].[control_match]"))
 
 ##Left join this table with Medicaid ID table
@@ -51,9 +48,6 @@ FROM claims.hudhears_id_xwalk WHERE id_mcaid is not null) b
 ON a.id_hudhears = b.id_hudhears") %>%
   mutate(exit_1yr_prior = exit_date - years(1) + days(1),
          exit_1yr_after = exit_date + years(1) - days(1))
-
-
-control_match_id_mcaid %>% arrange(exit_uid, id_type, id_hudhears) %>% head(12)
 
 
 ## Observations off by 300

@@ -1,6 +1,9 @@
 ## Script name: km_curve.R
 ##
 ## Purpose of script: Create Kaplan-Meier curves of time to homelessness by exit type for Capstone Hudhears project
+##            1) KM curves by exit type
+##            2) KM curves by exit type, stratified by KCHA/SHA
+##            3) KM curves by exit type, faceted by KCHA and SHA (separate plots)
 ##
 ## Author: Taylor Keating
 ## Date Created: 1/12/2022
@@ -32,52 +35,111 @@ db_hhsaw <- DBI::dbConnect(odbc::odbc(),
 
 # Select table that contains time-to-homelessness variable
 tth_data<- setDT(DBI::dbGetQuery(conn = db_hhsaw, "SELECT * FROM [hudhears].[capstone_data_2]"))
-
-
-#-------------------------------------
 # Create "survival" object column in data
 tth_data<- tth_data %>% mutate(surv_object= Surv(time=tt_homeless, event=event))
 
-# Create survival curve by exit type
+#-------------------------------------
+# 1) KM curves by exit type
+
+# Create KM estimate survival curve by exit type
 fit_exit_type<- survfit(surv_object ~ exit_category, data=tth_data, conf.type="log-log")
-#-------------------------------------
 
-
-#-------------------------------------
+#---
 ## Plotting
 # Create plot of Kaplan-Meier survival curve by exit type
 km_exit_type<- ggsurvplot(fit_exit_type, data=tth_data,
-                            xlab="Time from Public Housing Exit (Days)",
-                            ylab="Probability Remaining Housed",
-                            title="Kaplan-Meier Estimates of Time from Exit to Homelessness",
-                            break.time.by=50,
-                            xlim=c(0,max(tth_data$tt_homeless)),
-                            ylim=c(0.7,1),
-                            conf.int=TRUE,
-                            legend.title="Exit Type",
-                            legend.labs= na.omit(unique(tth_data$exit_category)),
-                            risk.table=TRUE, # risk table added
-                            cumevents=TRUE, # cumulative events table added
-                            tables.col="strata",
-                            #tables.height=0.3,
-                            censor.size=4,
-                            gg_theme=theme_bw())
+                          xlab="Time from Public Housing Exit (Days)",
+                          ylab="Probability Remaining Housed",
+                          title="Kaplan-Meier Estimates of Time from Exit to Homelessness",
+                          break.time.by=50,
+                          xlim=c(0,max(tth_data$tt_homeless)),
+                          ylim=c(0.7,1),
+                          conf.int=TRUE,
+                          legend.title="Exit Type",
+                          legend.labs= na.omit(unique(tth_data$exit_category)),
+                          risk.table=TRUE, # risk table added
+                          cumevents=TRUE, # cumulative events table added
+                          tables.col="strata",
+                          #tables.height=0.3,
+                          censor.size=4,
+                          gg_theme=theme_bw())
 # remove x-lab from risk table
 km_exit_type$table<- km_exit_type$table +
   labs(x="")
 km_exit_type$cumevents<- km_exit_type$cumevents + 
   labs(x="")
 
-
-#png(file="KM_curve_plot.png", width=600, height=800)
+png(file="KM_curve_plot.png", width=600, height=800)
 km_exit_type
-#dev.off()
-#-------------------------------------
+dev.off()
+#---
 
-
-#-------------------------------------
+#---
 ## Other Descriptive Stats
 # Non-parametric KM-estimated survival at time= 365 days
 summary(fit_exit_type, times=365)
 
+#------------------------------------
+# 2) KM curves by exit type, stratified by KCHA/SHA
+
+# Create KM estimate survival curve by exit type
+fit_exit_type_pha<- survfit(surv_object ~ exit_category + agency, 
+                            data=tth_data, 
+                            conf.type="log-log")
+
+#---
+## Plotting
+# Create plot of Kaplan-Meier survival curve by exit type, stratified by PHA
+km_exit_type_pha<- ggsurvplot(fit_exit_type_pha, data=tth_data,
+                              xlab="Time from Public Housing Exit (Days)",
+                              ylab="Probability Remaining Housed",
+                              title="Kaplan-Meier Estimates of Time from Exit to Homelessness",
+                              break.time.by=50,
+                              xlim=c(0,max(tth_data$tt_homeless)),
+                              ylim=c(0.7,1),
+                              conf.int=TRUE,
+                              legend.title="Exit Type and PHA Strata",
+                              legend.labs=c("Negative KCHA","Negative SHA",
+                                            "Neutral KCHA", "Neutral SHA",
+                                            "Positive KCHA", "Positive SHA"),
+                              # palette=c("firebrick","firebrick3", # change color palette
+                              #           "palegreen","palegreen3",
+                              #           "deepskyblue","deepskyblue3"),
+                              # linetype=c("solid","dashed", # cahnge line types
+                              #            "solid","dashed",
+                              #            "solid","dashed"),
+                              censor.size=4,
+                              gg_theme=theme_bw())
+
+png(file="KM_curve_pha_plot.png", width=600, height=450)
+km_exit_type_pha
+dev.off()
+#---
+
+#---
+## Other Descriptive Stats
+# Non-parametric KM-estimated survival at time= 365 days
+summary(fit_exit_type_pha, times=365)
+
+#---------------------------------------
+# 3) KM curves by exit type, faceted by KCHA and SHA (separate plots)
+km_exit_type_pha_facet<- ggsurvplot(fit_exit_type, data=tth_data,
+                                    facet.by="agency",
+                                    short.panel.labs=TRUE,
+                                    xlab="Time from Public Housing Exit (Days)",
+                                    ylab="Probability Remaining Housed",
+                                    title="Kaplan-Meier Estimates of Time from Exit to Homelessness",
+                                    break.time.by=50,
+                                    xlim=c(0,max(tth_data$tt_homeless)),
+                                    ylim=c(0.7,1),
+                                    conf.int=TRUE,
+                                    legend.title="Exit Type",
+                                    legend.labs= na.omit(unique(tth_data$exit_category)),
+                                    censor.size=4,
+                                    gg_theme=theme_bw())
+
+png(file="KM_curve_pha_facet_plot.png", width=600, height=450)
+km_exit_type_pha_facet
+dev.off()
+#---
 

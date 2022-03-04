@@ -102,7 +102,36 @@ exits <- exit_timevar %>%
   filter(exit_cnt == exit_order)
 
 # Note: Control matching was not rerun due to long run time. 
+#Read in pre-generated table of exits and matched controls
+control_match_long <- setDT(DBI::dbGetQuery(conn = db_hhsaw, "SELECT * FROM [hudhears].[control_match_long]"))
+#Tabulate Ids to check number of matched controls
+table(control_match_long$id_type)
+# id_control    id_exit 
+# 76936      19234 
 
+#19234 vs. 19329
+
+#Read in table with covariates
+control_match_covariate <- setDT(DBI::dbGetQuery(conn = db_hhsaw, "SELECT * FROM [hudhears].[control_match_covariate]"))
+table(control_match_covariate$id_type)
+# id_control    id_exit 
+# 76936      19234 
+
+##join this table with medicaid data to get n's
+
+##Left join this table with Medicaid ID table
+control_match_id_mcaid <- dbGetQuery(db_hhsaw,
+                                     "SELECT a.*, b.id_mcaid
+                                     FROM
+(SELECT * FROM hudhears.control_match_long) a
+LEFT JOIN
+(SELECT DISTINCT id_hudhears, id_mcaid
+FROM claims.hudhears_id_xwalk WHERE id_mcaid is not null) b
+ON a.id_hudhears = b.id_hudhears") %>%
+  mutate(exit_1yr_prior = exit_date - years(1) + days(1),
+         exit_1yr_after = exit_date + years(1) - days(1))
+
+table(control_match_id_mcaid$id_type)
 
 
 

@@ -28,11 +28,11 @@ Code developed by UW Biostatistics Capstone students in collaboration with Publi
 
 ## 00_opportunity_index
 
-[**Usage:**]{.ul} Ignore this step unless Opportunity Index is updated
+**Usage:** Ignore this step unless Opportunity Index is updated
 
-[**Output:**]{.ul} `kc_opp_indices_scaled.csv`
+**Output:** `kc_opp_indices_scaled.csv`
 
-[**Details:**]{.ul}
+**Details:**
 
 `create_opportunity_index.R` is used to create `kc_opp_indices_scaled.csv`from `PSRC_opp_mapping_all_indicators_raw.xlsx`. This has already been done using PSRC's 2018 Opportunity Index. Thus, unless the Opportunity Index data is updated, **this script does not need to be re-run prior to formatting or analysis** since `kc_opp_indices_scaled.csv` is ready to be used.
 
@@ -42,11 +42,11 @@ For a more thorough description of the contents of this folder and how the scrip
 
 ## 01_format
 
-[**Usage:**]{.ul} This script must be run from start to finish after `kc_opp_indices_scaled.csv` is created in the `00_opportunity_index` folder but before any analysis scripts in the `02_results` folder can be run. A KingCounty.gov username and password are required to perform database queries. Several required R packages may be installed by the `p_load` function upon initial use.
+**Usage:** This script must be run from start to finish after `kc_opp_indices_scaled.csv` is created in the `00_opportunity_index` folder but before any analysis scripts in the `02_results` folder can be run. A KingCounty.gov username and password are required to perform database queries. Several required R packages may be installed by the `p_load` function upon initial use.
 
-[**Output:**]{.ul} Two intermediate tables for debugging and a final table, `hudhears.capstone_data_3` ready for analysis scripts in `02_results` folder.
+**Output:** Two intermediate tables for debugging and a final table, `hudhears.capstone_data_3` ready for analysis scripts in `02_results` folder.
 
-[**Details:**]{.ul}
+**Details:**
 
 The purpose of this script is threefold:
 
@@ -92,9 +92,9 @@ Once the `hudhears.capstone_data_3` table is successfully created, scripts in th
 
 ### 01_descriptive_stats
 
-[**Usage:**]{.ul} This script is used to generate **descriptive statistics tables and visualizations of missingness patterns** from `hudhears.capstone_data_3`.
+**Usage:** This script is used to generate **descriptive statistics tables and visualizations of missingness patterns** from `hudhears.capstone_data_3`.
 
-[**Output:**]{.ul} Three descriptive statistics tables:
+**Output:** Three descriptive statistics tables:
 
 1. For censored individuals
 2. For individuals who have homelessness events
@@ -102,7 +102,7 @@ Once the `hudhears.capstone_data_3` table is successfully created, scripts in th
 
 Additionally producess a missingness frequency histogram and a missingness pattern plot.
 
-[**Details:**]{.ul}
+**Details:**
 
 The first part of the script implements the `table1` package to generate descriptive statistics typically found in Table 1. Each variable to be summarized is given an appropriate label, and categorical variables are renamed for readability. It is easy to edit the code to incorporate different variables or labels.
 
@@ -112,9 +112,9 @@ The last part of the script uses the `VIM` package to create a histogram of miss
 
 ### 02_km_curve
 
-[**Usage:**]{.ul} This script is used to generate various **Kaplan-Meier curves comparing survival by exit type** from `hudhears.capstone_data_3`.
+**Usage:** This script is used to generate various **Kaplan-Meier curves comparing survival by exit type** from `hudhears.capstone_data_3`.
 
-[**Output:**]{.ul} Three Kaplan-Meier curves:
+**Output:** Three Kaplan-Meier curves:
 
 1. `KM_curve_plot.png` 
 2. `KM_curve_pha_plot.png` stratified by SHA/KCHA
@@ -122,7 +122,7 @@ The last part of the script uses the `VIM` package to create a histogram of miss
 
 Additionally calculates K-M estimates for survival time at 365 days.
 
-[**Details:**]{.ul}
+**Details:**
 
 The script uses `ggsurvplot` to create Kaplan-Meier curves from survival objects produced from the `tt_homeless` and `event` variables of `hudhears.capstone_data_3`. The curves use complementary log-log confidence intervals.
 
@@ -132,11 +132,11 @@ Additionally, `summary(fit_exit_type, times=365)` is used to extract the K-M est
 
 ### 03_regression
 
-[**Usage:**]{.ul} This script is used to perform **regression analysis exploring the association between `tt_homeless` and `exit_type`** from `hudhears.capstone_data_3`.
+**Usage:** This script is used to perform **regression analysis exploring the association between `tt_homeless` and `exit_type`** from `hudhears.capstone_data_3`.
 
-[**Output:**]{.ul} Regression coefficients, standard errors, and p-values of the analysis. (TO DO: Add the results ggplot code to this script)
+**Output:** Regression coefficients, standard errors, and p-values of the analysis. (TO DO: Add the results ggplot code to this script)
 
-[**Details:**]{.ul}
+**Details:**
 
 The first step is to calculate **propensity scores** of exit types using multinomial logistic regression through the `multgee` package. The covariates informing the propensity scores are defined in the `formula` argument of the `nomLORgee` function. Clustering by household ID is specified in  the `id` argument. A working independence covariance matrix is specified in the `LORstr` argument. It is simple to modify the logistic regression model as needed by adjusting the arguments.
 
@@ -148,16 +148,16 @@ Finally, a **weighted Cox proportional hazards model** is fit using the `coxph` 
 
 ### 04_exit_reason_sensitivity
 
-[**Usage:**]{.ul} This script is used to perform a **sensitivity analysis exploring the impact of specific exit reasons** on the calculated hazard ratios, using data from `hudhears.capstone_data_3` and regression methods from [03_regression](#03_regression).
+**Usage:** This script is used to perform a **sensitivity analysis exploring the impact of specific exit reasons** on the calculated hazard ratios, using data from `hudhears.capstone_data_3` and regression methods from [03_regression](#03_regression).
 
-[**Output:**]{.ul} Four forest plots illustrating the overall hazard ratios versus when each exit reason is removed:
+**Output:** Four forest plots illustrating the overall hazard ratios versus when each exit reason is removed:
 
 1. `LOO_HR_pos_no_GEE.png`
 2. `LOO_HR_pos_no_GEE_no_neg.png`
 3. `LOO_HR_neg_no_GEE.png`
 4. `LOO_HR_neg_no_GEE_no_pos.png`
 
-[**Details:**]{.ul} (TO DO: I need to talk to Taylor to see which parts of the code to keep and which to archive.)
+**Details:** (TO DO: I need to talk to Taylor to see which parts of the code to keep and which to archive.)
 
 The script begins by generating a list of all unique and non-null exit reasons.
 

@@ -1,5 +1,5 @@
 #Creating STROBE Diagram
-#February 24, 2022
+#Updates March 9, 
 
 # SET OPTIONS AND BRING IN PACKAGES ----
 options(scipen = 6, digits = 4, warning.length = 8170)
@@ -144,7 +144,6 @@ ON a.id_hudhears = b.id_hudhears") %>%
 # control_match_covariate %>% select(id_hudhears, starts_with("full_")) %>% head() %>% mutate(chk = full_cov_7_prior * full_cov_7_after)
 
 ##Join covariate table to BH crisis events, ITAs, and outpatient events (all non-Medicaid)--then union these 3 new tables
-covariate <- dbGetQuery(db_hhsaw, "SELECT * FROM hudhears.control_match_covariate WHERE id_type = 'id_exit'")
 exits_bh <- dbGetQuery(db_hhsaw,
                        "SELECT a.id_hudhears, a.gender_me, a.exit_date, NULL as yr_before, DATEADD(year, 1, a.exit_date) AS yr_later, b.crisis_date AS event_date, b.source
 FROM
@@ -153,10 +152,10 @@ FROM
   WHERE id_type = 'id_exit' AND exit_death = 0) a
 LEFT JOIN
 (SELECT DISTINCT id_hudhears, program, description, crisis_date, 'crisis' AS source
-  FROM hudhears.bh_crisis_events) b
+  FROM hudhears.bh_crisis_events WHERE crisis_date IS NOT NULL) b
 ON a.id_hudhears = b.id_hudhears
 AND b.crisis_date >= a.exit_date AND b.crisis_date <= DATEADD(year, 1, a.exit_date)
-WHERE b.crisis_date IS NOT NULL
+
 
 UNION
 
@@ -166,10 +165,10 @@ FROM
   FROM hudhears.control_match_covariate 
   WHERE id_type = 'id_exit' AND exit_death = 0)  x
 LEFT JOIN
-(SELECT DISTINCT id_hudhears, call_date, 'ita' AS source FROM hudhears.bh_ita_events) y
+(SELECT DISTINCT id_hudhears, call_date, 'ita' AS source FROM hudhears.bh_ita_events WHERE call_date IS NOT NULL) y
 ON x.id_hudhears = y.id_hudhears
 AND y.call_date >= x.exit_date AND y.call_date <= DATEADD(year, 1, x.exit_date)
-WHERE y.call_date IS NOT NULL
+
 UNION
 
 SELECT z.id_hudhears, z.gender_me, z.exit_date, DATEADD(year, -1, z.exit_date) AS yr_before, NULL as yr_after, d.event_date AS event_date, d.source
@@ -178,12 +177,11 @@ FROM
   FROM hudhears.control_match_covariate 
   WHERE id_type = 'id_exit' AND exit_death = 0) z
 LEFT JOIN
-(SELECT DISTINCT id_hudhears, event_date, 'outpt' AS source FROM hudhears.bh_outpatient_events) d
+(SELECT DISTINCT id_hudhears, event_date, 'outpt' AS source FROM hudhears.bh_outpatient_events WHERE event_date IS NOT NULL) d
 ON z.id_hudhears = d.id_hudhears
 AND d.event_date <= z.exit_date AND d.event_date >= DATEADD(year, -1, z.exit_date)
-WHERE d.event_date IS NOT NULL
-")
 
+")
 
 
 
@@ -194,6 +192,7 @@ pha_stage <- dbGetQuery(db_hhsaw, "SELECT * FROM pha.stage_pha_exit_timevar WHER
 
 exits_bh_type <- left_join(exits_bh, distinct(pha_stage, id_hudhears, act_date, exit_category), by=c("id_hudhears", "exit_date"="act_date"))
 
+rm(pha_stage)
 
 
 #Summary Statistics
@@ -229,60 +228,68 @@ exits_bh_type %>% group_by(exit_category) %>% summarize(n_distinct (id_hudhears)
 # 3 Positive      0.00850    97
 
 #Make a data frame with number of events by person
-
-bh_count <- exits_bh_type %>% group_by(id_hudhears, exit_date) %>% filter(source %in% c("outpt")) %>% count()
-# summary(bh_count$n)
-# Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
-# 1.0     7.0    17.0    33.8    36.0   424.0 
-
-# hist(bh_count$n)
+bh_count <- exits_bh_type %>% filter(source %in% c("outpt")) %>% group_by(id_hudhears, exit_date) %>%  summarize(out_count=n_distinct(event_date))
+# summary(bh_count$out_count)
+# hist(bh_count$out_count)
 
 #Make indicator for people with 2+ visits
-bh_count$reg_care <-ifelse(bh_count$n > 1, 1, 0)
+bh_count$reg_care <-ifelse(bh_count$out_count >=2, 1, 0)
+#Check whether this worked
+bh_count %>% group_by(reg_care)%>% summarise_at(vars(out_count),list(name = min))
 
 #Join this with other data frame
-bh_routine <- left_join(exits_bh_type, distinct(bh_count, id_hudhears, exit_date, n, reg_care), by=c("id_hudhears", "exit_date")) 
+exits_bh_type2 <- left_join(exits_bh_type, distinct(bh_count, id_hudhears, exit_date, out_count, reg_care), by=c("id_hudhears", "exit_date")) 
+# #Summarize for all data
+# bh_routine %>% group_by(reg_care) %>% summarize(n_distinct(id_hudhears))
+# #Note that 174 were in the larger dataset who were duplicated IDs! (n=174)
 
-#Summarize for all data
-bh_routine %>% group_by(reg_care) %>% summarize(n_distinct(id_hudhears))
-#Note that 174 were in the larger dataset who were duplicated IDs! (n=174)
-
-#Make recoded version of variable (change NA to 0, by ID)
-bh_routine$recode_reg_care <- replace(bh_routine$reg_care, is.na(bh_routine$reg_care),0)
-
-
+#Recode variable (change NA to 0, by ID)
+exits_bh_type2 <- exits_bh_type2 %>% mutate(reg_care=ifelse(is.na(reg_care), 0,reg_care)) 
 #Look at exit category by receiving regular care
-bh_routine %>% group_by(exit_category, recode_reg_care) %>% summarize(n_distinct (id_hudhears))
+exits_bh_type2 %>% group_by(exit_category, reg_care) %>% summarize(n_distinct (id_hudhears))
 
+########
+##Make crisis event indicator variable
+#Filter out people with any crisis event, make var of number of events
+crisis_count <- exits_bh_type2 %>% filter(source %in% c("crisis", "ita")) %>% group_by(id_hudhears, exit_date) %>% summarize(crisis_num=n_distinct(event_date))
 
+#Code indicator variable (Note everyone here should have a value of 1 due to filtering)
+crisis_count$crisis_any <-ifelse(crisis_count$crisis_num >=1, 1, 0)
+#table(crisis_count$crisis_any) #Confirmed that it worked
 
-
+#Join this with other data frame
+exits_bh_type3 <- left_join(exits_bh_type2, distinct(crisis_count, id_hudhears, exit_date, crisis_num, crisis_any), by=c("id_hudhears", "exit_date")) 
+# #Summarize for all data
+#Recode variable (change NA to 0, by ID)
+exits_bh_type3 <- exits_bh_type3 %>% mutate(crisis_any=ifelse(is.na(crisis_any), 0,crisis_any)) 
+#Look at exit category by crisis event
+exits_bh_type3 %>% group_by(reg_care, crisis_any) %>% summarize(n_distinct (id_hudhears))
 
 
 
 
 #################################################################################
 
-#Attempts at flow chart
-library(DiagrammeR)
-grViz("digraph flowchart {
-      # node definitions with substituted label text
-      node [fontname = Helvetica, shape = rectangle]        
-      tab1 [label = '@@1']
-      tab2 [label = '@@2']
-      tab3 [label = '@@3']
-      tab4 [label = '@@4']
-      tab5 [label = '@@5']
-
-      # edge definitions with the node IDs
-      tab1 -> tab2 
-      tab1 -> tab 3 
-      -> tab3 -> tab4 -> tab5;
-      }
-
-      [1]: 'PHA Clients n=312,397'
-      [2]: 'Exit from public housing n=38,961'
-      [3]: 'No exit from public housing '
-      [4]: 'Participants eligible for the study n=600'
-      [5]: 'Study sample n=600'
-      ")
+# #Attempts at flow chart
+# library(DiagrammeR)
+# grViz("digraph flowchart {
+#       # node definitions with substituted label text
+#       node [fontname = Helvetica, shape = rectangle]        
+#       tab1 [label = '@@1']
+#       tab2 [label = '@@2']
+#       tab3 [label = '@@3']
+#       tab4 [label = '@@4']
+#       tab5 [label = '@@5']
+# 
+#       # edge definitions with the node IDs
+#       tab1 -> tab2 
+#       tab1 -> tab 3 
+#       -> tab3 -> tab4 -> tab5;
+#       }
+# 
+#       [1]: 'PHA Clients n=312,397'
+#       [2]: 'Exit from public housing n=38,961'
+#       [3]: 'No exit from public housing '
+#       [4]: 'Participants eligible for the study n=600'
+#       [5]: 'Study sample n=600'
+#       ")

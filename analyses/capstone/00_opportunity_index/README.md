@@ -4,6 +4,8 @@
 
 This code is used to create King County standardized opportunity index score for each census tract, based on data and methodology from [Puget Sound Regional Council's (PSRC) Opportunity Mapping](https://www.psrc.org/opportunity-mapping).
 
+Script `create_opportunity_index.R` takes raw data from `PSRC_opp_mapping_all_indicators_raw.xlsx` and writes `kc_opp_indices_scaled.csv`, which contains the King County standardized opportunity index score by census tract.
+
 ## Files
 
 ### PSRC_opp_mapping_all_indicators_raw.xlsx

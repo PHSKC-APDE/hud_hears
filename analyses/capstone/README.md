@@ -140,11 +140,15 @@ Additionally, `summary(fit_exit_type, times=365)` is used to extract the K-M est
 
 The first step is to calculate **propensity scores** of exit types using multinomial logistic regression through the `multgee` package. The covariates informing the propensity scores are defined in the `formula` argument of the `nomLORgee` function. Clustering by household ID is specified in  the `id` argument. A working independence covariance matrix is specified in the `LORstr` argument. It is simple to modify the logistic regression model as needed by adjusting the arguments.
 
-Next, the script calculates the **inverse probability treatment weight** of each observation. This value is the inverse of the propensity score of each observed exit type.
+Next, the script calculates the **inverse probability treatment weight** (IPTW) of each observation. This value is the inverse of the propensity score of each observed exit type.
 
 Finally, a **weighted Cox proportional hazards model** is fit using the `coxph` function and by specifying the `weights` argument. Clustering by household ID is once again specified in the `cluster` argument.
 
-(TO DO: Archive the 2nd half of this script. Add ggplot code here.)
+Additionally, this script performs a sensitivity analysis using overlap weights instead of IPTW. To carry out the sensitivity analysis, the same steps from the primary analysis are used, where the only difference is in step 2. Rather than assigning weights equal to the inverse of the propensity score of each observed exit type, weights are assigned by subtracting the propensity score from 1. 
+
+Moreover, this script repeats the primary analysis, but for subsets of the population. The first subset is for `agency = KCHA`, and the second subset is for `angecy = SHA`. The first two steps of the primary analysis (deriving propensity scores, and assigning weights via IPTW), are repeated. Then, before performing the third step (fitting the weighted Cox PH model), the data is subsetted by agency, and separate weighted Cox PH models are fit for each subsetted data set. 
+
+(TO DO: Add ggplot code here.)
 
 ### 04_exit_reason_sensitivity
 

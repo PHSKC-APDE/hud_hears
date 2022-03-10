@@ -129,11 +129,11 @@ The last part of the script uses the `VIM` package to create a histogram of miss
 
 **Output:** Three Kaplan-Meier curves:
 
-1. `KM_curve_plot.png` 
-2. `KM_curve_pha_plot.png` stratified by SHA/KCHA
-3. `KM_curve_pha_facet_plot.png` faceted by SHA/KCHA.
+1. `KM_curve.png` - KM curves by exit type
+2. `KM_curve_pha.png` - KM curves by exit type, stratified by SHA/KCHA
+3. `KM_curve_pha_facet.png`- KM curves by exit type, faceted by SHA/KCHA.
 
-Additionally calculates K-M estimates for survival time at 365 days.
+Additionally calculates K-M estimates for survival at 365 days (by exit type and by exit type / PHA combination).
 
 **Details:**
 
@@ -169,21 +169,21 @@ Moreover, this script repeats the primary analysis, but for subsets of the popul
 
 **Output:** Four forest plots illustrating the overall hazard ratios versus when each exit reason is removed:
 
-1. `LOO_HR_pos_no_GEE.png`
-2. `LOO_HR_pos_no_GEE_no_neg.png`
-3. `LOO_HR_neg_no_GEE.png`
-4. `LOO_HR_neg_no_GEE_no_pos.png`
+1. `LOO_HR_pos_no_GEE.png`- Hazard ratios comparing positive to neutral exits
+2. `LOO_HR_pos_no_GEE_no_neg.png`- Hazard ratios comparing positive to neutral exits (removing negative exit reasons in plot)
+3. `LOO_HR_neg_no_GEE.png`- Hazard ratios comparing negative to neutral exits
+4. `LOO_HR_neg_no_GEE_no_pos.png`- Hazard ratios comparing negative to neutral exits (removing positive exit reasons in plot)
 
 **Details:** (TO DO: I need to talk to Taylor to see which parts of the code to keep and which to archive.)
 
 The script begins by generating a list of all unique and non-null exit reasons.
 
-Next, a function `run_analysis_no_GEE` is defined to run the primary analysis without GEE. The reason GEE is no longer used in the sensitivity analysis since omitting some exit reasons resulted in colinearity.
+Next, a function `run_analysis_no_GEE` is defined to run the primary analysis without GEE. The reason GEE is no longer used in the sensitivity analysis is that omitting some exit reasons resulted in colinearity, therefore consistency the sensitivity analysis is run without GEE. (Note: another function `run_analysis` is also created that uses GEE in the multinomial logistic regression, but is not used for the sensitivity analysis)
 
-Another function `fit_one_out` is defined to omit all observations with a specified exit reason, run the analysis using `run_analysis_no_GEE`, and return results. These include the number of rows with the exit reason, the resulting hazard ratio, and confidence intervals for both positive vs. neutral and negative vs. neutral comparisons.
+Another function `fit_one_out` is defined to take the study dataset and omit all observations with a specified exit reason, run the analysis using `run_analysis_no_GEE`, and return results. These include the number of rows with the exit reason, the resulting hazard ratio, and confidence intervals for both positive vs. neutral and negative vs. neutral comparisons.
 
-Then, `fit_one_out` is applied to each exit reason in the list of all exit reasons and  the results are stored. Before forest plots can be created, exit reasons with observations below a certain `count_threshold` are omitted to prevent the plots from becoming too large. The value is set to 100, but this value can be easily modified in the code.
+Then, `fit_one_out` is applied to each exit reason in the list of all exit reasons and the results are stored. Before forest plots can be created, exit reasons with observations below a certain `count_threshold` are omitted to prevent the plots from becoming too large. The value is set to 100, but this value can be easily modified in the code.
 
-Using the `forestplot` package, two forest plots are created: one displaying changes in hazard ratio upon removing various exit reasons when comparing negative and neutral exits, and one displaying changes in hazard ratio upon removing various exit reasons when comparing negative and neutral exits when comparing positive and neutral exits.
+Using the `forestplot` function in the `forestplot` package, two forest plots are created: one displaying changes in hazard ratio upon removing various exit reasons when comparing negative and neutral exits, and one displaying changes in hazard ratio upon removing various exit reasons when comparing positive and neutral exits. (Note: two more forest plots are get rid of the negative exit reasons from the positive vs. neutral plot and the positive exit reasons from the negative vs. neutral plot - for shorter plots that are easier to use in a presentation)
 
 The `hrzl_lines` argument is a wide horizontal line to act as shading to differentiate different types of exits on one graph. If the graph is modified, it may be necessary to adjust the width of this horizontal line using the `lwd` argument. To modify the appearance of the forest plot in other ways, adjust any arguments in the `forestplot` function, referencing documentation if necessary. 

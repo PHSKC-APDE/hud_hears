@@ -1,12 +1,14 @@
 ## Script name: create_opportunity_index.R
 ##
 ## Purpose of script: Create opportunity index score 
-##      First, by standardizing each individual component in the 4-county area (by census tract)- to confirm the same methodology as PSRC 2018 
-##      Second, by standardizing each individual component in King County (by census tract)
+##      - First, by standardizing each individual component in the 4-county area (by census tract)- to confirm the same methodology as PSRC 2018 
+##      - Second, by standardizing each individual component in King County (by census tract)
+##      
+##      - Uses raw data from PSRC_opp_mapping_all_indicators_raw.xlsx
+##      - Writes King County standardized opportunity index scores to kc_opp_indices_scaled.csv file  
 ##
 ## Author: Taylor Keating
 ## Date Created: 1/21/2022
-## Email:n-tkeating@kingcounty.gov
 ##
 ## Notes: Data comes from PSRC 2018 and uses Kirwan methodology for opportunity areas
 ##
@@ -15,16 +17,16 @@
 ##   
 ##
 
+# set working directory (to load `PSRC_opp_mapping_all_indicators_raw.xlsx` and to write `kc_opp_indices_scaled.csv`)
+setwd("~/GitHub/hud_hears/analyses/capstone/00_opportunity_index")
+
 # SET OPTIONS AND BRING IN PACKAGES ----
 options(scipen = 6, digits = 4, warning.length = 8170)
-# Suppress summarise info
-options(dplyr.summarise.inform = FALSE)
-
 if (!require("pacman")) {install.packages("pacman")}
 pacman::p_load(tidyverse, odbc, glue, data.table, ggplot2, viridis, hrbrthemes,
                knitr, kableExtra, rmarkdown, readxl, readr)
 
-
+#-----------------------
 # function that takes in a column and returns a vector with a standardized value for each element of the column
 standardize<- function(column){
   value<- rep(NA, length(column))
@@ -206,7 +208,7 @@ opp_4county<- opp_raw %>%
 opp_4county<- opp_4county %>%
   mutate(OPP_Z= apply(X=(opp_4county %>% select(EDU_Z,ECON_Z,HOUSE_Z,TRANS_Z,HEALTH_Z)), MARGIN=1, FUN=mean)) %>%
   arrange(GEOID10)
-## confirm methodology is same as PSRC
+## CONFIRM METHODOLOGY is same as PSRC
 with(opp_4county, all.equal(`EDU-Z`, EDU_Z, tolerance=0.001))
 with(opp_4county, all.equal(`ECON-Z`, ECON_Z, tolerance=0.001))
 with(opp_4county, all.equal(`TRANS-Z`, TRANS_Z, tolerance=0.001))
@@ -225,5 +227,6 @@ opp_kc<- opp_kc %>%
   arrange(GEOID10)
 #####
 
+#-------------------------
 # write KC standardized opportunity index scores to a csv file
 write_csv(opp_kc, file="kc_opp_indices_scaled.csv")

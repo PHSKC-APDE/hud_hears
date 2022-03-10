@@ -1,23 +1,23 @@
-## Script name: km_curve.R
+## Script name: 02_km_curve.R
 ##
 ## Purpose of script: Create Kaplan-Meier curves of time to homelessness by exit type for Capstone Hudhears project
-##            1) KM curves by exit type
-##            2) KM curves by exit type, stratified by KCHA/SHA
-##            3) KM curves by exit type, faceted by KCHA and SHA (separate plots)
+##
+##            1) KM curves by exit type - KM_curve.png
+##            2) KM curves by exit type, stratified by KCHA/SHA - KM_curve_pha.png
+##            3) KM curves by exit type, faceted by KCHA and SHA (separate plots) - KM_curve_pha_facet.png
 ##
 ## Author: Taylor Keating
-## Date Created: 1/12/2022
-## Email:n-tkeating@kingcounty.gov
+## Date Created: 3/11/2022
 ##
-## Notes: Also produces estimates for probability remaining housed at 365 days after exit (by exit type)
+## Notes: Also produces estimates for probability remaining housed at 365 days after exit (by exit type and by exit type/PHA combination)
 ##   
 ##
 
+# set working directory (for output of plots- to utilize more easily)
+setwd("~/GitHub/hud_hears/analyses/capstone/02_results")
+
 # SET OPTIONS AND BRING IN PACKAGES ----
 options(scipen = 6, digits = 4, warning.length = 8170)
-# Suppress summarise info
-options(dplyr.summarise.inform = FALSE)
-
 if (!require("pacman")) {install.packages("pacman")}
 pacman::p_load(tidyverse, odbc, glue, data.table, ggplot2, viridis, hrbrthemes,
                knitr, kableExtra, rmarkdown, survival, survminer)
@@ -34,7 +34,7 @@ db_hhsaw <- DBI::dbConnect(odbc::odbc(),
                            Authentication = "ActiveDirectoryPassword")
 
 # Select table that contains time-to-homelessness variable
-tth_data<- setDT(DBI::dbGetQuery(conn = db_hhsaw, "SELECT * FROM [hudhears].[capstone_data_2]"))
+tth_data<- setDT(DBI::dbGetQuery(conn = db_hhsaw, "SELECT * FROM [hudhears].[capstone_data_3]"))
 # Create "survival" object column in data
 tth_data<- tth_data %>% mutate(surv_object= Surv(time=tt_homeless, event=event))
 
@@ -46,7 +46,7 @@ fit_exit_type<- survfit(surv_object ~ exit_category, data=tth_data, conf.type="l
 
 #---
 ## Plotting
-# Create plot of Kaplan-Meier survival curve by exit type
+# Create object of Kaplan-Meier survival curve by exit type
 km_exit_type<- ggsurvplot(fit_exit_type, data=tth_data,
                           xlab="Time from Public Housing Exit (Days)",
                           ylab="Probability Remaining Housed",
@@ -63,20 +63,20 @@ km_exit_type<- ggsurvplot(fit_exit_type, data=tth_data,
                           #tables.height=0.3,
                           censor.size=4,
                           gg_theme=theme_bw())
-# remove x-lab from risk table
+# remove x-lab from risk table and cumulative events table
 km_exit_type$table<- km_exit_type$table +
   labs(x="")
 km_exit_type$cumevents<- km_exit_type$cumevents + 
   labs(x="")
 
-png(file="KM_curve_plot.png", width=600, height=800)
+# plot object
+png(file="KM_curve.png", width=600, height=800)
 km_exit_type
 dev.off()
-#---
 
 #---
 ## Other Descriptive Stats
-# Non-parametric KM-estimated survival at time= 365 days
+# Non-parametric KM-estimated survival at time= 365 days (by exit type)
 summary(fit_exit_type, times=365)
 
 #------------------------------------
@@ -89,7 +89,7 @@ fit_exit_type_pha<- survfit(surv_object ~ exit_category + agency,
 
 #---
 ## Plotting
-# Create plot of Kaplan-Meier survival curve by exit type, stratified by PHA
+# Create object of Kaplan-Meier survival curve by exit type, stratified by PHA
 km_exit_type_pha<- ggsurvplot(fit_exit_type_pha, data=tth_data,
                               xlab="Time from Public Housing Exit (Days)",
                               ylab="Probability Remaining Housed",
@@ -102,23 +102,17 @@ km_exit_type_pha<- ggsurvplot(fit_exit_type_pha, data=tth_data,
                               legend.labs=c("Negative KCHA","Negative SHA",
                                             "Neutral KCHA", "Neutral SHA",
                                             "Positive KCHA", "Positive SHA"),
-                              # palette=c("firebrick","firebrick3", # change color palette
-                              #           "palegreen","palegreen3",
-                              #           "deepskyblue","deepskyblue3"),
-                              # linetype=c("solid","dashed", # cahnge line types
-                              #            "solid","dashed",
-                              #            "solid","dashed"),
                               censor.size=4,
                               gg_theme=theme_bw())
 
-png(file="KM_curve_pha_plot.png", width=600, height=450)
+# plot object
+png(file="KM_curve_pha.png", width=600, height=450)
 km_exit_type_pha
 dev.off()
-#---
 
 #---
 ## Other Descriptive Stats
-# Non-parametric KM-estimated survival at time= 365 days
+# Non-parametric KM-estimated survival at time= 365 days (by exit type / PHA combination)
 summary(fit_exit_type_pha, times=365)
 
 #---------------------------------------
@@ -138,7 +132,7 @@ km_exit_type_pha_facet<- ggsurvplot(fit_exit_type, data=tth_data,
                                     censor.size=4,
                                     gg_theme=theme_bw())
 
-png(file="KM_curve_pha_facet_plot.png", width=600, height=450)
+png(file="KM_curve_pha_facet.png", width=600, height=450)
 km_exit_type_pha_facet
 dev.off()
 #---

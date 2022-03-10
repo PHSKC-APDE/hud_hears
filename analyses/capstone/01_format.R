@@ -215,6 +215,9 @@ db_hhsaw <- DBI::dbConnect(odbc::odbc(),
 tth_data<- setDT(DBI::dbGetQuery(conn = db_hhsaw, "SELECT * FROM [hudhears].[capstone_data_2]"))
 
 #-----
+# set working directory to load opportunity index data
+setwd("~/GitHub/hud_hears/analyses/capstone")
+
 # load opportunity index data (version standardized in King County)
 kc_opp_index_data<- read_csv("00_opportunity_index/kc_opp_indices_scaled.csv")
 

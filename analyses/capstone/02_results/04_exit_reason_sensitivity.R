@@ -1,27 +1,33 @@
-## Script name: exit_reason_sensitivity.R
+## Script name: 04_exit_reason_sensitivity.R
 ##
-## Purpose of script: 
+## Purpose of script: Run leave-one-out sensitivity analysis on exit reasons and produce resulting forest plots of hazard ratios
+##                      - to determine the impact of specific exit reasons on the hazard ratios of experiencing homelessness
+##                      - regression methods are from `03_regression.R`
+##
 ##    1) Create vector of exit reasons for sensitivity analysis 
 ##    2) Create functions to perform analysis (with and without GEE in multinomial log reg)
 ##    3) Create function to omit an exit reason and perform analysis
 ##    4) Apply fit_one_out() function over vector of exit reasons
 ##    5) Create Forest Plots
+##        - Plot HR positive vs neutral - LOO_HR_pos_no_GEE.png
+##        - Plot HR positive vs neutral (removing negative exit reasons in plot) - LOO_HR_pos_no_GEE_no_neg.png
+##        - Plot HR negative vs neutral - LOO_HR_neg_no_GEE.png
+##        - Plot HR negative vs neutral (removing positive exit reasons in plot) - LOO_HR_neg_no_GEE_no_pos.png
 ##
 ## Author: Taylor Keating
-## Date Created: 2/7/2022
-## Email: n-tkeating@kingcounty.gov
+## Date Created: 3/11/2022
 ##
 ## Notes:
 ##    - Problem with 2 exit reasons ("Moved to Non-Subsidized Rental" and "Rent too high") while fitting multinomial log reg with GEE 
-##    - Therefore, all runs in this sensitivity analysis are performed used multinomial log reg W/O GEE
+##    - Therefore, ALL RUNS in this sensitivity analysis are performed using multinomial log reg W/O GEE
 ##   
 ##
 
+# set working directory (for output of plots- to utilize more easily)
+setwd("~/GitHub/hud_hears/analyses/capstone/02_results")
+
 # SET OPTIONS AND BRING IN PACKAGES ----
 options(scipen = 6, digits = 4, warning.length = 8170)
-# Suppress summarise info
-options(dplyr.summarise.inform = FALSE)
-
 if (!require("pacman")) {install.packages("pacman")}
 pacman::p_load(tidyverse, odbc, glue, data.table, ggplot2, viridis, hrbrthemes,
                knitr, kableExtra, rmarkdown, multgee, survival, forestplot, nnet)
@@ -214,7 +220,9 @@ forest_plot_data %>%
              grid= c(forest_plot_data %>% filter(exit_reason_omitted=="Full Data") %>% pull(HR_pos_lower),
                      forest_plot_data %>% filter(exit_reason_omitted=="Full Data") %>% pull(HR_pos_upper)),
              hrzl_lines=list("2" = gpar(lwd=1, columns=c(1:3)), 
-                             "27" = gpar(lwd= 442, lineend="butt", columns=c(1:3), col="#99999922"))
+                             "27" = gpar(lwd= 442, lineend="butt", columns=c(1:3), col="#99999922")) 
+                              # controls "grey box" used to visually separate exit categories in plot
+                              # "27" is vertical location of "line"/box, lwd is vertical width of "line"/box
              )
 dev.off()
 
@@ -240,6 +248,8 @@ forest_plot_data %>% filter((exit_category %in% c("Neutral", "Positive", "Exit C
                                  forest_plot_data %>% filter(exit_reason_omitted=="Full Data") %>% pull(HR_pos_upper)),
                          hrzl_lines=list("2" = gpar(lwd=1, columns=c(1:3)), 
                                          "21" = gpar(lwd=290, lineend="butt", columns=c(1:3), col="#99999922"))
+                                          # controls "grey box" used to visually separate exit categories in plot
+                                          # "21" is vertical location of "line"/box, lwd is vertical width of "line"/box
   )
 dev.off()
 
@@ -267,6 +277,8 @@ forest_plot_data %>%
                      forest_plot_data %>% filter(exit_reason_omitted=="Full Data") %>% pull(HR_neg_upper)),
              hrzl_lines=list("2" = gpar(lwd=1,columns=c(1:3)), 
                              "27" = gpar(lwd= 442, lineend="butt", columns=c(1:3), col="#99999922"))
+                              # controls "grey box" used to visually separate exit categories in plot
+                              # "27" is vertical location of "line"/box, lwd is vertical width of "line"/box
              )
 dev.off()
 
@@ -292,6 +304,8 @@ forest_plot_data %>% filter((exit_category %in% c("Neutral", "Negative", "Exit C
                                  forest_plot_data %>% filter(exit_reason_omitted=="Full Data") %>% pull(HR_neg_upper)),
                          hrzl_lines=list("2" = gpar(lwd=1, columns=c(1:3)), 
                                          "27" = gpar(lwd= 620, lineend="butt", columns=c(1:3), col="#99999922"))
+                                          # controls "grey box" used to visually separate exit categories in plot
+                                          # "27" is vertical location of "line"/box, lwd is vertical width of "line"/box
   )
 dev.off()
 

@@ -15,7 +15,9 @@
 ##              c) For SHA specific results, subset the data by agency = 'SHA'
 ##              d) For KCHA specific results, subset the data by agency = 'KCHA'
 ##
-## Author: Hantong Hu, Taylor Keating, Zichen Liu, Niki Petrakos
+##    Step 4) Visualize regression results
+##
+## Author: Niki Petrakos and Zichen Liu
 ## Date Created: 3/11/2022
 
 # BRING IN PACKAGES ----
@@ -33,9 +35,8 @@ db_hhsaw <- DBI::dbConnect(odbc::odbc(),
                            TrustServerCertificate = "yes",
                            Authentication = "ActiveDirectoryPassword")
 
-# Select capstone_data_3  ----
-tth_data <- setDT(DBI::dbGetQuery(conn = cxn16, "SELECT * FROM [hudhears].[capstone_data_3]"))
-
+# Select capstone_data_3, the output of 01_format.R  ----
+tth_data <- setDT(DBI::dbGetQuery(conn = db_hhsaw, "SELECT * FROM [hudhears].[capstone_data_3]"))
 
 #--------------------------------------------------
 ### Step 1) Perform primary analysis
@@ -181,4 +182,172 @@ tth_mod_kcha <- coxph(formula = Surv(tt_homeless, event) ~ exit_category,
                       cluster = hh_id_kc_pha)
 
 summary(tth_mod_kcha)
+
+#--------------------------------------------------
+### 4) Visualize regression results
+
+#-----
+## 4a) Primary analysis plot
+
+# Create dataframe of results
+primary <- data.frame(index=c("pos", "neg"),
+                      hr=c(exp(coef(tth_mod))[[2]], exp(coef(tth_mod))[[1]]),
+                      low=c(exp(confint(tth_mod))[[2]], exp(confint(tth_mod))[[1]]),
+                      hi=c(exp(confint(tth_mod))[[4]], exp(confint(tth_mod))[[3]]))
+
+# Create a boxplot with ggplot
+ggplot(data=primary) +
+  
+  # Point estimates
+  geom_point(aes(x=hr, y=index, color=index), size=3) +
+  
+  # Add labels under point estimates
+  geom_text(label=paste(round(exp(coef(tth_mod))[[2]], 2)),
+            x=exp(coef(tth_mod))[[2]], y=1.7, color="#619CFF") +
+  geom_text(label=paste(round(exp(coef(tth_mod))[[1]], 2)),
+            x=exp(coef(tth_mod))[[1]], y=0.7, color="#F8766D") +
+  
+  # Confidence intervals
+  geom_errorbarh(height=0.2, aes(y=index, xmin=low, xmax=hi, color=index), size=1, alpha=0.5) +
+  
+  # Hazard ratio = 1 line
+  geom_vline(xintercept=1, color="#00BA38", size=1, alpha=0.5) +
+  
+  # Other settings
+  scale_color_manual(values=c("#F8766D", "#619CFF")) +
+  scale_x_continuous(limits=c(-0.2, 2.2)) +
+  scale_y_discrete(labels=c("Negative exit\n(v. neutral)", "Positive exit\n(v. neutral)")) +
+  labs(x="Hazard ratio") +
+  theme_bw() +
+  theme(legend.position="none",
+        legend.title=element_blank(),
+        axis.title.y=element_blank(),
+        axis.ticks.y=element_blank(),
+        panel.grid=element_blank(),
+        panel.border=element_blank(),
+        axis.line=element_line())
+
+#-----
+## 4b) Sensitivity analysis plot
+
+# Create dataframe of results
+ow <- data.frame(index=c("pos", "neg"),
+                 hr=c(exp(coef(tth_mod_overlap))[[2]], exp(coef(tth_mod_overlap))[[1]]),
+                 low=c(exp(confint(tth_mod_overlap))[[2]], exp(confint(tth_mod_overlap))[[1]]),
+                 hi=c(exp(confint(tth_mod_overlap))[[4]], exp(confint(tth_mod_overlap))[[3]]))
+
+# Create a boxplot with ggplot
+ggplot(data=ow) +
+  
+  # Point estimates
+  geom_point(aes(x=hr, y=index, color=index), size=3) +
+  
+  # Add labels under point estimates
+  geom_text(label=paste(round(exp(coef(tth_mod_overlap))[[2]], 2)),
+            x=exp(coef(tth_mod_overlap))[[2]], y=1.7, color="#619CFF") +
+  geom_text(label=paste(round(exp(coef(tth_mod_overlap))[[1]], 2)),
+            x=exp(coef(tth_mod_overlap))[[1]], y=0.7, color="#F8766D") +
+  
+  # Confidence intervals
+  geom_errorbarh(height=0.2, aes(y=index, xmin=low, xmax=hi, color=index), size=1, alpha=0.5) +
+  
+  # Hazard ratio = 1 line
+  geom_vline(xintercept=1, color="#00BA38", size=1, alpha=0.5) +
+  
+  # Other settings
+  scale_color_manual(values=c("#F8766D", "#619CFF")) +
+  scale_x_continuous(limits=c(-0.2, 2.2)) +
+  scale_y_discrete(labels=c("Negative exit\n(v. neutral)", "Positive exit\n(v. neutral)")) +
+  labs(x="Hazard ratio") +
+  theme_bw() +
+  theme(legend.position="none",
+        legend.title=element_blank(),
+        axis.title.y=element_blank(),
+        axis.ticks.y=element_blank(),
+        panel.grid=element_blank(),
+        panel.border=element_blank(),
+        axis.line=element_line())
+
+#-----
+## 4c) PHA stratified analysis plots
+
+# i) SHA specific plot
+
+# Create dataframe of results
+sha <- data.frame(index=c("pos", "neg"),
+                  hr=c(exp(coef(tth_mod_sha))[[2]], exp(coef(tth_mod_sha))[[1]]),
+                  low=c(exp(confint(tth_mod_sha))[[2]], exp(confint(tth_mod_sha))[[1]]),
+                  hi=c(exp(confint(tth_mod_sha))[[4]], exp(confint(tth_mod_sha))[[3]]))
+
+# Create a boxplot with ggplot
+ggplot(data=sha) +
+  
+  # Point estimates
+  geom_point(aes(x=hr, y=index, color=index), size=3) +
+  
+  # Add labels under point estimates
+  geom_text(label=paste(round(exp(coef(tth_mod_sha))[[2]], 2)),
+            x=exp(coef(tth_mod_sha))[[2]], y=1.7, color="#619CFF") +
+  geom_text(label=paste(round(exp(coef(tth_mod_sha))[[1]], 2)),
+            x=exp(coef(tth_mod_sha))[[1]], y=0.7, color="#F8766D") +
+  
+  # Confidence intervals
+  geom_errorbarh(height=0.2, aes(y=index, xmin=low, xmax=hi, color=index), size=1, alpha=0.5) +
+  
+  # Hazard ratio = 1 line
+  geom_vline(xintercept=1, color="#00BA38", size=1, alpha=0.5) +
+  
+  # Other settings
+  scale_color_manual(values=c("#F8766D", "#619CFF")) +
+  scale_x_continuous(limits=c(-2.5, 4.5)) +
+  scale_y_discrete(labels=c("Negative exit\n(v. neutral)", "Positive exit\n(v. neutral)")) +
+  labs(x="Hazard ratio", title="SHA Only") +
+  theme_bw() +
+  theme(legend.position="none",
+        plot.title=element_text(hjust=0.5),
+        axis.title.y=element_blank(),
+        axis.ticks.y=element_blank(),
+        panel.grid=element_blank(),
+        panel.border=element_blank(),
+        axis.line=element_line())
+
+# ii) KCHA specific plot
+
+# Create dataframe of results
+kcha <- data.frame(index=c("pos", "neg"),
+                   hr=c(exp(coef(tth_mod_kcha))[[2]], exp(coef(tth_mod_kcha))[[1]]),
+                   low=c(exp(confint(tth_mod_kcha))[[2]], exp(confint(tth_mod_kcha))[[1]]),
+                   hi=c(exp(confint(tth_mod_kcha))[[4]], exp(confint(tth_mod_kcha))[[3]]))
+
+# Create a boxplot with ggplot
+ggplot(data=kcha) +
+  
+  # Point estimates
+  geom_point(aes(x=hr, y=index, color=index), size=3) +
+  
+  # Add labels under point estimates
+  geom_text(label=paste(round(exp(coef(tth_mod_kcha))[[2]], 2)),
+            x=exp(coef(tth_mod_kcha))[[2]], y=1.7, color="#619CFF") +
+  geom_text(label=paste(round(exp(coef(tth_mod_kcha))[[1]], 2)),
+            x=exp(coef(tth_mod_kcha))[[1]], y=0.7, color="#F8766D") +
+  
+  # Confidence intervals
+  geom_errorbarh(height=0.2, aes(y=index, xmin=low, xmax=hi, color=index), size=1, alpha=0.5) +
+  
+  # Hazard ratio = 1 line
+  geom_vline(xintercept=1, color="#00BA38", size=1, alpha=0.5) +
+  
+  # Other settings
+  scale_color_manual(values=c("#F8766D", "#619CFF")) +
+  scale_x_continuous(limits=c(-2.5, 4.5)) +
+  scale_y_discrete(labels=c("Negative exit\n(v. neutral)", "Positive exit\n(v. neutral)")) +
+  labs(x="Hazard ratio", title="KCHA Only") +
+  theme_bw() +
+  theme(legend.position="none",
+        plot.title=element_text(hjust=0.5),
+        axis.title.y=element_blank(),
+        axis.ticks.y=element_blank(),
+        panel.grid=element_blank(),
+        panel.border=element_blank(),
+        axis.line=element_line())
 

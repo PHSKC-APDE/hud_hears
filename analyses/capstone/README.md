@@ -1,29 +1,12 @@
 # **Associations Between Public Housing Exit Type and Long-Term Outcomes**
 
-Code developed by UW Biostatistics Capstone students in collaboration with Public Health - Seattle and King County on the HUD HEARS project.
-
-(TO DO: Insert general overview here after discussing with team. Not sure what else to include. Probably names/contact information?)
-
-**Background:** The lack of affordable housing is a known social determinant of health. For those who cannot afford housing, public housing is often an option, however it is a limited resource. Because of this, it is more sustainable for public housing authorities to help people successfully exit from public housing in order to create space for others in need. Since previous research is sparse in understanding public housing exits and their potential associations with long-term outcomes, this project aims to fill this gap by investigating the relationship between exit types and housing stability, defined by time to experiencing homelessness within 1 year of exiting from public housing.
-
-**Study Design:** This is a retrospective cohort study that includes 17,224 individuals who received and exited from federal housing assistance at either (a). Seattle Housing Authority (SHA) between 01/01/2012 and 12/31/2018, or (b). King County Housing Authority (KCHA) between 01/01/2016 and 12/31/2018. Each individual has exactly one exit which is either positive, neutral, or negative. The housing outcome of individuals with positive or negative exits are compared to those of individuals with neutral exits. 
-
-**Statistical Methods:** First, to investigate the relationship between exit type and time-to-homelessness, Kaplan-Meier survival curves are fit for each exit type in order to show the probability of remaining housed for those who experience positive exits, neutral exits, or negative exits. Additionally, to explore this relationship while also taking into account potential confounding, propensity scores are calculated via a multinomial logistic regression model, with confounding individual-, household-, and neighborhood-level variables as the predictors and exit type as the outcome. Generalized estimating equations are also used with clustering by household, as multiple individuals in the data may belong to the same household, and hence share attributes. These propensity scores are then used to calculate weights via inverse probability treatment weighting. Then, these weights are used as input when fitting a Cox proportional hazards model, where the predictor of interest is exit type and the outcome is time to homelessness. Here, clustering by household via a robust sandwich estimator is also included. Hazard ratios are then interpreted. Moreover, a leave-one-out sensitivity analysis is performed in order to determine which specific exit reasons are most influential, and whether the primary analysis results are robust to any one particular exit reason. This sensitivity analysis is carried out by removing each exit reason one at a time, and then re-running the primary analysis. Two forest plots are analyzed (first comparing negative exits to neutral exits, then comparing positive exits to neutral exits) in order to draw conclusions.
-
-**Results:** Based on the Kaplan-Meier curves, the probability of remaining housed for those with positive exits is approximately 97%. The probability of remaining housed for those with neutral exits is approximately 85%. The probability of remaining housed for those with negative exits is approximately 75%. Additionally, based on the Cox proportional hazards model, the hazard of experiencing homelessness for people with positive exits from public housing is approximately 19% (95% CI: 14%, 26%) of the hazard for people with neutral exits from public housing. The hazard of experiencing homelessness for people with negative exits from public housing is approximately 87% (95% CI: 67%, 109%) greater than the hazard for people with neutral exits from public housing. From the sensitivity analysis forest plots, it is shown that the primary analysis results are robust to any particular exit reason. Additionally, the neutral-classified exit reason, “PB/MR moved out location unknown” appears to be more negative in nature, and the exit reason “Landlord eviction” appears to be the most influential negative exit reason.
-
-**Discussion:** Positive exits are generally associated with a lower probability of experiencing homelessness within the first year post-exit, and negative exits are generally associated with a higher probability of experiencing homelessness within the first year post-exit. Since how someone exits from public housing has been shown to be associated with housing stability, this provides further evidence for public housing authorities to allocate resources towards helping people achieve positive exits and avoid negative exits from public housing. Some next steps include exploring other long-term outcomes, such as change in income, and further investigating the impact that specific exit reasons have on long-term outcomes.
-
-Written by: Hantong Hu, Taylor Keating, Zichen Liu, Niki Petrakos
-
-
-## Summary
-
-1.  If the Opportunity Index data does not need to be updated, **skip 00_opportunity_index**.
-2.  **Run 01_format.R** to query and format the data before performing analyses.
-3.  **Run any set of scripts in the 02_results folder** depending on which analyses are desired.
+Code developed by UW Biostatistics Capstone students Hantong Hu, Taylor Keating, Zichen Liu, and Niki Petrakos in collaboration with Public Health - Seattle and King County on the HUD HEARS project. (TO DO: ask about new_housing_time and capstone_data_4)
 
 ## Contents
+
+[About](#About)
+
+[Summary](#Summary)
 
 [00_opportunity_index](#00_opportunity_index)
 
@@ -38,6 +21,33 @@ Written by: Hantong Hu, Taylor Keating, Zichen Liu, Niki Petrakos
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[03_regression](#03_regression)
 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[04_exit_reason_sensitivity](#04_exit_reason_sensitivity)
+
+## About
+
+**Background:** Since previous research is sparse in understanding public housing exits and their potential associations with long-term outcomes, this project aims to fill this gap by investigating the relationship between exit types and housing stability, defined by time to experiencing homelessness within 1 year of exiting from public housing.
+
+**Study Design:** This is a retrospective cohort study that includes individuals who exited from Seattle Housing Authority (SHA) between 01/01/2012 and 12/31/2018 or from King County Housing Authority (KCHA) between 01/01/2016 and 12/31/2018. Each individual exactly one positive, neutral, or negative exit. The housing outcomes of individuals with positive or negative exits are compared to those of individuals with neutral exits. 
+
+**Statistical Methods:**
+1. Descriptive statistics tables are produced to compare populations with different exit types.
+2. Kaplan-Meier survival curves are fit to describe the probability of remaining housed for each exit type. 
+3. For a regression analysis, propensity scores are calculated via a multinomial logistic regression model, using generalized estimating equations with clustering by household. The propensity scores are used to calculate inverse probability treatment weights. These weights are used when fitting a Cox proportional hazards model $h(t)=h_0(t)e^{\beta_{pos}POS+\beta_{neg}NEG}$. A robust sandwich estimator accounts for clustering by household. A box plot is created to display the regression results.
+4. A leave-one-out sensitivity analysis is performed in order to determine which exit reasons are most influential, and whether the primary analysis results are robust to any one particular exit reason. This sensitivity analysis is carried out by removing each exit reason one at a time, then re-running the primary analysis. Forest plots are produced.
+
+**Results:**
+- Based on the Kaplan-Meier curves, the probability of remaining housed is approximately 97% for those with positive exits, 85% for those with neutral exits, and 75% for those with negative exits.
+- Based on the Cox proportional hazards model, the hazard of experiencing homelessness for people with positive exits from public housing is approximately 19% (95% CI: 14%, 26%) of the hazard for people with neutral exits from public housing. The hazard of experiencing homelessness for people with negative exits from public housing is approximately 87% (95% CI: 67%, 109%) greater than the hazard for people with neutral exits from public housing.
+- From the sensitivity analysis forest plots, it is shown that the primary analysis results are robust to any particular exit reason. The exit reason "PB/MR moved out location unknown" appears to be more negative in than neutral, and "Landlord eviction"" appears to be the most influential negative exit reason.
+
+**Discussion:** Positive exits are generally associated with a lower probability of experiencing homelessness within the first year post-exit, and negative exits are generally associated with a higher probability of experiencing homelessness within the first year post-exit. This provides further evidence for public housing authorities to allocate resources towards helping people achieve positive exits and avoid negative exits from public housing.
+
+**The code in this repository can be used to reproduce the necessary data processing and statistical analyses to reach these conclusions. Please refer to the full report for more detailed background and discussion, and documentation on data sources and statistical methods.**
+
+## Summary
+
+1.  If the Opportunity Index data does not need to be updated, **skip 00_opportunity_index**.
+2.  **Run 01_format.R** to query and format the data before performing analyses.
+3.  **Run any set of scripts in the 02_results folder** depending on which analyses are desired.
 
 ## 00_opportunity_index
 
@@ -71,7 +81,7 @@ The purpose of this script is threefold:
 
 First, the script creates a connection to the `hhs_analytics_workspace`. To query, the database, being logged in to the KingCounty.gov VPN and having a valid KingCounty.gov username and password are necessary.
 
-Next, three databases are queried. `pha.stage_pha_exit_timevar` is queried to obtain information on **exit times and exit types**. `hudhears.control_match_covariate` is queried to obtain **demographics and household covariates**. `hudhears.pha_homeless_status` is queried to obtain **homelessness status and start dates**.
+Next, three databases are queried. `pha.stage_pha_exit_timevar` is queried to obtain information on **exit times and exit types**. `hudhears.control_match_covariate` is queried to obtain **demographics and household covariates**. `hudhears.pha_homeless_status` is queried to obtain **homelessness status and start dates**. This step has a long run time due to querying.
 
 The data are filtered to include the study population only: those who exited (specifically, only true exits and non-death exits) Seattle Housing Authority from 2012 to 2019 and those who exited King County Housing Authority from 2016 to 2019. The data are merged together on `id_hudhears`. Individuals who did not appear to have a homeless status are still merged to ensure those who have not experienced a homelessness event are included in the population.
 
@@ -89,9 +99,9 @@ The code in the next section is confusing, but the general idea is that the merg
 
 Two possible edits to the code may be necessary if methodology changes are made:
 
-1. To change the 30 day administrative buffer, set `` to another length in days (TO DO: I need to confirm this part)
+1. To change the 30 day administrative buffer, set `buffer` to another length in days.
 
-2. To change the 1 year censoring cutoff, set `max_date` to be `max_days` after the last `exit_date` in the data. (TO DO: Explain this better somehow...)
+2. To change the 1 year censoring cutoff, set `max_date` to be `max_days` after the last `exit_date` seen in the data.
 
 *An intermediate table, `hudhears.capstone_data_2` is created after this step for debugging purposes.*
 
@@ -145,9 +155,9 @@ Additionally, `summary(fit_exit_type, times=365)` is used to extract the K-M est
 
 ### 03_regression
 
-**Usage:** This script is used to perform **regression analysis exploring the association between `tt_homeless` and `exit_type`** from `hudhears.capstone_data_3`.
+**Usage:** This script is used to perform **regression analyses exploring the association between `tt_homeless` and `exit_type`** from `hudhears.capstone_data_3`.
 
-**Output:** Regression coefficients, standard errors, and p-values of the analysis. (TO DO: Add the results ggplot code to this script)
+**Output:** Regression coefficients, standard errors, and p-values of the analyses, along with ggplot visualizations of these results.
 
 **Details:**
 
@@ -157,11 +167,11 @@ Next, the script calculates the **inverse probability treatment weight** (IPTW) 
 
 Finally, a **weighted Cox proportional hazards model** is fit using the `coxph` function and by specifying the `weights` argument. Clustering by household ID is once again specified in the `cluster` argument.
 
-Additionally, this script performs a sensitivity analysis using overlap weights instead of IPTW. To carry out the sensitivity analysis, the same steps from the primary analysis are used, where the only difference is in step 2. Rather than assigning weights equal to the inverse of the propensity score of each observed exit type, weights are assigned by subtracting the propensity score from 1. 
+Additionally, this script performs a sensitivity analysis using overlap weights (OW) instead of IPTW. To carry out the sensitivity analysis, the same steps from the primary analysis are used, except for step 2. Rather than assigning weights equal to the inverse of the propensity score of each observed exit type, weights are assigned by subtracting the propensity score from 1. 
 
-Moreover, this script repeats the primary analysis, but for subsets of the population. The first subset is for `agency = KCHA`, and the second subset is for `angecy = SHA`. The first two steps of the primary analysis (deriving propensity scores, and assigning weights via IPTW), are repeated. Then, before performing the third step (fitting the weighted Cox PH model), the data is subsetted by agency, and separate weighted Cox PH models are fit for each subsetted data set. 
+This script repeats the primary analysis, but for subsets of the population. The first subset is for `agency = KCHA`, and the second subset is for `agency = SHA`. The first two steps of the primary analysis (deriving propensity scores, and assigning weights via IPTW), are repeated. Then, before performing the third step (fitting the weighted Cox PH model), the data is subsetted by agency, and separate weighted Cox PH models are fit for each subsetted data set. 
 
-(TO DO: Add ggplot code here.)
+Finally, the script visualizes all regression results in a series of ggplots. The code automatically takes in the results of the regression before creating the plots, but it may be useful to refer to documentation on the `ggplot2` package if editing the plot settings is desired.
 
 ### 04_exit_reason_sensitivity
 

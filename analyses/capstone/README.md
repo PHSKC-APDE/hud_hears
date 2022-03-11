@@ -4,9 +4,9 @@ Code developed by UW Biostatistics Capstone students Hantong Hu, Taylor Keating,
 
 ## Contents
 
-[About](#About)
-
 [Summary](#Summary)
+
+[About](#About)
 
 [00_opportunity_index](#00_opportunity_index)
 
@@ -22,6 +22,12 @@ Code developed by UW Biostatistics Capstone students Hantong Hu, Taylor Keating,
 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[04_exit_reason_sensitivity](#04_exit_reason_sensitivity)
 
+## Summary
+
+1.  If the Opportunity Index data does not need to be updated, **skip 00_opportunity_index**.
+2.  **Run 01_format.R** to query and format the data before performing analyses.
+3.  **Run any set of scripts in the 02_results folder** depending on which analyses are desired.
+
 ## About
 
 **Background:** Since previous research is sparse in understanding public housing exits and their potential associations with long-term outcomes, this project aims to fill this gap by investigating the relationship between exit types and housing stability, defined by time to experiencing homelessness within 1 year of exiting from public housing.
@@ -31,23 +37,10 @@ Code developed by UW Biostatistics Capstone students Hantong Hu, Taylor Keating,
 **Statistical Methods:**
 1. Descriptive statistics tables are produced to compare populations with different exit types.
 2. Kaplan-Meier survival curves are fit to describe the probability of remaining housed for each exit type. 
-3. For a regression analysis, propensity scores are calculated via a multinomial logistic regression model, using generalized estimating equations with clustering by household. The propensity scores are used to calculate inverse probability treatment weights. These weights are used when fitting a Cox proportional hazards model $h(t)=h_0(t)e^{\beta_{pos}POS+\beta_{neg}NEG}$. A robust sandwich estimator accounts for clustering by household. A box plot is created to display the regression results.
+3. For a regression analysis, propensity scores are calculated via a multinomial logistic regression model, using generalized estimating equations with clustering by household. Inverse probability treatment weights are used when fitting a Cox proportional hazards model where the predictor of interest is exit type and the outcome is time to homelessness. Box plots are created to display the regression results.
 4. A leave-one-out sensitivity analysis is performed in order to determine which exit reasons are most influential, and whether the primary analysis results are robust to any one particular exit reason. This sensitivity analysis is carried out by removing each exit reason one at a time, then re-running the primary analysis. Forest plots are produced.
 
-**Results:**
-- Based on the Kaplan-Meier curves, the probability of remaining housed is approximately 97% for those with positive exits, 85% for those with neutral exits, and 75% for those with negative exits.
-- Based on the Cox proportional hazards model, the hazard of experiencing homelessness for people with positive exits from public housing is approximately 19% (95% CI: 14%, 26%) of the hazard for people with neutral exits from public housing. The hazard of experiencing homelessness for people with negative exits from public housing is approximately 87% (95% CI: 67%, 109%) greater than the hazard for people with neutral exits from public housing.
-- From the sensitivity analysis forest plots, it is shown that the primary analysis results are robust to any particular exit reason. The exit reason "PB/MR moved out location unknown" appears to be more negative in than neutral, and "Landlord eviction"" appears to be the most influential negative exit reason.
-
-**Discussion:** Positive exits are generally associated with a lower probability of experiencing homelessness within the first year post-exit, and negative exits are generally associated with a higher probability of experiencing homelessness within the first year post-exit. This provides further evidence for public housing authorities to allocate resources towards helping people achieve positive exits and avoid negative exits from public housing.
-
-**The code in this repository can be used to reproduce the necessary data processing and statistical analyses to reach these conclusions. Please refer to the full report for more detailed background and discussion, and documentation on data sources and statistical methods.**
-
-## Summary
-
-1.  If the Opportunity Index data does not need to be updated, **skip 00_opportunity_index**.
-2.  **Run 01_format.R** to query and format the data before performing analyses.
-3.  **Run any set of scripts in the 02_results folder** depending on which analyses are desired.
+**The code in this repository can be used to reproduce the necessary data processing and statistical analyses to reach these conclusions. Please refer to the full report for more detailed background, results, and discussion, as well as documentation on data sources and statistical methods.**
 
 ## 00_opportunity_index
 

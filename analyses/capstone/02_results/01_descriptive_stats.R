@@ -3,7 +3,7 @@
 ## Purpose of script: - generate descriptive statistics tables
 ##                    - visualizations of missingness patterns
 ##
-## Author: Capstone Group 2
+## Author: Hantong Hu
 ## Date: 3/11/2022
 ##
 ## R version: 4.1.2

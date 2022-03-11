@@ -10,10 +10,12 @@
 ##              a) Repeating Step 1 (primary analysis), but in step b), use overlap weights instead of IPTW
 ##
 ##    Step 3) Perform primary analysis for KCHA and SHA separately, which involves:
-##              a) Repeating Step 1 parts a) and b), where agency is omitted from propensity score calcuation
+##              a) Repeating Step 1 parts a) and b), where agency is omitted from propensity score calculation
 ##              b) Before fitting a weighted Cox PH model, split the data by agency
 ##              c) For SHA specific results, subset the data by agency = 'SHA'
 ##              d) For KCHA specific results, subset the data by agency = 'KCHA'
+##              e) Cox model results, adjusting for agency
+##              f) Cox model results, interaction between agency and exit_category
 ##
 ##    Step 4) Visualize regression results
 ##
@@ -182,6 +184,22 @@ tth_mod_kcha <- coxph(formula = Surv(tt_homeless, event) ~ exit_category,
                       cluster = hh_id_kc_pha)
 
 summary(tth_mod_kcha)
+
+#-----
+## 3e) PHA adjusted results
+tth_mod_pha_adjusted<- coxph(formula = Surv(tt_homeless, event) ~ exit_category + agency,
+                             data = tth_data,
+                             weights = IPTW,
+                             cluster = hh_id_kc_pha)
+summary(tth_mod_pha_adjusted)
+
+#-----
+## 3f) PHA interaction with exit category results
+tth_mod_interaction_pha_exitcat<- coxph(formula = Surv(tt_homeless, event) ~ exit_category * agency,
+                                        data = tth_data,
+                                        weights = IPTW,
+                                        cluster = hh_id_kc_pha)
+summary(tth_mod_interaction_pha_exitcat)
 
 #--------------------------------------------------
 ### 4) Visualize regression results

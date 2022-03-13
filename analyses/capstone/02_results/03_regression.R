@@ -49,11 +49,11 @@ tth_data <- setDT(DBI::dbGetQuery(conn = db_hhsaw, "SELECT * FROM [hudhears].[ca
 # Formula:
 # exit_category ~ age_at_exit + gender_me + race_eth_me + agency + 
 #                 single_caregiver + hh_size + hh_disability + 
-#                 new_housing_time + major_prog + kc_opp_index_score
+#                 housing_time_at_exit + major_prog + kc_opp_index_score
 
 ps_mod <- nomLORgee(formula = exit_category ~ age_at_exit + gender_me + 
                       race_eth_me + agency + single_caregiver + hh_size +
-                      hh_disability + new_housing_time + major_prog +
+                      hh_disability + housing_time_at_exit + major_prog +
                       kc_opp_index_score,
                     data = tth_data,
                     id = hh_id_kc_pha,

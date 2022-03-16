@@ -265,9 +265,15 @@ exits_bh_type3 <- exits_bh_type3 %>% mutate(crisis_any=ifelse(is.na(crisis_any),
 #Look at exit category by crisis event
 exits_bh_type3 %>% group_by(reg_care, crisis_any) %>% summarize(n_distinct (id_hudhears))
 
-##Join with Medicaid Covariate table and make descriptive tables
+##Join with covariate table with exits
+exits_bh_cov <- left_join(exits_bh_type3, filter(control_match_covariate, id_type=="id_exit"), by=c("id_hudhears", "exit_date"))
 
 
+
+#########
+#Descriptive tables (note: modifying Alastair's code)
+
+#First tables
 #################################################################################
 
 # #Attempts at flow chart

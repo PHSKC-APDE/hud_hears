@@ -41,16 +41,25 @@ db_hhsaw <- DBI::dbConnect(odbc::odbc(),
 tth_data <- setDT(DBI::dbGetQuery(conn = db_hhsaw, "SELECT * FROM [hudhears].[capstone_data_3]"))
 
 #--------------------------------------------------
-### Step 1) Perform primary analysis
+# Step 1) Perform primary analysis ----
 
-#-----
-## 1a) First, fit the multinomial logistic regression model, using GEE 
+
+## 1a) First, fit the multinomial logistic regression model, using GEE ----
 
 # Formula:
 # exit_category ~ age_at_exit + gender_me + race_eth_me + agency + 
 #                 single_caregiver + hh_size + hh_disability + 
 #                 housing_time_at_exit + major_prog + kc_opp_index_score
 
+# Remove anyone with missing variables
+tth_data <- tth_data %>%
+  filter(!(is.na(exit_category) | is.na(age_at_exit) | is.na(gender_me) | 
+             is.na(race_eth_me) | race_eth_me == "Unknown" |
+             is.na(agency) | is.na(single_caregiver) | 
+             is.na(hh_size) | is.na(hh_disability) | is.na(housing_time_at_exit) | is.na(major_prog) | 
+             is.na(kc_opp_index_score)))
+
+# First, fit the multinomial logistic regression model, using GEE
 ps_mod <- nomLORgee(formula = exit_category ~ age_at_exit + gender_me + 
                       race_eth_me + agency + single_caregiver + hh_size +
                       hh_disability + housing_time_at_exit + major_prog +
@@ -59,78 +68,62 @@ ps_mod <- nomLORgee(formula = exit_category ~ age_at_exit + gender_me +
                     id = hh_id_kc_pha,
                     LORstr = "independence")
 
-## Next, calculate generalized propensity scores 
+# Next, calculate generalized propensity scores
 ps <- as.data.frame(fitted(ps_mod))
 colnames(ps) <- c("Neutral", "Negative", "Positive")
+ps <- cbind("id_hudhears" = tth_data$id_hudhears, ps)
 
-#-----
-## 1b) Then, calculate inverse weights and assign to each observation 
 
-tth_data$IPTW <- ifelse(tth_data$exit_category == "Negative", 1/ps$Negative,
-                        ifelse(tth_data$exit_category == "Neutral", 1/ps$Neutral,
-                               1/ps$Positive))
+## 1b) Then, calculate inverse weights and assign to each observation  ----
+tth_data <- tth_data %>%
+  left_join(., ps, by = "id_hudhears") %>%
+  mutate(iptw = case_when(exit_category == "Neutral" ~ 1/Neutral,
+                          exit_category == "Negative" ~ 1/Negative,
+                          exit_category == "Positive" ~ 1/Positive))
 
-#-----
-## 1c) Finally, fit weighted Cox PH, and cluster on hh_id
+
+## 1c) Finally, fit weighted Cox PH, and cluster on hh_id ----
 
 tth_data$exit_category <- relevel(factor(tth_data$exit_category), ref = "Neutral")
 
 tth_mod <- coxph(formula = Surv(tt_homeless, event) ~ exit_category,
                  data = tth_data,
-                 weights = IPTW,
+                 weights = iptw,
                  cluster = hh_id_kc_pha)
 
 summary(tth_mod)
 
 
 #--------------------------------------------------
-### Step 2) Perform sensitivity analysis using overlap weights
+# Step 2) Perform sensitivity analysis using overlap weights ----
 
-#-----
-## 2a) First, fit the multinomial logistic regression model, using GEE 
+
+## 2a) First, calculate overlap weights and assign to each observation ----
 
 # Formula:
 # exit_category ~ age_at_exit + gender_me + race_eth_me + agency + 
 #                 single_caregiver + hh_size + hh_disability + 
 #                 housing_time_at_exit + major_prog + kc_opp_index_score
+tth_data <- tth_data %>% 
+  mutate(overlap = case_when(exit_category == "Neutral" ~ 1 - Neutral,
+                             exit_category == "Negative" ~ 1 - Negative,
+                             exit_category == "Positive" ~ 1 - Positive))
 
-ps_mod <- nomLORgee(formula = exit_category ~ age_at_exit + gender_me + 
-                      race_eth_me + agency + single_caregiver + hh_size +
-                      hh_disability + housing_time_at_exit + major_prog +
-                      kc_opp_index_score,
-                    data = tth_data,
-                    id = hh_id_kc_pha,
-                    LORstr = "independence")
 
-## Next, calculate generalized propensity scores 
-ps <- as.data.frame(fitted(ps_mod))
-colnames(ps) <- c("Neutral", "Negative", "Positive")
-
-#-----
-## 2b) Then, calculate overlap weights and assign to each observation 
-
-tth_data$Overlap <- ifelse(tth_data$exit_category == "Negative", 1-ps$Negative,
-                           ifelse(tth_data$exit_category == "Neutral", 1-ps$Neutral,
-                                  1-ps$Positive))
-
-#-----
-## 2c) Finally, fit weighted Cox PH, and cluster on hh_id
-
-tth_data$exit_category <- relevel(factor(tth_data$exit_category), ref = "Neutral")
-
+## 2b) Then, fit weighted Cox PH, and cluster on hh_id ----
 tth_mod_overlap <- coxph(formula = Surv(tt_homeless, event) ~ exit_category,
                          data = tth_data,
-                         weights = Overlap,
+                         weights = overlap,
                          cluster = hh_id_kc_pha)
 
 summary(tth_mod_overlap)
 
 
 #--------------------------------------------------
-### Step 3) Perform primary analysis for KCHA and SHA separately
+# Step 3) Perform primary analysis for KCHA and SHA separately ----
 
-#-----
-## 3a) First, fit the multinomial logistic regression model, using GEE 
+
+## 3a) First, fit the multinomial logistic regression model, using GEE ----
 
 # Formula:
 # exit_category ~ age_at_exit + gender_me + race_eth_me +  

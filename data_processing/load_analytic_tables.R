@@ -25,7 +25,7 @@ db_hhsaw <- DBI::dbConnect(odbc::odbc(),
                            pwd = keyring::key_get("hhsaw", keyring::key_list("hhsaw")[["username"]]),
                            Encrypt = "yes",
                            TrustServerCertificate = "yes",
-                           Authentication = "ActiveDirectoryPassword")
+                           Authentication = "ActiveDirectoryInteractive")
 
 
 # ID XWALK TABLES ----
@@ -117,18 +117,25 @@ match_f <- function(exit_id, exit_dt) {
                    interval(start = exit_dt, end = max_period_date) / years(1) >= 1]
   match <- unique(match[, .(id_kc_pha)])
   
-  set.seed(202198104)
-  match <- match %>% sample_n(4)
-  
-  # Remove these controls from the list of future controls
-  controls <<- anti_join(controls, match, by = "id_kc_pha")
-  
-  output <- match %>%
-    mutate(id_exit = rep(exit_id, 4),
-           exit_date = rep(exit_dt, 4),
-           control_num = row_number()) %>%
-    rename(id_control = id_kc_pha) %>%
-    select(id_exit, exit_date, control_num, id_control)
+  if (nrow(match) > 0) {
+    set.seed(202198104)
+    match <- match %>% slice_sample(n = 4, replace = T)  
+    
+    # Remove these controls from the list of future controls
+    controls <<- anti_join(controls, match, by = "id_kc_pha")
+    
+    output <- match %>%
+      mutate(id_exit = rep(exit_id, 4),
+             exit_date = rep(exit_dt, 4),
+             control_num = row_number()) %>%
+      rename(id_control = id_kc_pha) %>%
+      select(id_exit, exit_date, control_num, id_control)
+  } else {
+    output <- data.frame(id_exit = exit_id,
+                         exit_date = exit_dt,
+                         control_num = 1,
+                         id_control = "no_match")
+  }
   
   output
 }
@@ -138,6 +145,7 @@ system.time(control_match <- map2(exits$id_kc_pha, exits$act_date, ~ match_f(exi
 # Add an exit ID so that controls can be linked up later
 control_match <- control_match %>%
   bind_rows() %>%
+  distinct() %>%
   group_by(id_exit, exit_date) %>%
   mutate(exit_uid = cur_group_id()) %>%
   ungroup()
@@ -440,7 +448,6 @@ mcaid_ccw_summ <- mcaid_ccw %>%
          ccw_flag = ifelse(ccw_cnt >= 2, 1L, 0L))
 
 
-
 ## Medicaid well-child visits ----
 wc_visits_prior <- dbGetQuery(db_hhsaw,
                                  "SELECT x.id_hudhears, x.exit_date, COUNT(x.wc_visit) AS wc_cnt_prior
@@ -513,12 +520,12 @@ exit_info <- control_match_long %>%
   filter(id_type == "id_exit") %>%
   select(id_hudhears, id_kc_pha, exit_date, exit_uid) %>%
   left_join(., filter(exit_timevar, chooser == chooser_max) %>%
-              select(id_hudhears, id_kc_pha, act_date, exit_reason_clean),
+              select(id_hudhears, id_kc_pha, act_date, exit_reason_clean, exit_category),
             by = c("id_hudhears", "id_kc_pha", "exit_date" = "act_date")) %>%  
   mutate(exit_death = case_when(is.na(exit_reason_clean) ~ NA_integer_,
                                 exit_reason_clean == "Deceased" ~ 1L,
                                 TRUE ~ 0L)) %>%
-  select(exit_uid, exit_reason_clean, exit_death)
+  select(exit_uid, exit_reason_clean, exit_category, exit_death)
 
 # Join back to covariate data
 covariate <- covariate %>%
@@ -531,7 +538,7 @@ covariate <- covariate %>%
          vouch_type_final = coalesce(vouch_type_final.x, vouch_type_final.y),
          portfolio_final = coalesce(portfolio_final.x, portfolio_final.y),
          geo_tractce10 = coalesce(geo_tractce10.x, geo_tractce10.y)) %>%
-  select(id_hudhears:exit_date, exit_reason_clean, exit_death, gender_me:age_at_exit,  
+  select(id_hudhears:exit_date, exit_reason_clean, exit_category, exit_death, gender_me:age_at_exit,  
          housing_time_at_exit, hh_id_kc_pha, hh_demog_date, agency:geo_tractce10, 
          hh_size:single_caregiver) %>%
   left_join(., select(mcaid_elig_prior, id_hudhears, exit_date, full_cov_11_prior, full_cov_7_prior), 

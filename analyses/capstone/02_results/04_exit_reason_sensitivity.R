@@ -47,6 +47,14 @@ db_hhsaw <- DBI::dbConnect(odbc::odbc(),
 study_data<- setDT(DBI::dbGetQuery(conn = db_hhsaw, "SELECT * FROM [hudhears].[capstone_data_3]"))
 study_data$exit_category<- relevel(factor(study_data$exit_category), ref="Neutral")
 
+# Remove anyone with missing variables
+study_data <- study_data %>%
+  filter(!(is.na(exit_category) | is.na(age_at_exit) | is.na(gender_me) | 
+             is.na(race_eth_me) | race_eth_me == "Unknown" |
+             is.na(agency) | is.na(single_caregiver) | 
+             is.na(hh_size) | is.na(hh_disability) | is.na(housing_time_at_exit) | is.na(major_prog) | 
+             is.na(kc_opp_index_score)))
+
 #--------------------------------------------------
 # 1) Create list of exit reasons for sensitivity analysis
 
@@ -70,17 +78,20 @@ run_analysis<- function(data){
                       id = hh_id_kc_pha,
                       LORstr = "independence")
   ps <- as.data.frame(fitted(ps_mod))
-  colnames(ps) <- levels(data$exit_category) 
+  colnames(ps) <- levels(data$exit_category)
+  ps<- cbind("id_hudhears" = data$id_hudhears, ps)
   
   # Then, calculate inverse weights and assign to each obs.
-  data$IPTW <- ifelse(data$exit_category == "Negative", 1/ps$Negative,
-                          ifelse(data$exit_category == "Neutral", 1/ps$Neutral,
-                                 1/ps$Positive))
+  data<- data %>%
+    left_join(., ps, by = "id_hudhears") %>%
+    mutate(iptw = case_when(exit_category == "Neutral" ~ 1/Neutral,
+                            exit_category == "Negative" ~ 1/Negative,
+                            exit_category == "Positive" ~ 1/Positive))
   
   # Finally, fit weighted Cox PH (cluster on hh_id_kc_pha)
   tth_mod <- coxph(formula = Surv(tt_homeless, event) ~ exit_category,
                    data = data,
-                   weights = IPTW,
+                   weights = iptw,
                    cluster = hh_id_kc_pha)
   return(tth_mod)
 }
@@ -96,16 +107,19 @@ run_analysis_no_GEE<- function(data){
                     data= data,
                     trace=FALSE) 
   ps<- as.data.frame(fitted(ps_mod))
+  ps<- cbind("id_hudhears" = data$id_hudhears, ps)
   
   # Then, calculate inverse weights and assign to each obs.
-  data$IPTW<- ifelse(data$exit_category== "Negative", 1/ps$Negative,
-                         ifelse(data$exit_category== "Neutral", 1/ps$Neutral,
-                                1/ps$Positive))
+  data<- data %>%
+    left_join(., ps, by = "id_hudhears") %>%
+    mutate(iptw = case_when(exit_category == "Neutral" ~ 1/Neutral,
+                            exit_category == "Negative" ~ 1/Negative,
+                            exit_category == "Positive" ~ 1/Positive))
   
   # Finally, fit weighted Cox PH (cluster on hh_id_kc_pha)
   tth_mod<- coxph(formula = Surv(tt_homeless, event) ~ exit_category,
                   data = data,
-                  weights = IPTW,
+                  weights = iptw,
                   cluster = hh_id_kc_pha)
   return(tth_mod)
 }

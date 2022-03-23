@@ -142,12 +142,13 @@ ON a.id_hudhears = b.id_hudhears") %>%
 
 
 # control_match_covariate %>% select(id_hudhears, starts_with("full_")) %>% head() %>% mutate(chk = full_cov_7_prior * full_cov_7_after)
+################################################################################
 
 ##Join covariate table to BH crisis events, ITAs, ED visits
 exits_bh <- dbGetQuery(db_hhsaw,
-                       "SELECT a.id_hudhears, a.gender_me, a.exit_date, NULL as yr_before, DATEADD(year, 1, a.exit_date) AS yr_later, b.crisis_date AS event_date, b.source
+                       "SELECT a.id_hudhears, a.gender_me, a.exit_date, a.exit_category, NULL as yr_before, DATEADD(year, 1, a.exit_date) AS yr_later, b.crisis_date AS event_date, b.source
 FROM
-(SELECT id_hudhears, exit_date, gender_me 
+(SELECT id_hudhears, exit_date, gender_me, exit_category
   FROM hudhears.control_match_covariate 
   WHERE id_type = 'id_exit' AND exit_death = 0) a
 LEFT JOIN
@@ -160,9 +161,9 @@ WHERE b.source IS NOT NULL
 
 UNION
 
-SELECT x.id_hudhears, x.gender_me, x.exit_date, NULL as yr_before, DATEADD(year, 1, x.exit_date) AS yr_later, y.call_date AS event_date, y.source
+SELECT x.id_hudhears, x.gender_me, x.exit_date, x.exit_category, NULL as yr_before, DATEADD(year, 1, x.exit_date) AS yr_later, y.call_date AS event_date, y.source
 FROM
-(SELECT id_hudhears, exit_date, gender_me 
+(SELECT id_hudhears, exit_date, gender_me, exit_category
   FROM hudhears.control_match_covariate 
   WHERE id_type = 'id_exit' AND exit_death = 0)  x
 LEFT JOIN
@@ -173,9 +174,9 @@ WHERE y.source IS NOT NULL
 
 UNION
 
-SELECT z.id_hudhears, z.gender_me, z.exit_date, DATEADD(year, -1, z.exit_date) AS yr_before, NULL as yr_after, m.first_service_date AS event_date, m.source
+SELECT z.id_hudhears, z.gender_me, z.exit_date, z.exit_category, DATEADD(year, -1, z.exit_date) AS yr_before, NULL as yr_after, m.first_service_date AS event_date, m.source
 FROM
-(SELECT id_hudhears, exit_date, gender_me 
+(SELECT id_hudhears, exit_date, gender_me, exit_category
   FROM hudhears.control_match_covariate 
   WHERE id_type = 'id_exit' AND exit_death = 0) z
 LEFT JOIN
@@ -191,9 +192,9 @@ WHERE m.source IS NOT NULL
 outpt_bh <- dbGetQuery(db_hhsaw,
                        "
 
-SELECT z.id_hudhears, z.gender_me, z.exit_date, DATEADD(year, -1, z.exit_date) AS yr_before, NULL as yr_after, d.event_date AS event_date, d.source
+SELECT z.id_hudhears, z.gender_me, z.exit_date, z.exit_category, DATEADD(year, -1, z.exit_date) AS yr_before, NULL as yr_after, d.event_date AS event_date, d.source
 FROM
-(SELECT id_hudhears, exit_date, gender_me 
+(SELECT id_hudhears, exit_date, gender_me, exit_category
   FROM hudhears.control_match_covariate 
   WHERE id_type = 'id_exit' AND exit_death = 0) z
 LEFT JOIN
@@ -205,68 +206,43 @@ AND d.event_date <= z.exit_date AND d.event_date >= DATEADD(year, -1, z.exit_dat
 
 
 
-#Get exit type variable from relevant table
-#Note: only getting that one variable
-
-pha_stage <- dbGetQuery(db_hhsaw, "SELECT * FROM pha.stage_pha_exit_timevar WHERE act_date IS NOT NULL")
-
-exits_bh_type <- left_join(exits_bh, distinct(pha_stage, id_hudhears, act_date, exit_category), by=c("id_hudhears", "exit_date"="act_date"))
-
-rm(pha_stage)
-
-
-#Summary Statistics
+#Summary Statistics (of crisis events)
 # Number of events of each type (can be multiple for single ID)
 exits_bh %>% distinct() %>% count(source)
 #Number of IDs with any event
-exits_bh_type %>% filter(source %in% c("crisis", "ita"))%>%summarize(events=n_distinct (id_hudhears))
+exits_bh %>% summarize(events=n_distinct (id_hudhears))
 #Count of events, grouped by exit type and ID
-exits_bh_type %>% filter(source %in% c("crisis", "ita"))%>% group_by(exit_category) %>% summarize(events=n_distinct (id_hudhears))%>% ungroup()
+exits_bh %>% group_by(exit_category) %>% summarize(events=n_distinct (id_hudhears))%>% ungroup()
 # exit_category events
-# 1 Negative         212
-# 2 Neutral          241
-# 3 Positive          26
-
-
-#Get denominators
-exits_bh_type %>% group_by(exit_category) %>% summarize(n_distinct (id_hudhears))
-# A tibble: 3 x 2
-# exit_category `n_distinct(id_hudhears)`
-# 1 Negative                           5896
-# 2 Neutral                            8251
-# 3 Positive                           3058
-
-
-##Tabulate proportions
-# exits_bh_type %>% group_by(exit_category) %>% mutate(totals=n_distinct (id_hudhears)) %>% filter(source %in% c("crisis", "ita"))%>% mutate(events=n_distinct (id_hudhears))%>% mutate(prop=events/totals)%>% count(prop)
-
-# #Total numbers of events
-# exit_category    prop     n
 # 
-# 1 Negative      0.0360    568
-# 2 Neutral       0.0292    638
-# 3 Positive      0.00850    97
+# 1 Negative         721
+# 2 Neutral          828
+# 3 Positive         106
 
-#Make a data frame with number of events by person
-bh_count <- exits_bh_type %>% filter(source %in% c("outpt")) %>% group_by(id_hudhears, exit_date) %>%  summarize(out_count=n_distinct(event_date))
-# summary(bh_count$out_count)
-# hist(bh_count$out_count)
+###OUTPATIENT EVENTS
+#Make a data frame with number of events by person (note: includes people with and without outpatient events
+bh_outpt_count <- outpt_bh %>% group_by(id_hudhears, exit_date) %>% summarize(out_count=n_distinct(event_date))
+
 
 #Make indicator for people with 2+ visits
-bh_count$reg_care <-ifelse(bh_count$out_count >=2, 1, 0)
+bh_outpt_count$reg_care <-ifelse(bh_outpt_count$out_count >=2, 1, 0)
+
+#This will be used later when joining with the larger table to include people without outpt events
+# #Recode variable (change NA to 0, by ID)
+# bh_outpt_count <- bh_outpt_count %>% mutate(reg_care=ifelse(is.na(reg_care), 0,reg_care)) 
+
 #Check whether this worked
-bh_count %>% group_by(reg_care)%>% summarise_at(vars(out_count),list(name = min))
+bh_outpt_count %>% group_by(reg_care)%>% summarise_at(vars(out_count),list(name =max))
 
 #Join this with other data frame
-exits_bh_type2 <- left_join(exits_bh_type, distinct(bh_count, id_hudhears, exit_date, out_count, reg_care), by=c("id_hudhears", "exit_date")) 
+exits_bh <- left_join(exits_bh, distinct(bh_outpt_count, id_hudhears, exit_date, out_count, reg_care), by=c("id_hudhears", "exit_date")) 
 # #Summarize for all data
-# bh_routine %>% group_by(reg_care) %>% summarize(n_distinct(id_hudhears))
+bh_outpt_count %>% group_by(reg_care) %>% summarize(n_distinct(id_hudhears))
 # #Note that 174 were in the larger dataset who were duplicated IDs! (n=174)
 
-#Recode variable (change NA to 0, by ID)
-exits_bh_type2 <- exits_bh_type2 %>% mutate(reg_care=ifelse(is.na(reg_care), 0,reg_care)) 
+
 #Look at exit category by receiving regular care
-exits_bh_type2 %>% group_by(exit_category, reg_care) %>% summarize(n_distinct (id_hudhears))
+exits_bh %>% group_by(exit_category, reg_care) %>% summarize(n_distinct (id_hudhears))
 
 ########
 ##Make crisis event indicator variable
@@ -278,22 +254,21 @@ crisis_count$crisis_any <-ifelse(crisis_count$crisis_num >=1, 1, 0)
 #table(crisis_count$crisis_any) #Confirmed that it worked
 
 #Join this with other data frame
-exits_bh_type3 <- left_join(exits_bh_type2, distinct(crisis_count, id_hudhears, exit_date, crisis_num, crisis_any), by=c("id_hudhears", "exit_date")) 
+exits_bh <- left_join(exits_bh, distinct(crisis_count, id_hudhears, exit_date, crisis_num, crisis_any), by=c("id_hudhears", "exit_date")) 
 # #Summarize for all data
 #Recode variable (change NA to 0, by ID)
-exits_bh_type3 <- exits_bh_type3 %>% mutate(crisis_any=ifelse(is.na(crisis_any), 0,crisis_any)) 
+exits_bh <- exits_bh %>% mutate(crisis_any=ifelse(is.na(crisis_any), 0,crisis_any)) 
 #Look at exit category by crisis event
-exits_bh_type3 %>% group_by(reg_care, crisis_any) %>% summarize(n_distinct (id_hudhears))
+exits_bh %>% group_by(reg_care, crisis_any) %>% summarize(n_distinct (id_hudhears))
+# reg_care crisis_any `n_distinct(id_hudhears)`
+# 1        0          1                       804
+# 2        1          1                       845
 
 ##Join with covariate table with exits
-exits_bh_cov <- left_join(exits_bh_type3, filter(control_match_covariate, id_type=="id_exit"), by=c("id_hudhears", "exit_date"))
+##This table now include anyone who had a crisis event
+had_crisis_events_cov <- left_join(exits_bh, filter(control_match_covariate, id_type=="id_exit"), by=c("id_hudhears", "exit_date"))
 
 
-
-#########
-#Descriptive tables (note: modifying Alastair's code)
-
-#First tables
 #################################################################################
 
 # #Attempts at flow chart

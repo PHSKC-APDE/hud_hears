@@ -143,7 +143,7 @@ ON a.id_hudhears = b.id_hudhears") %>%
 
 # control_match_covariate %>% select(id_hudhears, starts_with("full_")) %>% head() %>% mutate(chk = full_cov_7_prior * full_cov_7_after)
 
-##Join covariate table to BH crisis events, ITAs, and outpatient events (all non-Medicaid)--then union these 3 new tables
+##Join covariate table to BH crisis events, ITAs, ED visits
 exits_bh <- dbGetQuery(db_hhsaw,
                        "SELECT a.id_hudhears, a.gender_me, a.exit_date, NULL as yr_before, DATEADD(year, 1, a.exit_date) AS yr_later, b.crisis_date AS event_date, b.source
 FROM
@@ -155,6 +155,7 @@ LEFT JOIN
   FROM hudhears.bh_crisis_events WHERE crisis_date IS NOT NULL) b
 ON a.id_hudhears = b.id_hudhears
 AND b.crisis_date >= a.exit_date AND b.crisis_date <= DATEADD(year, 1, a.exit_date)
+WHERE b.source IS NOT NULL
 
 
 UNION
@@ -168,8 +169,27 @@ LEFT JOIN
 (SELECT DISTINCT id_hudhears, call_date, 'ita' AS source FROM hudhears.bh_ita_events WHERE call_date IS NOT NULL) y
 ON x.id_hudhears = y.id_hudhears
 AND y.call_date >= x.exit_date AND y.call_date <= DATEADD(year, 1, x.exit_date)
+WHERE y.source IS NOT NULL
 
 UNION
+
+SELECT z.id_hudhears, z.gender_me, z.exit_date, DATEADD(year, -1, z.exit_date) AS yr_before, NULL as yr_after, m.first_service_date AS event_date, m.source
+FROM
+(SELECT id_hudhears, exit_date, gender_me 
+  FROM hudhears.control_match_covariate 
+  WHERE id_type = 'id_exit' AND exit_death = 0) z
+LEFT JOIN
+(SELECT DISTINCT id_hudhears, id_mcaid FROM claims.hudhears_id_xwalk) aa
+ON z.id_hudhears= aa.id_hudhears
+LEFT JOIN
+(SELECT DISTINCT id_mcaid, first_service_date, ed_bh, 'mcaid' AS source FROM claims.final_mcaid_claim_header WHERE ed_bh = 1) m
+ON aa.id_mcaid = m.id_mcaid
+AND m.first_service_date <= z.exit_date AND m.first_service_date >= DATEADD(year, -1, z.exit_date)
+WHERE m.source IS NOT NULL
+")
+
+outpt_bh <- dbGetQuery(db_hhsaw,
+                       "
 
 SELECT z.id_hudhears, z.gender_me, z.exit_date, DATEADD(year, -1, z.exit_date) AS yr_before, NULL as yr_after, d.event_date AS event_date, d.source
 FROM
@@ -251,7 +271,7 @@ exits_bh_type2 %>% group_by(exit_category, reg_care) %>% summarize(n_distinct (i
 ########
 ##Make crisis event indicator variable
 #Filter out people with any crisis event, make var of number of events
-crisis_count <- exits_bh_type2 %>% filter(source %in% c("crisis", "ita")) %>% group_by(id_hudhears, exit_date) %>% summarize(crisis_num=n_distinct(event_date))
+crisis_count <- exits_bh %>% group_by(id_hudhears, exit_date) %>% summarize(crisis_num=n_distinct(event_date))
 
 #Code indicator variable (Note everyone here should have a value of 1 due to filtering)
 crisis_count$crisis_any <-ifelse(crisis_count$crisis_num >=1, 1, 0)

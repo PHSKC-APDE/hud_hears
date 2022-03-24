@@ -111,25 +111,25 @@ db_hhsaw <- DBI::dbConnect(odbc::odbc(),
 # 
 # #19234 vs. 19329
 
-#Read in table with covariates
-control_match_covariate <- setDT(DBI::dbGetQuery(conn = db_hhsaw, "SELECT * FROM [hudhears].[control_match_covariate]"))
-table(control_match_covariate$id_type)
-# id_control    id_exit 
-# 76936      19234 
-
-##join this table with medicaid data to get n's
-
-##Left join this table with Medicaid ID table
-control_match_id_mcaid <- dbGetQuery(db_hhsaw,
-                                     "SELECT a.*, b.id_mcaid
-                                     FROM
-(SELECT * FROM hudhears.control_match_long) a
-LEFT JOIN
-(SELECT DISTINCT id_hudhears, id_mcaid
-FROM claims.hudhears_id_xwalk WHERE id_mcaid is not null) b
-ON a.id_hudhears = b.id_hudhears") %>%
-  mutate(exit_1yr_prior = exit_date - years(1) + days(1),
-         exit_1yr_after = exit_date + years(1) - days(1))
+# #Read in table with covariates
+# control_match_covariate <- setDT(DBI::dbGetQuery(conn = db_hhsaw, "SELECT * FROM [hudhears].[control_match_covariate]"))
+# table(control_match_covariate$id_type)
+# # id_control    id_exit 
+# # 76936      19234 
+# 
+# ##join this table with medicaid data to get n's
+# 
+# ##Left join this table with Medicaid ID table
+# control_match_id_mcaid <- dbGetQuery(db_hhsaw,
+#                                      "SELECT a.*, b.id_mcaid
+#                                      FROM
+# (SELECT * FROM hudhears.control_match_long) a
+# LEFT JOIN
+# (SELECT DISTINCT id_hudhears, id_mcaid
+# FROM claims.hudhears_id_xwalk WHERE id_mcaid is not null) b
+# ON a.id_hudhears = b.id_hudhears") %>%
+#   mutate(exit_1yr_prior = exit_date - years(1) + days(1),
+#          exit_1yr_after = exit_date + years(1) - days(1))
 
 
 ## Observations off by 300
@@ -249,7 +249,7 @@ bh_outpt_count$reg_care <-ifelse(bh_outpt_count$out_count >=2, 1, 0)
 # bh_outpt_count <- bh_outpt_count %>% mutate(reg_care=ifelse(is.na(reg_care), 0,reg_care)) 
 
 #Check whether this worked
-bh_outpt_count %>% group_by(reg_care)%>% summarise_at(vars(out_count),list(name =max))
+bh_outpt_count %>% group_by(reg_care) %>% summarise_at(vars(out_count),list(name =max))
 
 #Join this with other data frame
 exits_bh <- left_join(exits_bh, distinct(bh_outpt_count, id_hudhears, exit_date, out_count, reg_care), by=c("id_hudhears", "exit_date")) 
@@ -287,19 +287,23 @@ AND bh.from_date <= cov.exit_date
 WHERE bh.from_date IS NOT NULL
 ")
 
-##Make indicator var for conditions (distinct condition and from_date for each person)
-#Number of conditions
-bh_conditions <- bh_conditions %>% group_by(id_hudhears, exit_date) %>% summarize(con_count=n_distinct(from_date, bh_cond)) %>% mutate(con_count=con_count)
-
-#Code indicator variable (Note everyone here should have a value of 1)
-bh_conditions$any_con <-ifelse(bh_conditions$con_count>=1, 1, 0)
-#table(bh_conditions$any_con) #Confirmed that it worked
+#Number of conditions by person (N=6878 with at least 1 condition)
+conditions_count_bh <- bh_conditions %>% group_by(id_hudhears, exit_date) %>% summarize(con_count=n_distinct(bh_cond))
+#Make indicator for people with 2+ visits
+conditions_count_bh$any_cond <-ifelse(conditions_count_bh$con_count >=1, 1, 0)
 
 ##Joining this with exit table
-exits_bh <- left_join(exits_bh, bh_conditions, by=c("id_hudhears", "exit_date"))
+exits_bh <- left_join(exits_bh, conditions_count_bh, by=c("id_hudhears", "exit_date"))
+
 
 ##Join with covariate table with exits --> This table now include anyone who had a crisis event
 exits_bh <- left_join(exits_bh, control_match_covariate, by=c("id_hudhears", "exit_date"))
+
+
+#Change NAs for BH conditions variables
+exits_bh <- exits_bh %>% mutate(con_count=ifelse(is.na(con_count), 0, con_count)) 
+exits_bh <- exits_bh %>% mutate(any_cond=ifelse(is.na(any_cond), 0,any_cond)) 
+
 
 
 #################################################################################

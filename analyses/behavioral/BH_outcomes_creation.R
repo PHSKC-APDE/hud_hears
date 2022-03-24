@@ -219,6 +219,23 @@ exits_bh %>% group_by(exit_category) %>% summarize(events=n_distinct (id_hudhear
 # 2 Neutral          828
 # 3 Positive         106
 
+
+##Make crisis event indicator variable
+#Filter out people with any crisis event, make var of number of events
+crisis_count <- exits_bh %>% group_by(id_hudhears, exit_date) %>% summarize(crisis_num=n_distinct(event_date))
+
+#Code indicator variable (Note everyone here should have a value of 1)
+crisis_count$crisis_any <-ifelse(crisis_count$crisis_num >=1, 1, 0)
+#table(crisis_count$crisis_any) #Confirmed that it worked
+
+##Use this code later when joining with other table
+#Recode variable (change NA to 0, by ID)
+# exits_bh <- exits_bh %>% mutate(crisis_any=ifelse(is.na(crisis_any), 0,crisis_any)) 
+
+#Join this with other data frame
+exits_bh <- left_join(exits_bh, distinct(crisis_count, id_hudhears, exit_date, crisis_num, crisis_any), by=c("id_hudhears", "exit_date")) 
+
+########
 ###OUTPATIENT EVENTS
 #Make a data frame with number of events by person (note: includes people with and without outpatient events
 bh_outpt_count <- outpt_bh %>% group_by(id_hudhears, exit_date) %>% summarize(out_count=n_distinct(event_date))
@@ -236,37 +253,53 @@ bh_outpt_count %>% group_by(reg_care)%>% summarise_at(vars(out_count),list(name 
 
 #Join this with other data frame
 exits_bh <- left_join(exits_bh, distinct(bh_outpt_count, id_hudhears, exit_date, out_count, reg_care), by=c("id_hudhears", "exit_date")) 
-# #Summarize for all data
+
+# #Summarize for all data (including people without crisis event)
 bh_outpt_count %>% group_by(reg_care) %>% summarize(n_distinct(id_hudhears))
 # #Note that 174 were in the larger dataset who were duplicated IDs! (n=174)
-
 
 #Look at exit category by receiving regular care
 exits_bh %>% group_by(exit_category, reg_care) %>% summarize(n_distinct (id_hudhears))
 
-########
-##Make crisis event indicator variable
-#Filter out people with any crisis event, make var of number of events
-crisis_count <- exits_bh %>% group_by(id_hudhears, exit_date) %>% summarize(crisis_num=n_distinct(event_date))
-
-#Code indicator variable (Note everyone here should have a value of 1 due to filtering)
-crisis_count$crisis_any <-ifelse(crisis_count$crisis_num >=1, 1, 0)
-#table(crisis_count$crisis_any) #Confirmed that it worked
-
-#Join this with other data frame
-exits_bh <- left_join(exits_bh, distinct(crisis_count, id_hudhears, exit_date, crisis_num, crisis_any), by=c("id_hudhears", "exit_date")) 
-# #Summarize for all data
-#Recode variable (change NA to 0, by ID)
-exits_bh <- exits_bh %>% mutate(crisis_any=ifelse(is.na(crisis_any), 0,crisis_any)) 
-#Look at exit category by crisis event
+#Look at regular care by crisis event and exit category
 exits_bh %>% group_by(reg_care, crisis_any) %>% summarize(n_distinct (id_hudhears))
 # reg_care crisis_any `n_distinct(id_hudhears)`
 # 1        0          1                       804
 # 2        1          1                       845
 
-##Join with covariate table with exits
-##This table now include anyone who had a crisis event
-had_crisis_events_cov <- left_join(exits_bh, filter(control_match_covariate, id_type=="id_exit"), by=c("id_hudhears", "exit_date"))
+##Get table of behavioral health conditions
+bh_conditions <- dbGetQuery(db_hhsaw,
+                       "SELECT cov.id_hudhears, cov.gender_me, cov.exit_date, cov.exit_category, bh.from_date, bh.bh_cond
+FROM
+(SELECT id_hudhears, exit_date, gender_me, exit_category
+  FROM hudhears.control_match_covariate 
+  WHERE id_type = 'id_exit' AND exit_death = 0) cov
+
+LEFT JOIN
+
+(SELECT DISTINCT id_hudhears, id_mcaid FROM claims.hudhears_id_xwalk) walk
+ON cov.id_hudhears= walk.id_hudhears
+LEFT JOIN
+(SELECT DISTINCT id_mcaid, from_date, bh_cond
+FROM claims.final_mcaid_claim_bh) bh
+ON walk.id_mcaid =bh.id_mcaid
+AND bh.from_date <= cov.exit_date
+WHERE bh.from_date IS NOT NULL
+")
+
+##Make indicator var for conditions (distinct condition and from_date for each person)
+#Number of conditions
+bh_conditions <- bh_conditions %>% group_by(id_hudhears, exit_date) %>% summarize(con_count=n_distinct(from_date, bh_cond)) %>% mutate(con_count=con_count)
+
+#Code indicator variable (Note everyone here should have a value of 1)
+bh_conditions$any_con <-ifelse(bh_conditions$con_count>=1, 1, 0)
+#table(bh_conditions$any_con) #Confirmed that it worked
+
+##Joining this with exit table
+exits_bh <- left_join(exits_bh, bh_conditions, by=c("id_hudhears", "exit_date"))
+
+##Join with covariate table with exits --> This table now include anyone who had a crisis event
+exits_bh <- left_join(exits_bh, control_match_covariate, by=c("id_hudhears", "exit_date"))
 
 
 #################################################################################

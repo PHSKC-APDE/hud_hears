@@ -1,5 +1,5 @@
 ##Making descriptive tables code
-##Updated March 23, 2022
+##Updated March 25, 2022
 
 # #Demographic tables included:
 # 1)Comparison of people with and without the outcome
@@ -16,7 +16,8 @@
 
 #######################################
 
-
+# ##Note: exits_bh data frame contains outcome and covariate information for all with
+# a behavioral health crisis event
 
 
 # SET UP GENERIC SUMMARY FUNCTIONS ----
@@ -227,10 +228,10 @@ mcaid_outcomes_sum <- function(df,
 }
 
 
-# FACTORS ASSOCIATED WITH EXIT VS NOT -----
-covariate_nodeath %>% head()
+# DEMOGRAPHIC FACTORS  -----
+exits_bh %>% head()
 
-covariate_nodeath %>% count(id_type)
+exits_bh %>% count(id_type)
 
 ## Demogs ----
 # Age

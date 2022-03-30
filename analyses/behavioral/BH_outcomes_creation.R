@@ -1,3 +1,8 @@
+# NOTE: This version of code is outdated as of 3/29/2022. See "Outcomes_code_cleaned.R" for updated code
+
+
+
+
 # Code goal:
 # Df with covariates for all participants who had a BH crisis event, ready for summary in tables
 # #Code steps:
@@ -156,7 +161,7 @@ db_hhsaw <- DBI::dbConnect(odbc::odbc(),
 # INDIVIDUALS WITH THE OUTCOME (i.e. at least 1 crisis event within 1 year of exit)
 ################################################################################
 
-##Join covariate table to BH crisis events, ITAs, ED visits
+##Join IDs to BH crisis events, ITAs, ED visits
 crisis_pop <- dbGetQuery(db_hhsaw,
                        "SELECT a.id_hudhears, a.gender_me, a.exit_date, a.exit_category, NULL as yr_before, DATEADD(year, 1, a.exit_date) AS yr_later, b.crisis_date AS event_date, b.source
 FROM
@@ -201,6 +206,28 @@ AND m.first_service_date <= z.exit_date AND m.first_service_date >= DATEADD(year
 WHERE m.source IS NOT NULL
 ")
 
+##########
+#Summary Statistics (of crisis events)
+# Number of events of each type (can be multiple for single ID)
+crisis_pop %>% distinct() %>% count(source)
+#Number of IDs with any event
+crisis_pop %>% summarize(events=n_distinct (id_hudhears))
+#Count of events, grouped by exit type and ID
+crisis_pop %>% group_by(exit_category) %>% summarize(events=n_distinct (id_hudhears))%>% ungroup()
+# exit_category events
+# 
+# 1 Negative         721
+# 2 Neutral          828
+# 3 Positive         106
+
+
+##Make crisis event number of events
+crisis_count <- crisis_pop %>% group_by(id_hudhears, exit_date) %>% summarize(crisis_num=n_distinct(event_date))
+
+########
+###OUTPATIENT EVENTS
+
+#Get table of outpatient events
 outpt_bh <- dbGetQuery(db_hhsaw,
                        "
 
@@ -216,40 +243,7 @@ AND d.event_date <= z.exit_date AND d.event_date >= DATEADD(year, -1, z.exit_dat
 
 ")
 
-
-
-#Summary Statistics (of crisis events)
-# Number of events of each type (can be multiple for single ID)
-crisis_pop %>% distinct() %>% count(source)
-#Number of IDs with any event
-crisis_pop %>% summarize(events=n_distinct (id_hudhears))
-#Count of events, grouped by exit type and ID
-crisis_pop %>% group_by(exit_category) %>% summarize(events=n_distinct (id_hudhears))%>% ungroup()
-# exit_category events
-# 
-# 1 Negative         721
-# 2 Neutral          828
-# 3 Positive         106
-
-
-##Make crisis event indicator variable
-#Filter out people with any crisis event, make var of number of events
-crisis_count <- crisis_pop %>% group_by(id_hudhears, exit_date) %>% summarize(crisis_num=n_distinct(event_date))
-
-#Code indicator variable (Note everyone here should have a value of 1)
-crisis_count$crisis_any <-ifelse(crisis_count$crisis_num >=1, 1, 0)
-#table(crisis_count$crisis_any) #Confirmed that it worked
-
-##Use this code later when joining with other table
-#Recode variable (change NA to 0, by ID)
-# crisis_pop <- crisis_pop %>% mutate(crisis_any=ifelse(is.na(crisis_any), 0,crisis_any)) 
-
-#Join this with other data frame
-crisis_pop <- left_join(crisis_pop, distinct(crisis_count, id_hudhears, exit_date, crisis_num, crisis_any), by=c("id_hudhears", "exit_date")) 
-
-########
-###OUTPATIENT EVENTS
-#Make a data frame with number of events by person (note: includes people with and without outpatient events
+#Make a data frame with number of events by person (note: includes people with and without outpatient events)
 bh_outpt_count <- outpt_bh %>% group_by(id_hudhears, exit_date) %>% summarize(out_count=n_distinct(event_date))
 
 
@@ -260,11 +254,8 @@ bh_outpt_count$reg_care <-ifelse(bh_outpt_count$out_count >=2, 1, 0)
 # #Recode variable (change NA to 0, by ID)
 # bh_outpt_count <- bh_outpt_count %>% mutate(reg_care=ifelse(is.na(reg_care), 0,reg_care)) 
 
-#Check whether this worked
+#Check whether this worked (it did, yay!)
 bh_outpt_count %>% group_by(reg_care) %>% summarise_at(vars(out_count),list(name =max))
-
-#Join this with other data frame
-crisis_pop <- left_join(crisis_pop, distinct(bh_outpt_count, id_hudhears, exit_date, out_count, reg_care), by=c("id_hudhears", "exit_date")) 
 
 # #Summarize for all data (including people without crisis event)
 bh_outpt_count %>% group_by(reg_care) %>% summarize(n_distinct(id_hudhears))
@@ -279,9 +270,17 @@ crisis_pop %>% group_by(reg_care, crisis_any) %>% summarize(n_distinct (id_hudhe
 # 1        0          1                       804
 # 2        1          1                       845
 
-##Get table of behavioral health conditions
+
+
+#Change NAs for BH conditions variables
+crisis_pop <- crisis_pop %>% mutate(con_count=ifelse(is.na(con_count), 0, con_count)) 
+crisis_pop <- crisis_pop %>% mutate(any_cond=ifelse(is.na(any_cond), 0,any_cond)) 
+
+
+##
+#####Get table of behavioral health conditions
 bh_conditions <- dbGetQuery(db_hhsaw,
-                       "SELECT cov.id_hudhears, cov.gender_me, cov.exit_date, cov.exit_category, bh.from_date, bh.bh_cond
+                            "SELECT cov.id_hudhears, cov.gender_me, cov.exit_date, cov.exit_category, bh.from_date, bh.bh_cond
 FROM
 (SELECT id_hudhears, exit_date, gender_me, exit_category
   FROM hudhears.control_match_covariate 
@@ -304,26 +303,10 @@ conditions_count_bh <- bh_conditions %>% group_by(id_hudhears, exit_date) %>% su
 #Make indicator for people with 2+ visits
 conditions_count_bh$any_cond <-ifelse(conditions_count_bh$con_count >=1, 1, 0)
 
-##Joining this with crisis_pop
-crisis_pop <- left_join(crisis_pop, conditions_count_bh, by=c("id_hudhears", "exit_date"))
-
-#Change NAs for BH conditions variables
-crisis_pop <- crisis_pop %>% mutate(con_count=ifelse(is.na(con_count), 0, con_count)) 
-crisis_pop <- crisis_pop %>% mutate(any_cond=ifelse(is.na(any_cond), 0,any_cond)) 
-
 
 ##Join with covariate table, make two separate dfs of each population (ones with and without exits)
 control_match_covariate <- setDT(DBI::dbGetQuery(conn = db_hhsaw, "SELECT * FROM [hudhears].[control_match_covariate]"))
 
-all_pop <- left_join(control_match_covariate, select(crisis_pop, -gender_me, -exit_category), by=c("id_hudhears", "exit_date"))
-
-
-##Data frame that includes all people with crisis events
-all_pop <- all_pop %>% group_by(id_hudhears) %>% mutate(crisis_any=ifelse(is.na(crisis_any), 0,crisis_any)) 
-all_pop <- all_pop %>% group_by(id_hudhears) %>% mutate(crisis_count=ifelse(is.na(crisis_count), 0, crisis_count))
-                                                        
-all_pop <- all_pop %>% ungroup %>% left_join(all_pop, conditions_count, by=c("id_hudhears", "exit_date"))
-all_pop <- all_pop %>% left_join(all_pop, bh_oupt_count, by=c("id_hudhears", "exit_date"))
 # #Attempts at flow chart
 # library(DiagrammeR)
 # grViz("digraph flowchart {

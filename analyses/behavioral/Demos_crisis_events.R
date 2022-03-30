@@ -12,12 +12,11 @@
 # -Top exit reasons by outcome status
 
 
-##NOTE: Run BH_outcomes_creation.R code first to build appropriate data frames
+##NOTE: Run Outcomes_code_cleaned.R code first to build appropriate data frames
 
 #######################################
 
-# ##Note: exits_bh data frame contains outcome and covariate information for all with
-# a behavioral health crisis event
+# ##Note: all_pop data frame contains outcome and covariate information for all with and without crisis event
 
 
 # SET UP GENERIC SUMMARY FUNCTIONS ----

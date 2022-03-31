@@ -16,7 +16,20 @@
 
 #######################################
 
+
+# SET OPTIONS AND BRING IN PACKAGES ----
+options(scipen = 6, digits = 4, warning.length = 8170)
+# Suppress summarise info
+options(dplyr.summarise.inform = FALSE)
+
+if (!require("pacman")) {install.packages("pacman")}
+pacman::p_load(tidyverse, odbc, glue, data.table, ggplot2, viridis, hrbrthemes,
+               knitr, kableExtra, rmarkdown, nnet, scales)
+
 # ##Note: all_pop data frame contains outcome and covariate information for all with and without crisis event
+# BRING IN DATA ----
+all_pop <- all_pop %>% mutate(outcome = case_when(crisis_any == "1" ~ 1L,crisis_any == "0" ~ 0L))
+
 
 
 # SET UP GENERIC SUMMARY FUNCTIONS ----
@@ -52,10 +65,55 @@ age_sum <- function(df, ...) {
   output
 }
 
+
+#Condition count
+condition_sum <- function(df, ...) {
+  col_names <- df %>% select(...) %>% colnames()
+  output <- df %>% 
+    filter(!is.na(con_count)) %>%
+    group_by(...) %>%
+    summarise(n = number(n(), big.mark = ","), 
+              condition_avg = round(mean(con_count), 1),
+              condition_med = median(con_count),
+              condition_range = paste0(min(con_count), "-", max(con_count)))%>% 
+    pivot_longer(cols = !col_names, values_transform = list(value = as.character)) %>%
+    pivot_wider(id_cols = "name", names_from = col_names) %>%
+    mutate(category = "Number of Behavioral Health Conditions", .before = "name",
+           name = case_when(name == "condition_avg" ~ "Mean",
+                            name == "condition_med" ~ "Median",
+                            name == "condition_range" ~ "Range",
+                            TRUE ~ name)) %>%
+    rename("group" = "name")
+  
+  output
+}
+
+#Outpatient visits (year before)
+outpatient_sum <- function(df, ...) {
+  col_names <- df %>% select(...) %>% colnames()
+  output <- df %>% 
+    filter(!is.na(out_count)) %>%
+    group_by(...) %>%
+    summarise(n = number(n(), big.mark = ","), 
+              out_avg = round(mean(out_count), 1),
+              out_med = median(out_count),
+              out_range = paste0(min(out_count), "-", max(out_count)))%>% 
+    pivot_longer(cols = !col_names, values_transform = list(value = as.character)) %>%
+    pivot_wider(id_cols = "name", names_from = col_names) %>%
+    mutate(category = "Number of Outpatient Visits Year Prior", .before = "name",
+           name = case_when(name == "out_avg" ~ "Mean",
+                            name == "out_med" ~ "Median",
+                            name == "out_range" ~ "Range",
+                            TRUE ~ name)) %>%
+    rename("group" = "name")
+  
+  output
+}
+
 # Can take a common approach to summaries that are simple percents
 demog_pct_sum <- function(df, 
                           level = c("ind", "hh"),
-                          demog = c("gender", "race", "program", "voucher", 
+                          demog = c("gender", "race", "reg_care", "bh_cond", "program", "voucher", 
                                     "program_ind", "voucher_ind"), 
                           ...) {
   # Set things up to select in pivot_ functions
@@ -82,6 +140,18 @@ demog_pct_sum <- function(df,
       distinct(id_var, exit_date, ..., race_eth_me) %>%
       filter(!is.na(race_eth_me) & race_eth_me != "Unknown") %>%
       mutate(group = ifelse(race_eth_me == "Latino", "Latina/o/x", race_eth_me))
+  } else if (demog=="reg_care") {
+    cat_text <= "Routine Behavioral Care"
+    output <- output %>% 
+      distinct(id_var, exit_date, ..., reg_care) %>%
+      filter(!is.na(reg_care)) %>%
+      mutate(group=reg_care)
+  }else if (demog=="bh_cond") {
+    cat_text <= "Behavioral Health Condition"
+    output <- output %>% 
+      distinct(id_var, exit_date, ..., any_cond) %>%
+      filter(!is.na(any_cond)) %>%
+      mutate(group=any_cond)
   } else if (demog == "program") {
     cat_text <- "Program type"
     output <- output %>% 
@@ -150,9 +220,11 @@ hh_demogs_sum <- function(df, level = c("hh", "ind"), ...) {
   }
   
   output <- output %>% 
-    distinct(id_var, exit_date, ..., hh_size, single_caregiver, hh_disability) %>%
+    distinct(id_var, exit_date, ..., n_child, hh_size, single_caregiver, hh_disability) %>%
     group_by(...) %>%
-    summarise(n = number(n(), big.mark = ","), 
+    summarise(n = number(n(), big.mark = ","),
+              n_child_mean = round(mean(n_child, na.rm = T), 1),
+              n_child_med = median(n_child, na.rm = T),
               hh_size_mean = round(mean(hh_size, na.rm = T), 1),
               hh_size_med = median(hh_size, na.rm = T),
               single_caregiver = scales::percent(mean(single_caregiver, na.rm = T), accuracy = 0.1L),
@@ -160,7 +232,9 @@ hh_demogs_sum <- function(df, level = c("hh", "ind"), ...) {
     pivot_longer(cols = !col_names, values_transform = list(value = as.character)) %>%
     pivot_wider(id_cols = "name", names_from = col_names) %>%
     mutate(category = "Household characteristics", .before = "name",
-           name = case_when(name == "hh_size_mean" ~ "Mean household size",
+           name = case_when(name == "n_child_mean" ~ "Mean number of children",
+                            name == "n_child_med" ~ "Median number of children",
+                            name == "hh_size_mean" ~ "Mean household size",
                             name == "hh_size_med" ~ "Median household size",
                             name == "single_caregiver" ~ "Single caregiver",
                             name == "hh_disability" ~ "HoH disability",
@@ -228,104 +302,115 @@ mcaid_outcomes_sum <- function(df,
 
 
 # DEMOGRAPHIC FACTORS  -----
-exits_bh %>% head()
-
-exits_bh %>% count(id_type)
+all_pop %>% head()
 
 ## Demogs ----
 # Age
-exit_any_age <- age_sum(covariate_nodeath, id_type)
+crisis_age <- age_sum(all_pop, crisis_any)
 
 # Gender
-exit_any_gender <- demog_pct_sum(covariate_nodeath, level = "ind", demog = "gender", id_type)
+crisis_gender <- demog_pct_sum(all_pop, level = "ind", demog = "gender", crisis_any)
 
 # Race/eth
-exit_any_race <- demog_pct_sum(covariate_nodeath, level = "ind", demog = "race", id_type)
+crisis_race <- demog_pct_sum(all_pop, level = "ind", demog = "race", crisis_any)
+
+#Any BH condition
+crisis_cond_any <- demog_pct_sum(all_pop, level= "ind", demog = "bh_cond", crisis_any)
+
+#Number of conditions
+crisis_cond <- condition_sum(all_pop, crisis_any)
+
+#Regular BH care
+crisis_reg_care <- demog_pct_sum (all_pop, level= "ind", demog = "reg_care", crisis_any)
+
+#Number of outpatient visits
+crisis_out <- outpatient_sum(all_pop, crisis_any)
+
 
 # Combine for R markdown
-exit_any_ind <- bind_rows(exit_any_age, exit_any_gender, exit_any_race) %>%
-  rename("Remained" = "id_control", "Exited" = "id_exit") %>%
+crisis_ind <- bind_rows(crisis_age, crisis_gender, crisis_race, crisis_cond_any, crisis_cond, crisis_reg_care, crisis_out) %>%
+  rename("Had Crisis Event" = "1", "No Crisis Event" = "0") %>%
   filter(!group == "n")
 
 
 ## HH demogs ----
 # Time in housing (this is based on HH data)
-exit_any_hh_los <- hh_los_sum(covariate_nodeath, id_type)
+crisis_hh_los <- hh_los_sum(all_pop, crisis_any)
 
 # Size and composition
-exit_any_hh_demogs <- hh_demogs_sum(covariate_nodeath, level = "hh", id_type)
+crisis_hh_demogs <- hh_demogs_sum(all_pop, level = "hh", demog= "crisis_any)
 
 # Program type
-exit_any_hh_prog <- demog_pct_sum(covariate_nodeath, level = "hh", demog = "program", id_type)
+crisis_hh_prog <- demog_pct_sum(all_pop, level = "hh", demog = "program", crisis_any)
 
 # Voucher type
-exit_any_hh_vouch <- demog_pct_sum(covariate_nodeath, level = "hh", demog = "voucher", id_type)
+crisis_hh_vouch <- demog_pct_sum(all_pop, level = "hh", demog = "voucher", crisis_any)
 
 # Agency - this doesn't make sense to do because KCHA only runs 2016-2018
-covariate_nodeath %>% 
-  distinct(hh_id_kc_pha, exit_date, id_type, agency) %>%
+all_pop %>% 
+  distinct(hh_id_kc_pha, exit_date, crisis_any, agency) %>%
   filter(!is.na(agency)) %>%
-  count(id_type, agency) %>%
-  group_by(id_type) %>%
+  count(crisis_any, agency) %>%
+  group_by(crisis_any) %>%
   ungroup() %>%
-  group_by(id_type) %>%
+  group_by(crisis_any) %>%
   mutate(tot = sum(n),
          pct = round(n/tot*100, 1))
 
 
 # Combine for R markdown
-exit_any_hh <- bind_rows(exit_any_hh_los, exit_any_hh_demogs, exit_any_hh_prog, exit_any_hh_vouch) %>%
-  rename("Remained" = "id_control", "Exited" = "id_exit") %>%
+crisis_hh <- bind_rows(crisis_hh_los, crisis_hh_demogs, crisis_hh_prog, crisis_hh_vouch) %>%
+  rename("Had Crisis Event" = "1", "No Crisis Event" = "0") %>%
   filter(!group == "n")
 
 
-## Repeat but at individual level ----
-# Not used in markdown doc currently
+# ## Repeat but at individual level ----
+# # Not used in markdown doc currently
+# 
+# # Size and composition
+# crisis_ind_demogs <- hh_demogs_sum(all_pop, level = "ind", crisis_any)
+# 
+# # Program type
+# crisis_ind_prog <- demog_pct_sum(all_pop, level = "ind", demog = "program", crisis_any)
+# 
+# # Voucher type
+# crisis_ind_vouch <- demog_pct_sum(all_pop, level = "ind", demog = "voucher", crisis_any)
+# 
+# 
+# ## Medicaid outcomes ----
+# all_pop %>% 
+#   group_by(crisis_any) %>%
+#   summarise(n = n(),
+#             full_cov_11_prior = mean(full_cov_11_prior, na.rm = T),
+#             full_cov_7_prior = mean(full_cov_7_prior, na.rm = T),
+#             full_cov_11_after = mean(full_cov_11_after, na.rm = T),
+#             full_cov_7_after = mean(full_cov_7_after, na.rm = T))
+# 
+# 
+# crisis_mcaid_11_prior <- mcaid_outcomes_sum(all_pop, time = "prior", cov_time = "11_mth", crisis_any)
+# 
+# crisis_mcaid_7_prior <- mcaid_outcomes_sum(all_pop, time = "prior", cov_time = "7_mth", crisis_any)
+# 
+# 
 
-# Size and composition
-exit_any_ind_demogs <- hh_demogs_sum(covariate_nodeath, level = "ind", id_type)
-
-# Program type
-exit_any_ind_prog <- demog_pct_sum(covariate_nodeath, level = "ind", demog = "program", id_type)
-
-# Voucher type
-exit_any_ind_vouch <- demog_pct_sum(covariate_nodeath, level = "ind", demog = "voucher", id_type)
-
-
-## Medicaid outcomes ----
-covariate_nodeath %>% 
-  group_by(id_type) %>%
-  summarise(n = n(),
-            full_cov_11_prior = mean(full_cov_11_prior, na.rm = T),
-            full_cov_7_prior = mean(full_cov_7_prior, na.rm = T),
-            full_cov_11_after = mean(full_cov_11_after, na.rm = T),
-            full_cov_7_after = mean(full_cov_7_after, na.rm = T))
-
-
-exit_any_mcaid_11_prior <- mcaid_outcomes_sum(covariate_nodeath, time = "prior", cov_time = "11_mth", id_type)
-
-exit_any_mcaid_7_prior <- mcaid_outcomes_sum(covariate_nodeath, time = "prior", cov_time = "7_mth", id_type)
-
-
-
-## Demogs by exit and Medicaid status ----
+## Demogs by Outcome and Medicaid status ----
 # Age
-exit_any_mcaid_age <- age_sum(covariate_nodeath, id_type, full_cov_7_prior)
+crisis_mcaid_age <- age_sum(all_pop, crisis_any, full_cov_7_prior)
 
 # Gender
-exit_any_mcaid_gender <- demog_pct_sum(covariate_nodeath, level = "ind", demog = "gender", id_type, full_cov_7_prior)
+crisis_mcaid_gender <- demog_pct_sum(all_pop, level = "ind", demog = "gender", crisis_any, full_cov_7_prior)
 
 # Race/eth
-exit_any_mcaid_race <- demog_pct_sum(covariate_nodeath, level = "ind", demog = "race", id_type, full_cov_7_prior)
+crisis_mcaid_race <- demog_pct_sum(all_pop, level = "ind", demog = "race", crisis_any, full_cov_7_prior)
 
 # Time in housing
-exit_any_mcaid_hh_los <- hh_los_sum(covariate_nodeath, id_type, full_cov_7_prior)
+crisis_mcaid_hh_los <- hh_los_sum(all_pop, crisis_any, full_cov_7_prior)
 
 
 
-# REGRESSION MODEL FOR EXIT VS NOT ----
+# REGRESSION MODEL FOR Outcome vs not ----
 ## Not including Medicaid factors ----
-model_data <- covariate_nodeath %>%
+model_data <- all_pop %>%
   mutate(agegrp = case_when(age_at_exit < 18 ~ "<18",
                             data.table::between(age_at_exit, 18, 24.99, NAbounds = NA) ~ "18-24",
                             data.table::between(age_at_exit, 25, 44.99, NAbounds = NA) ~ "25-44",
@@ -337,67 +422,25 @@ model_data <- covariate_nodeath %>%
                          between(housing_time_at_exit, 6, 9.999, NAbounds = NA) ~ "6-9.99",
                          housing_time_at_exit >= 10 ~ "10+"))
 
-anyexit <- glm(exit ~ gender_me + race_eth_me + agegrp + los + 
+anycrisis <- glm(crisis_any ~ gender_me + race_eth_me + agegrp + los + 
                  major_prog + hh_size + single_caregiver + hh_disability, 
                data = model_data, family = "binomial")
 
-summary(anyexit)
+summary(anycrisis)
 
-exp(cbind(OR = coef(anyexit), confint(anyexit)))
+exp(cbind(OR = coef(anycrisis), confint(anycrisis)))
 
 
 ## Including Medicaid factors ----
 model_data_mcaid <- model_data %>% filter(full_cov_7_prior == T)
 
 
-anyexit_mcaid <- glm(exit ~ gender_me + race_eth_me + agegrp + los + 
+anycrisis_mcaid <- glm(exit ~ gender_me + race_eth_me + agegrp + los + 
                        major_prog + hh_size + single_caregiver + hh_disability + 
                        ed_cnt_prior + hosp_cnt_prior + ccw_flag, 
                      data = model_data_mcaid, family = "binomial")
 
-summary(anyexit_mcaid)
+summary(anycrisis_mcaid)
 
-exp(cbind(OR = coef(anyexit_mcaid), confint(anyexit_mcaid)))
+exp(cbind(OR = coef(anycrisis_mcaid), confint(anycrisis_mcaid)))
 
-
-
-# FACTORS ASSOCIATED WITH EXIT TYPE -----
-## Demogs ----
-# Age
-exit_type_age <- age_sum(covariate_exits, exit_category)
-
-# Gender
-exit_type_gender <- demog_pct_sum(covariate_exits, demog = "gender", exit_category)
-
-# Race/eth
-exit_type_race <- demog_pct_sum(covariate_exits, demog = "race", exit_category)
-
-# Combine for R markdown
-exit_type_ind <- bind_rows(exit_type_age, exit_type_gender, exit_type_race) %>%
-  filter(!group == "n")
-
-
-## HH demogs ----
-# Time in housing (this is based on HH data)
-exit_type_hh_los <- hh_los_sum(covariate_exits, exit_category)
-
-# Size and composition
-exit_type_hh_demogs <- hh_demogs_sum(covariate_exits, level = "hh", exit_category)
-
-# Program type
-exit_type_hh_prog <- demog_pct_sum(covariate_exits, demog = "program", exit_category)
-
-# Voucher type
-exit_type_hh_vouch <- demog_pct_sum(covariate_exits, demog = "voucher", exit_category)
-
-
-# Agency - this doesn't make sense to do because KCHA only runs 2016-2018
-covariate_exits %>% 
-  distinct(hh_id_kc_pha, exit_date, exit_category, agency) %>%
-  filter(!is.na(agency)) %>%
-  count(exit_category, agency) %>%
-  group_by(exit_category) %>%
-  ungroup() %>%
-  group_by(exit_category) %>%
-  mutate(tot = sum(n),
-         pct = round(n/tot*100, 1))

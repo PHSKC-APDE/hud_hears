@@ -168,7 +168,7 @@ all_pop <- all_pop %>% mutate(con_count=ifelse(is.na(con_count), 0, con_count))%
 
 
 #Make indicator for any condition
-conditions_count_bh$any_cond <-ifelse(conditions_count_bh$con_count >=1, 1, 0)
+condition_count_bh$any_cond <-ifelse(condition_count_bh$con_count >=1, 1, 0)
 
 
 

@@ -171,5 +171,6 @@ all_pop <- all_pop %>% mutate(con_count=ifelse(is.na(con_count), 0, con_count))%
 condition_count_bh$any_cond <-ifelse(condition_count_bh$con_count >=1, 1, 0)
 
 
-
-
+##Run preliminary model (unadjusted)
+model1 <- glm(crisis_any ~ exit_category*reg_care + reg_care + gender_me + age_at_exit + race_eth_me  + hh_size + any_condition, family="binomial", data=all_pop)
+exp(cbind(OR = coef(model1), confint(model1)))

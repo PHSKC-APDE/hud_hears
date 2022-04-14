@@ -5,7 +5,8 @@
 # 1) Build crisis event outcome table
 # 2) Build BH regular care table
 # 3) Build BH conditions table
-# 4) Join the above to full covariates table (for exits only)
+# 4) Join the above to full covariates table
+# Note: 1-4 limited to those with an exit only
 
 
 
@@ -87,7 +88,7 @@ crisis_count <- crisis_events %>% group_by(id_hudhears, exit_date) %>% summarize
 crisis_count$crisis_any <-ifelse(crisis_count$crisis_num >=1, 1, 0)
 
 
-#Outpatient care
+#####Outpatient care
 outpt_bh <- dbGetQuery(db_hhsaw,
                        "
 
@@ -160,17 +161,25 @@ all_pop <-left_join(all_pop, condition_count_bh, by=c("id_hudhears", "exit_date"
 all_pop <- all_pop %>% mutate(con_count=ifelse(is.na(con_count), 0, con_count))%>% mutate(any_condition=ifelse(is.na(any_condition), 0, any_condition))
 
 
-
-
-#This will be used later when joining with the larger table to include people without outpt events
-# #Recode variable (change NA to 0, by ID)
-# bh_outpt_count <- bh_outpt_count %>% mutate(reg_care=ifelse(is.na(reg_care), 0,reg_care)) 
-
-
 #Make indicator for any condition
 condition_count_bh$any_cond <-ifelse(condition_count_bh$con_count >=1, 1, 0)
 
-
+####################################################
+#Preliminary Models
+####################################################
+#Change exit category to a factor variable
+all_pop$exit_category <- as.factor(all_pop$exit_category)
 ##Run preliminary model (unadjusted)
-model1 <- glm(crisis_any ~ exit_category*reg_care + reg_care + gender_me + age_at_exit + race_eth_me  + hh_size + any_condition, family="binomial", data=all_pop)
+model2 <-glm(crisis_any ~ exit_category, family="binomial", data=all_pop)
 exp(cbind(OR = coef(model1), confint(model1)))
+
+model2 <- glm(crisis_any ~ exit_category*reg_care + reg_care + gender_me + age_at_exit + race_eth_me  + hh_size + any_condition, family="binomial", data=all_pop)
+exp(cbind(OR = coef(model2), confint(model2)))
+
+##association between any condition and exit type
+model3 <-polr(exit_category ~ any_condition, data=all_pop, Hess=T)
+exp(cbind(OR = coef(model3), confint(model3)))
+
+##association between routine care and exit type
+model4 <-polr(exit_category ~ reg_care, data=all_pop, Hess=T)
+exp(cbind(OR = coef(model4), confint(model4)))

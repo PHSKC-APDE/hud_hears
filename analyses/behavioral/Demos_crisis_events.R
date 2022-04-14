@@ -113,7 +113,7 @@ outpatient_sum <- function(df, ...) {
 # Can take a common approach to summaries that are simple percents
 demog_pct_sum <- function(df, 
                           level = c("ind", "hh"),
-                          demog = c("gender", "race", "reg_care", "bh_cond", "program", "voucher", 
+                          demog = c("gender", "race", "reg_care", "bh_condition", "program", "voucher", 
                                     "program_ind", "voucher_ind"), 
                           ...) {
   # Set things up to select in pivot_ functions
@@ -146,12 +146,12 @@ demog_pct_sum <- function(df,
       distinct(id_var, exit_date, ..., reg_care) %>%
       filter(!is.na(reg_care)) %>%
       mutate(group=reg_care)
-  }else if (demog=="bh_cond") {
+  }else if (demog=="bh_condition") {
     cat_text <= "Behavioral Health Condition"
     output <- output %>% 
-      distinct(id_var, exit_date, ..., any_cond) %>%
-      filter(!is.na(any_cond)) %>%
-      mutate(group=any_cond)
+      distinct(id_var, exit_date, ..., any_condition) %>%
+      filter(!is.na(any_condition)) %>%
+      mutate(group=any_condition)
   } else if (demog == "program") {
     cat_text <- "Program type"
     output <- output %>% 
@@ -315,10 +315,10 @@ crisis_gender <- demog_pct_sum(all_pop, level = "ind", demog = "gender", crisis_
 crisis_race <- demog_pct_sum(all_pop, level = "ind", demog = "race", crisis_any)
 
 #Any BH condition
-crisis_cond_any <- demog_pct_sum(all_pop, level= "ind", demog = "bh_cond", crisis_any)
+crisis_cond_any <- demog_pct_sum(all_pop, level= "ind", demog = "bh_condition", crisis_any)
 
 #Number of conditions
-crisis_cond <- condition_sum(all_pop, crisis_any)
+crisis_cond <- condition_count(all_pop, crisis_any)
 
 #Regular BH care
 crisis_reg_care <- demog_pct_sum (all_pop, level= "ind", demog = "reg_care", crisis_any)

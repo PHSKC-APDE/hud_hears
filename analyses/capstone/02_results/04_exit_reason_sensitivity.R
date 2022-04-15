@@ -70,20 +70,32 @@ exit_reason_vector<- exit_reason_vector[is.na(exit_reason_vector)==FALSE] # omit
   # ii) without GEE in multinomial log reg
 
 # function runs analysis (with GEE in multinomial log reg) on dataset and returns fitted Cox PH model
-run_analysis<- function(data){
+run_analysis <- function(data, gee = T){
   
-  # fit multinomial log reg model with GEE and calculate generalized propensity scores
-  ps_mod <- nomLORgee(formula = exit_category ~ age_at_exit + gender_me +
+  if (gee == T) {
+    # fit multinomial log reg model with GEE and calculate generalized propensity scores
+    ps_mod <- nomLORgee(formula = exit_category ~ age_at_exit + gender_me +
+                          race_eth_me + agency + single_caregiver + hh_size +
+                          hh_disability + housing_time_at_exit + major_prog +
+                          kc_opp_index_score,
+                        data = data,
+                        id = hh_id_kc_pha,
+                        LORstr = "independence")
+    ps <- as.data.frame(fitted(ps_mod))
+    colnames(ps) <- levels(data$exit_category)
+    ps<- cbind("id_hudhears" = data$id_hudhears, ps)
+  } else {
+    # fit multinomial log reg model without GEE and calculate generalized propensity scores
+    ps_mod<- multinom(formula= exit_category ~ age_at_exit + gender_me +
                         race_eth_me + agency + single_caregiver + hh_size +
                         hh_disability + housing_time_at_exit + major_prog +
                         kc_opp_index_score,
-                      data = data,
-                      id = hh_id_kc_pha,
-                      LORstr = "independence")
-  ps <- as.data.frame(fitted(ps_mod))
-  colnames(ps) <- levels(data$exit_category)
-  ps<- cbind("id_hudhears" = data$id_hudhears, ps)
-  
+                      data= data,
+                      trace=FALSE) 
+    ps<- as.data.frame(fitted(ps_mod))
+    ps<- cbind("id_hudhears" = data$id_hudhears, ps)
+  }
+
   # Then, calculate inverse weights and assign to each obs.
   data <- data %>%
     left_join(., ps, by = "id_hudhears") %>%
@@ -96,34 +108,6 @@ run_analysis<- function(data){
                    data = data,
                    weights = iptw,
                    cluster = hh_id_kc_pha)
-  return(tth_mod)
-}
-
-# function runs analysis (without GEE in multinomial log reg) on dataset and returns fitted Cox PH model
-run_analysis_no_GEE<- function(data){
-  
-  # fit multinomial log reg model without GEE and calculate generalized propensity scores
-  ps_mod<- multinom(formula= exit_category ~ age_at_exit + gender_me +
-                      race_eth_me + agency + single_caregiver + hh_size +
-                      hh_disability + housing_time_at_exit + major_prog +
-                      kc_opp_index_score,
-                    data= data,
-                    trace=FALSE) 
-  ps<- as.data.frame(fitted(ps_mod))
-  ps<- cbind("id_hudhears" = data$id_hudhears, ps)
-  
-  # Then, calculate inverse weights and assign to each obs.
-  data<- data %>%
-    left_join(., ps, by = "id_hudhears") %>%
-    mutate(iptw = case_when(exit_category == "Neutral" ~ 1/Neutral,
-                            exit_category == "Negative" ~ 1/Negative,
-                            exit_category == "Positive" ~ 1/Positive))
-  
-  # Finally, fit weighted Cox PH (cluster on hh_id_kc_pha)
-  tth_mod<- coxph(formula = Surv(tt_homeless, event) ~ exit_category,
-                  data = data,
-                  weights = iptw,
-                  cluster = hh_id_kc_pha)
   return(tth_mod)
 }
 
@@ -144,8 +128,8 @@ fit_one_out<- function(reason_omitted, data){
   new_data <- data %>% filter(exit_reason_clean != reason_omitted) 
   
   # run analysis w/o GEE in multinomial log reg, return fitted Cox PH model
-  tth_mod <- run_analysis(new_data)
-  tth_mod_no_gee <- run_analysis_no_GEE(new_data)
+  tth_mod <- run_analysis(new_data, gee = T)
+  tth_mod_no_gee <- run_analysis(new_data, gee = F)
   
   
   # return reason omitted, reason category, number omitted, HR estimates and CI's for pos and neg
@@ -183,8 +167,8 @@ loo_output$exit_category<-  relevel(factor(loo_output$exit_category), ref = "Neu
 loo_output<- loo_output %>% arrange(exit_category, desc(as.numeric(number_omitted)))
 
 # Full Data HR estimates and CI's (analysis using multinomial log reg w/o GEE)
-full_data_mod <- run_analysis(study_data)
-full_data_mod_no_gee <- run_analysis_no_GEE(study_data)
+full_data_mod <- run_analysis(study_data, gee = T)
+full_data_mod_no_gee <- run_analysis(study_data, gee = F)
 
 full_data_output <- 
   tibble(exit_reason_omitted= "Full Data",

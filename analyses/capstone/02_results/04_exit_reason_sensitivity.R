@@ -25,6 +25,7 @@
 
 # set working directory (for output of plots- to utilize more easily)
 setwd("~/GitHub/hud_hears/analyses/capstone/02_results")
+capstone_path <- file.path(here::here(), "analyses/capstone/02_results")
 
 # SET OPTIONS AND BRING IN PACKAGES ----
 options(scipen = 6, digits = 4, warning.length = 8170)
@@ -55,14 +56,16 @@ study_data <- study_data %>%
              is.na(hh_size) | is.na(hh_disability) | is.na(housing_time_at_exit) | is.na(major_prog) | 
              is.na(kc_opp_index_score)))
 
+
 #--------------------------------------------------
-# 1) Create list of exit reasons for sensitivity analysis
+# 1) Create list of exit reasons for sensitivity analysis ----
 
 exit_reason_vector<- study_data$exit_reason_clean %>% unique()
 exit_reason_vector<- exit_reason_vector[is.na(exit_reason_vector)==FALSE] # omit NA exit_reason_clean from vector
 
+
 #--------------------------------------------------
-# 2) Create 2 functions to perform analysis on study data
+# 2) Create 2 functions to perform analysis on study data ----
   # i) with GEE in multinomial log reg
   # ii) without GEE in multinomial log reg
 
@@ -82,7 +85,7 @@ run_analysis<- function(data){
   ps<- cbind("id_hudhears" = data$id_hudhears, ps)
   
   # Then, calculate inverse weights and assign to each obs.
-  data<- data %>%
+  data <- data %>%
     left_join(., ps, by = "id_hudhears") %>%
     mutate(iptw = case_when(exit_category == "Neutral" ~ 1/Neutral,
                             exit_category == "Negative" ~ 1/Negative,
@@ -124,8 +127,9 @@ run_analysis_no_GEE<- function(data){
   return(tth_mod)
 }
 
+
 #--------------------------------------------------
-# 3) Create function to omit an exit reason and perform analysis
+# 3) Create function to omit an exit reason and perform analysis ----
 
 # function that takes an exit reason, and the full dataset
   # omits rows with that reason from full dataset,
@@ -137,10 +141,12 @@ fit_one_out<- function(reason_omitted, data){
   print(reason_omitted)
   
   # omit rows with that specified exit reason
-  new_data<- data %>% filter(exit_reason_clean != reason_omitted) 
+  new_data <- data %>% filter(exit_reason_clean != reason_omitted) 
   
   # run analysis w/o GEE in multinomial log reg, return fitted Cox PH model
-  tth_mod<- run_analysis_no_GEE(new_data)
+  tth_mod <- run_analysis(new_data)
+  tth_mod_no_gee <- run_analysis_no_GEE(new_data)
+  
   
   # return reason omitted, reason category, number omitted, HR estimates and CI's for pos and neg
   return(list(exit_reason_omitted= reason_omitted,
@@ -151,13 +157,20 @@ fit_one_out<- function(reason_omitted, data){
               HR_pos_upper= (tth_mod %>% confint() %>% exp())["exit_categoryPositive", 2],
               HR_neg= (tth_mod %>% coef() %>% exp())[["exit_categoryNegative"]],
               HR_neg_lower= (tth_mod %>% confint() %>% exp())["exit_categoryNegative", 1],
-              HR_neg_upper= (tth_mod %>% confint() %>% exp())["exit_categoryNegative", 2]
+              HR_neg_upper= (tth_mod %>% confint() %>% exp())["exit_categoryNegative", 2],
+              HR_pos_no_gee = (tth_mod_no_gee %>% coef() %>% exp())[["exit_categoryPositive"]],
+              HR_pos_lower_no_gee = (tth_mod_no_gee %>% confint() %>% exp())["exit_categoryPositive", 1],
+              HR_pos_upper_no_gee = (tth_mod_no_gee %>% confint() %>% exp())["exit_categoryPositive", 2],
+              HR_neg_no_gee = (tth_mod_no_gee %>% coef() %>% exp())[["exit_categoryNegative"]],
+              HR_neg_lower_no_gee = (tth_mod_no_gee %>% confint() %>% exp())["exit_categoryNegative", 1],
+              HR_neg_upper_no_gee = (tth_mod_no_gee %>% confint() %>% exp())["exit_categoryNegative", 2]
               )
          )
 }
 
+
 #--------------------------------------------------
-# 4) Apply fit_one_out function over vector of exit reasons to study data
+# 4) Apply fit_one_out function over vector of exit reasons to study data ----
 
 # HR estimates and CI's from loo sensitivity analysis
 loo_output<- as.tibble(t(sapply(exit_reason_vector, FUN=fit_one_out, data=study_data)))
@@ -170,8 +183,10 @@ loo_output$exit_category<-  relevel(factor(loo_output$exit_category), ref = "Neu
 loo_output<- loo_output %>% arrange(exit_category, desc(as.numeric(number_omitted)))
 
 # Full Data HR estimates and CI's (analysis using multinomial log reg w/o GEE)
-full_data_mod<- run_analysis_no_GEE(study_data)
-full_data_output<- 
+full_data_mod <- run_analysis(study_data)
+full_data_mod_no_gee <- run_analysis_no_GEE(study_data)
+
+full_data_output <- 
   tibble(exit_reason_omitted= "Full Data",
          exit_category= "Full Data",
          number_omitted= "0",
@@ -181,10 +196,17 @@ full_data_output<-
          HR_neg= (full_data_mod %>% coef() %>% exp())[["exit_categoryNegative"]],
          HR_neg_lower= (full_data_mod %>% confint() %>% exp())["exit_categoryNegative", 1],
          HR_neg_upper= (full_data_mod %>% confint() %>% exp())["exit_categoryNegative", 2],
+         HR_pos_no_gee = (full_data_mod_no_gee %>% coef() %>% exp())[["exit_categoryPositive"]],
+         HR_pos_lower_no_gee = (full_data_mod_no_gee %>% confint() %>% exp())["exit_categoryPositive", 1],
+         HR_pos_upper_no_gee = (full_data_mod_no_gee %>% confint() %>% exp())["exit_categoryPositive", 2],
+         HR_neg_no_gee = (full_data_mod_no_gee %>% coef() %>% exp())[["exit_categoryNegative"]],
+         HR_neg_lower_no_gee = (full_data_mod_no_gee %>% confint() %>% exp())["exit_categoryNegative", 1],
+         HR_neg_upper_no_gee = (full_data_mod_no_gee %>% confint() %>% exp())["exit_categoryNegative", 2],
          summary=TRUE)
 
+
 #--------------------------------------------------
-# 5) Create Forest Plots
+# 5) Create Forest Plots ----
 ## using forestplot::forestplot()
 
 # i) set count threshold
@@ -192,12 +214,12 @@ full_data_output<-
 # iii) plots of HR pos vs neutral
 # iv) plots of HR neg vs neutral
 
-#---
-## i) set count threshold to plot
-count_threshold<- 100
 
-#---
-## ii) format data frame for forest plot
+## i) set count threshold to plot ----
+count_threshold <- 100
+
+
+## ii) format data frame for forest plot ----
 forest_plot_data<- bind_rows(
   # header row
   tibble(exit_reason_omitted= "Exit Reason Omitted", 
@@ -205,43 +227,45 @@ forest_plot_data<- bind_rows(
          exit_category= "Exit Category",
          summary=TRUE),
   # LOO data with only rows of exit reasons with count >= threshold
-  loo_output %>% filter(as.numeric(number_omitted)>=count_threshold), 
+  # Also filter 'Expired - ported out' for now because it has two categories (this will be fixed)
+  loo_output %>% filter(as.numeric(number_omitted)>=count_threshold & exit_reason_omitted != "Expired - Ported Out"), 
   # empty row
   tibble(exit_reason_omitted=NA), 
   # results from full model
   full_data_output)
 
-#---
-## iii) plot HR Positive vs Neutral
+
+## GEE models ----
+### Plot HR Positive vs Neutral ----
 
 # forest plot for HR positive vs neutral (FULL PLOT)
-png(file="LOO_HR_pos_no_GEE.png", width=1600, height=1200)
+png(file = file.path(capstone_path, "LOO_HR_pos.png"), width=1600, height=1200)
 forest_plot_data %>%
   forestplot::forestplot(labeltext= c(exit_reason_omitted, number_omitted, exit_category),
-             txt_gp= fpTxtGp(label=gpar(cex=1.4), # label text size might be too large to plot (adjust here to 0.25)
-                             xlab=gpar(cex=2),
-                             title=gpar(cex=3),
-                             ticks=gpar(cex=1.5),
-                             summary=gpar(cex=1.8)),
-             xticks=seq(0.00,0.40,by=0.05),
-             is.summary= summary,
-             mean= HR_pos,
-             lower= HR_pos_lower,
-             upper= HR_pos_upper,
-             title= "Positive vs. Neutral Exit",
-             xlab="Hazard Ratio of Experiencing Homelessness",
-             zero= forest_plot_data %>% filter(exit_reason_omitted=="Full Data") %>% pull(HR_pos),
-             grid= c(forest_plot_data %>% filter(exit_reason_omitted=="Full Data") %>% pull(HR_pos_lower),
-                     forest_plot_data %>% filter(exit_reason_omitted=="Full Data") %>% pull(HR_pos_upper)),
-             hrzl_lines=list("2" = gpar(lwd=1, columns=c(1:3)), 
-                             "27" = gpar(lwd= 442, lineend="butt", columns=c(1:3), col="#99999922")) 
-                              # controls "grey box" used to visually separate exit categories in plot
-                              # "27" is vertical location of "line"/box, lwd is vertical width of "line"/box
-             )
+                         txt_gp= fpTxtGp(label=gpar(cex=1.4), # label text size might be too large to plot (adjust here to 0.25)
+                                         xlab=gpar(cex=2),
+                                         title=gpar(cex=3),
+                                         ticks=gpar(cex=1.5),
+                                         summary=gpar(cex=1.8)),
+                         xticks=seq(0.00,0.40,by=0.05),
+                         is.summary= summary,
+                         mean= HR_pos,
+                         lower= HR_pos_lower,
+                         upper= HR_pos_upper,
+                         title= "Positive vs. Neutral Exit",
+                         xlab="Hazard Ratio of Experiencing Homelessness",
+                         zero= forest_plot_data %>% filter(exit_reason_omitted=="Full Data") %>% pull(HR_pos),
+                         grid= c(forest_plot_data %>% filter(exit_reason_omitted=="Full Data") %>% pull(HR_pos_lower),
+                                 forest_plot_data %>% filter(exit_reason_omitted=="Full Data") %>% pull(HR_pos_upper)),
+                         hrzl_lines=list("2" = gpar(lwd=1, columns=c(1:3)), 
+                                         "25" = gpar(lwd= 442, lineend="butt", columns=c(1:3), col="#99999922")) 
+                         # controls "grey box" used to visually separate exit categories in plot
+                         # "25" is vertical location of "line"/box, lwd is vertical width of "line"/box
+  )
 dev.off()
 
 # forest plot for HR positive vs neutral (REMOVING NEGATIVE REASONS)
-png(file="LOO_HR_pos_no_GEE_no_neg.png", width=1600, height=1400)
+png(file = file.path(capstone_path, "LOO_HR_pos_no_neg.png"), width=1600, height=1400)
 forest_plot_data %>% filter((exit_category %in% c("Neutral", "Positive", "Exit Category", "Full Data")) |
                               is.na(exit_category)) %>%
   forestplot::forestplot(labeltext= c(exit_reason_omitted, number_omitted, exit_category),
@@ -261,43 +285,43 @@ forest_plot_data %>% filter((exit_category %in% c("Neutral", "Positive", "Exit C
                          grid= c(forest_plot_data %>% filter(exit_reason_omitted=="Full Data") %>% pull(HR_pos_lower),
                                  forest_plot_data %>% filter(exit_reason_omitted=="Full Data") %>% pull(HR_pos_upper)),
                          hrzl_lines=list("2" = gpar(lwd=1, columns=c(1:3)), 
-                                         "21" = gpar(lwd=290, lineend="butt", columns=c(1:3), col="#99999922"))
-                                          # controls "grey box" used to visually separate exit categories in plot
-                                          # "21" is vertical location of "line"/box, lwd is vertical width of "line"/box
+                                         "19" = gpar(lwd=290, lineend="butt", columns=c(1:3), col="#99999922"))
+                         # controls "grey box" used to visually separate exit categories in plot
+                         # "19" is vertical location of "line"/box, lwd is vertical width of "line"/box
   )
 dev.off()
 
-#---
-## iv) plot HR Negative vs Neutral
+
+### plot HR Negative vs Neutral ----
 
 # forest plot for HR negative vs neutral (FULL PLOT)
-png(file="LOO_HR_neg_no_GEE.png", width=1600, height=1200)
+png(file = file.path(capstone_path, "LOO_HR_neg.png"), width=1600, height=1200)
 forest_plot_data %>% 
   forestplot::forestplot(labeltext= c(exit_reason_omitted, number_omitted, exit_category),
-             txt_gp= fpTxtGp(label=gpar(cex=1.4),  # label text size might be too large to plot (adjust here to 0.25)
-                             xlab=gpar(cex=2),
-                             title=gpar(cex=3),
-                             ticks=gpar(cex=1.5),
-                             summary=gpar(cex=1.8)),
-             xticks=seq(1.50,3.00,by=0.25),
-             is.summary= summary,
-             mean= HR_neg,
-             lower= HR_neg_lower,
-             upper= HR_neg_upper,
-             title= "Negative vs. Neutral Exit",
-             xlab="Hazard Ratio of Experiencing Homelessness",
-             zero= forest_plot_data %>% filter(exit_reason_omitted=="Full Data") %>% pull(HR_neg),
-             grid= c(forest_plot_data %>% filter(exit_reason_omitted=="Full Data") %>% pull(HR_neg_lower),
-                     forest_plot_data %>% filter(exit_reason_omitted=="Full Data") %>% pull(HR_neg_upper)),
-             hrzl_lines=list("2" = gpar(lwd=1,columns=c(1:3)), 
-                             "27" = gpar(lwd= 442, lineend="butt", columns=c(1:3), col="#99999922"))
-                              # controls "grey box" used to visually separate exit categories in plot
-                              # "27" is vertical location of "line"/box, lwd is vertical width of "line"/box
-             )
+                         txt_gp= fpTxtGp(label=gpar(cex=1.4),  # label text size might be too large to plot (adjust here to 0.25)
+                                         xlab=gpar(cex=2),
+                                         title=gpar(cex=3),
+                                         ticks=gpar(cex=1.5),
+                                         summary=gpar(cex=1.8)),
+                         xticks=seq(1.50,3.00,by=0.25),
+                         is.summary= summary,
+                         mean= HR_neg,
+                         lower= HR_neg_lower,
+                         upper= HR_neg_upper,
+                         title= "Negative vs. Neutral Exit",
+                         xlab="Hazard Ratio of Experiencing Homelessness",
+                         zero= forest_plot_data %>% filter(exit_reason_omitted=="Full Data") %>% pull(HR_neg),
+                         grid= c(forest_plot_data %>% filter(exit_reason_omitted=="Full Data") %>% pull(HR_neg_lower),
+                                 forest_plot_data %>% filter(exit_reason_omitted=="Full Data") %>% pull(HR_neg_upper)),
+                         hrzl_lines=list("2" = gpar(lwd=1,columns=c(1:3)), 
+                                         "25" = gpar(lwd= 442, lineend="butt", columns=c(1:3), col="#99999922"))
+                         # controls "grey box" used to visually separate exit categories in plot
+                         # "25" is vertical location of "line"/box, lwd is vertical width of "line"/box
+  )
 dev.off()
 
 # forest plot for HR negative vs neutral (REMOVING POSITIVE REASONS)
-png(file="LOO_HR_neg_no_GEE_no_pos.png", width=1600, height=1400)
+png(file = file.path(capstone_path, "LOO_HR_neg_no_pos.png"), width=1600, height=1400)
 forest_plot_data %>% filter((exit_category %in% c("Neutral", "Negative", "Exit Category", "Full Data")) |
                               is.na(exit_category)) %>%
   forestplot::forestplot(labeltext= c(exit_reason_omitted, number_omitted, exit_category),
@@ -317,9 +341,127 @@ forest_plot_data %>% filter((exit_category %in% c("Neutral", "Negative", "Exit C
                          grid= c(forest_plot_data %>% filter(exit_reason_omitted=="Full Data") %>% pull(HR_neg_lower),
                                  forest_plot_data %>% filter(exit_reason_omitted=="Full Data") %>% pull(HR_neg_upper)),
                          hrzl_lines=list("2" = gpar(lwd=1, columns=c(1:3)), 
-                                         "27" = gpar(lwd= 620, lineend="butt", columns=c(1:3), col="#99999922"))
+                                         "25" = gpar(lwd= 620, lineend="butt", columns=c(1:3), col="#99999922"))
+                         # controls "grey box" used to visually separate exit categories in plot
+                         # "27" is vertical location of "line"/box, lwd is vertical width of "line"/box
+  )
+dev.off()
+
+
+## Non-GEE models ----
+### Plot HR Positive vs Neutral ----
+# forest plot for HR positive vs neutral (FULL PLOT)
+png(file = file.path(capstone_path, "LOO_HR_pos_no_GEE.png"), width=1600, height=1200)
+forest_plot_data %>%
+  forestplot::forestplot(labeltext= c(exit_reason_omitted, number_omitted, exit_category),
+             txt_gp= fpTxtGp(label=gpar(cex=1.4), # label text size might be too large to plot (adjust here to 0.25)
+                             xlab=gpar(cex=2),
+                             title=gpar(cex=3),
+                             ticks=gpar(cex=1.5),
+                             summary=gpar(cex=1.8)),
+             xticks=seq(0.15,0.55,by=0.05),
+             is.summary= summary,
+             mean= HR_pos_no_gee,
+             lower= HR_pos_lower_no_gee,
+             upper= HR_pos_upper_no_gee,
+             title= "Positive vs. Neutral Exit",
+             xlab="Hazard Ratio of Experiencing Homelessness",
+             zero= forest_plot_data %>% filter(exit_reason_omitted=="Full Data") %>% pull(HR_pos_no_gee),
+             grid= c(forest_plot_data %>% filter(exit_reason_omitted=="Full Data") %>% pull(HR_pos_lower_no_gee),
+                     forest_plot_data %>% filter(exit_reason_omitted=="Full Data") %>% pull(HR_pos_upper_no_gee)),
+             hrzl_lines=list("2" = gpar(lwd=1, columns=c(1:3)), 
+                             "25" = gpar(lwd= 442, lineend="butt", columns=c(1:3), col="#99999922")) 
+                              # controls "grey box" used to visually separate exit categories in plot
+                              # "25" is vertical location of "line"/box, lwd is vertical width of "line"/box
+             )
+dev.off()
+
+# forest plot for HR positive vs neutral (REMOVING NEGATIVE REASONS)
+# Find where the positive rows start
+pos_row <- which(str_detect(forest_plot_data %>% 
+                              filter((exit_category %in% c("Neutral", "Positive", "Exit Category", "Full Data")) | is.na(exit_category)) %>% 
+                              select(exit_category) %>% unlist(., use.names = F),
+                            "Positive"))
+
+png(file = file.path(capstone_path, "LOO_HR_pos_no_neg_no_GEE.png"), width=1600, height=1400)
+forest_plot_data %>% filter((exit_category %in% c("Neutral", "Positive", "Exit Category", "Full Data")) |
+                              is.na(exit_category)) %>%
+  forestplot::forestplot(labeltext= c(exit_reason_omitted, number_omitted, exit_category),
+                         txt_gp= fpTxtGp(label=gpar(cex=1.8), # label text size might be too large to plot (adjust here to 0.25)
+                                         xlab=gpar(cex=2),
+                                         title=gpar(cex=3),
+                                         ticks=gpar(cex=1.8),
+                                         summary=gpar(cex=2)),
+                         xticks=seq(0.15,0.55,by=0.05),
+                         is.summary= summary,
+                         mean= HR_pos_no_gee,
+                         lower= HR_pos_lower_no_gee,
+                         upper= HR_pos_upper_no_gee,
+                         title= "Positive vs. Neutral Exit",
+                         xlab="Hazard Ratio of Experiencing Homelessness",
+                         zero= forest_plot_data %>% filter(exit_reason_omitted=="Full Data") %>% pull(HR_pos_no_gee),
+                         grid= c(forest_plot_data %>% filter(exit_reason_omitted=="Full Data") %>% pull(HR_pos_lower_no_gee),
+                                 forest_plot_data %>% filter(exit_reason_omitted=="Full Data") %>% pull(HR_pos_upper_no_gee)),
+                         hrzl_lines=list("2" = gpar(lwd=1, columns=c(1:3)), 
+                                         "19" = gpar(lwd=290, lineend="butt", columns=c(1:3), col="#99999922"))
                                           # controls "grey box" used to visually separate exit categories in plot
-                                          # "27" is vertical location of "line"/box, lwd is vertical width of "line"/box
+                                          # "19" is vertical location of "line"/box, lwd is vertical width of "line"/box
+  )
+dev.off()
+
+
+### plot HR Negative vs Neutral ----
+
+# forest plot for HR negative vs neutral (FULL PLOT)
+png(file = file.path(capstone_path, "LOO_HR_neg_no_GEE.png"), width=1600, height=1200)
+forest_plot_data %>% 
+  forestplot::forestplot(labeltext= c(exit_reason_omitted, number_omitted, exit_category),
+             txt_gp= fpTxtGp(label=gpar(cex=1.4),  # label text size might be too large to plot (adjust here to 0.25)
+                             xlab=gpar(cex=2),
+                             title=gpar(cex=3),
+                             ticks=gpar(cex=1.5),
+                             summary=gpar(cex=1.8)),
+             xticks=seq(1.50,3.00,by=0.25),
+             is.summary= summary,
+             mean= HR_neg_no_gee,
+             lower= HR_neg_lower_no_gee,
+             upper= HR_neg_upper_no_gee,
+             title= "Negative vs. Neutral Exit",
+             xlab="Hazard Ratio of Experiencing Homelessness",
+             zero= forest_plot_data %>% filter(exit_reason_omitted=="Full Data") %>% pull(HR_neg_no_gee),
+             grid= c(forest_plot_data %>% filter(exit_reason_omitted=="Full Data") %>% pull(HR_neg_lower_no_gee),
+                     forest_plot_data %>% filter(exit_reason_omitted=="Full Data") %>% pull(HR_neg_upper_no_gee)),
+             hrzl_lines=list("2" = gpar(lwd=1,columns=c(1:3)), 
+                             "25" = gpar(lwd= 442, lineend="butt", columns=c(1:3), col="#99999922"))
+                              # controls "grey box" used to visually separate exit categories in plot
+                              # "25" is vertical location of "line"/box, lwd is vertical width of "line"/box
+             )
+dev.off()
+
+# forest plot for HR negative vs neutral (REMOVING POSITIVE REASONS)
+png(file = file.path(capstone_path, "LOO_HR_neg_no_pos_no_GEE.png"), width=1600, height=1400)
+forest_plot_data %>% filter((exit_category %in% c("Neutral", "Negative", "Exit Category", "Full Data")) |
+                              is.na(exit_category)) %>%
+  forestplot::forestplot(labeltext= c(exit_reason_omitted, number_omitted, exit_category),
+                         txt_gp= fpTxtGp(label=gpar(cex=1.6),  # label text size might be too large to plot (adjust here to 0.25)
+                                         xlab=gpar(cex=2),
+                                         title=gpar(cex=3),
+                                         ticks=gpar(cex=1.8),
+                                         summary=gpar(cex=2)),
+                         xticks=seq(1.50,3.00,by=0.25),
+                         is.summary= summary,
+                         mean= HR_neg_no_gee,
+                         lower= HR_neg_lower_no_gee,
+                         upper= HR_neg_upper_no_gee,
+                         title= "Negative vs. Neutral Exit",
+                         xlab="Hazard Ratio of Experiencing Homelessness",
+                         zero= forest_plot_data %>% filter(exit_reason_omitted=="Full Data") %>% pull(HR_neg_no_gee),
+                         grid= c(forest_plot_data %>% filter(exit_reason_omitted=="Full Data") %>% pull(HR_neg_lower_no_gee),
+                                 forest_plot_data %>% filter(exit_reason_omitted=="Full Data") %>% pull(HR_neg_upper_no_gee)),
+                         hrzl_lines=list("2" = gpar(lwd=1, columns=c(1:3)), 
+                                         "25" = gpar(lwd= 620, lineend="butt", columns=c(1:3), col="#99999922"))
+                                          # controls "grey box" used to visually separate exit categories in plot
+                                          # "25" is vertical location of "line"/box, lwd is vertical width of "line"/box
   )
 dev.off()
 

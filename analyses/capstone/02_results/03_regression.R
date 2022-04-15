@@ -121,84 +121,98 @@ summary(tth_mod_overlap)
 
 #--------------------------------------------------
 # Step 3) Perform primary analysis for KCHA and SHA separately ----
-
+# Note: agency is not in the formula
 
 ## 3a) First, fit the multinomial logistic regression model, using GEE ----
+### KCHA ----
+ps_mod_kcha <- nomLORgee(formula = exit_category ~ age_at_exit + gender_me + 
+                           race_eth_me + single_caregiver + hh_size +
+                           hh_disability + housing_time_at_exit + major_prog +
+                           kc_opp_index_score,
+                         data = tth_data[tth_data$agency == "KCHA"],
+                         id = hh_id_kc_pha,
+                         LORstr = "independence")
 
-# Formula:
-# exit_category ~ age_at_exit + gender_me + race_eth_me +  
-#                 single_caregiver + hh_size + hh_disability + 
-#                 housing_time_at_exit + major_prog + kc_opp_index_score
+# Next, calculate generalized propensity scores
+ps_kcha <- as.data.frame(fitted(ps_mod_kcha))
+colnames(ps_kcha) <- c("Neutral_kcha", "Negative_kcha", "Positive_kcha")
+ps_kcha <- cbind("id_hudhears" = tth_data$id_hudhears[tth_data$agency == "KCHA"], 
+                 agency = rep("KCHA", nrow(ps_kcha)),
+                 ps_kcha)
 
-ps_mod <- nomLORgee(formula = exit_category ~ age_at_exit + gender_me + 
-                      race_eth_me + single_caregiver + hh_size +
-                      hh_disability + housing_time_at_exit + major_prog +
-                      kc_opp_index_score,
-                    data = tth_data,
-                    id = hh_id_kc_pha,
-                    LORstr = "independence")
 
-## Next, calculate generalized propensity scores
-ps <- as.data.frame(fitted(ps_mod))
-colnames(ps) <- c("Neutral", "Negative", "Positive")
+### SHA ----
+ps_mod_sha <- nomLORgee(formula = exit_category ~ age_at_exit + gender_me + 
+                          race_eth_me + single_caregiver + hh_size +
+                          hh_disability + housing_time_at_exit + major_prog +
+                          kc_opp_index_score,
+                        data = tth_data[tth_data$agency == "SHA"],
+                        id = hh_id_kc_pha,
+                        LORstr = "independence")
 
-#-----
-## 3b) Then, calculate inverse weights and assign to each observation 
-tth_data$IPTW <- ifelse(tth_data$exit_category == "Negative", 1/ps$Negative,
-                        ifelse(tth_data$exit_category == "Neutral", 1/ps$Neutral,
-                               1/ps$Positive))
+# Next, calculate generalized propensity scores
+ps_sha <- as.data.frame(fitted(ps_mod_sha))
+colnames(ps_sha) <- c("Neutral_sha", "Negative_sha", "Positive_sha")
+ps_sha <- cbind("id_hudhears" = tth_data$id_hudhears[tth_data$agency == "SHA"], 
+                agency = rep("SHA", nrow(ps_sha)),
+                ps_sha)
 
+
+
+## 3b) Then, calculate inverse weights and assign to each observation  ----
+tth_data <- tth_data %>%
+  left_join(., ps_kcha, by = c("id_hudhears", "agency")) %>%
+  left_join(., ps_sha, by = c("id_hudhears", "agency")) %>%
+  mutate(iptw_kcha = case_when(exit_category == "Neutral" ~ 1/Neutral_kcha,
+                          exit_category == "Negative" ~ 1/Negative_kcha,
+                          exit_category == "Positive" ~ 1/Positive_kcha),
+         iptw_sha = case_when(exit_category == "Neutral" ~ 1/Neutral_sha,
+                               exit_category == "Negative" ~ 1/Negative_sha,
+                               exit_category == "Positive" ~ 1/Positive_sha))
+
+
+## 3c) Finally, fit weighted Cox PH, and cluster on hh_id ----
+### KCHA ----
 tth_data$exit_category <- relevel(factor(tth_data$exit_category), ref = "Neutral")
 
-#-----
-## 3c) SHA specific results 
-
-## Subset the data to only include SHA
-tth_data_sha <- tth_data %>% subset(agency=="SHA")
-
-## Finally, fit weighted Cox PH, and cluster on hh_id
-tth_mod_sha <- coxph(formula = Surv(tt_homeless, event) ~ exit_category,
-                     data = tth_data_sha,
-                     weights = IPTW,
-                     cluster = hh_id_kc_pha)
-
-summary(tth_mod_sha)
-
-#-----
-## 3d) KCHA specific results 
-
-## Subset the data to only include SHA
-tth_data_kcha <- tth_data %>% subset(agency=="KCHA")
-
-## Finally, fit weighted Cox PH, and cluster on hh_id
 tth_mod_kcha <- coxph(formula = Surv(tt_homeless, event) ~ exit_category,
-                      data = tth_data_kcha,
-                      weights = IPTW,
-                      cluster = hh_id_kc_pha)
+                 data = tth_data[tth_data$agency == "KCHA"],
+                 weights = iptw_kcha,
+                 cluster = hh_id_kc_pha)
 
 summary(tth_mod_kcha)
 
-#-----
-## 3e) PHA adjusted results
+
+### SHA ----
+tth_mod_sha <- coxph(formula = Surv(tt_homeless, event) ~ exit_category,
+                      data = tth_data[tth_data$agency == "SHA"],
+                      weights = iptw_sha,
+                      cluster = hh_id_kc_pha)
+
+summary(tth_mod_sha)
+
+
+### Adjusted results ----
 tth_mod_pha_adjusted<- coxph(formula = Surv(tt_homeless, event) ~ exit_category + agency,
                              data = tth_data,
-                             weights = IPTW,
+                             weights = iptw,
                              cluster = hh_id_kc_pha)
 summary(tth_mod_pha_adjusted)
 
-#-----
-## 3f) PHA interaction with exit category results
+
+### PHA interaction with exit category results ----
 tth_mod_interaction_pha_exitcat<- coxph(formula = Surv(tt_homeless, event) ~ exit_category * agency,
                                         data = tth_data,
-                                        weights = IPTW,
+                                        weights = iptw,
                                         cluster = hh_id_kc_pha)
 summary(tth_mod_interaction_pha_exitcat)
 
-#--------------------------------------------------
-### 4) Visualize regression results
 
-#-----
-## 4a) Primary analysis plot
+#--------------------------------------------------
+# 4) Visualize regression results ----
+
+
+## 4a) Primary analysis plot ----
 
 # Create dataframe of results
 primary <- data.frame(index=c("pos", "neg"),
@@ -219,7 +233,7 @@ ggplot(data=primary) +
             x=exp(coef(tth_mod))[[1]], y=0.7, color="#F8766D") +
   
   # Confidence intervals
-  geom_errorbarh(height=0.2, aes(y=index, xmin=low, xmax=hi, color=index), size=1, alpha=0.5) +
+  geom_errorbarh(height=0.05, aes(y=index, xmin=low, xmax=hi, color=index), size=1, alpha=0.5) +
   
   # Hazard ratio = 1 line
   geom_vline(xintercept=1, color="#00BA38", size=1, alpha=0.5) +
@@ -238,8 +252,8 @@ ggplot(data=primary) +
         panel.border=element_blank(),
         axis.line=element_line())
 
-#-----
-## 4b) Sensitivity analysis plot
+
+## 4b) Sensitivity analysis plot ----
 
 # Create dataframe of results
 ow <- data.frame(index=c("pos", "neg"),
@@ -260,7 +274,7 @@ ggplot(data=ow) +
             x=exp(coef(tth_mod_overlap))[[1]], y=0.7, color="#F8766D") +
   
   # Confidence intervals
-  geom_errorbarh(height=0.2, aes(y=index, xmin=low, xmax=hi, color=index), size=1, alpha=0.5) +
+  geom_errorbarh(height=0.05, aes(y=index, xmin=low, xmax=hi, color=index), size=1, alpha=0.5) +
   
   # Hazard ratio = 1 line
   geom_vline(xintercept=1, color="#00BA38", size=1, alpha=0.5) +
@@ -279,51 +293,9 @@ ggplot(data=ow) +
         panel.border=element_blank(),
         axis.line=element_line())
 
-#-----
-## 4c) PHA stratified analysis plots
 
-# i) SHA specific plot
-
-# Create dataframe of results
-sha <- data.frame(index=c("pos", "neg"),
-                  hr=c(exp(coef(tth_mod_sha))[[2]], exp(coef(tth_mod_sha))[[1]]),
-                  low=c(exp(confint(tth_mod_sha))[[2]], exp(confint(tth_mod_sha))[[1]]),
-                  hi=c(exp(confint(tth_mod_sha))[[4]], exp(confint(tth_mod_sha))[[3]]))
-
-# Create a boxplot with ggplot
-ggplot(data=sha) +
-  
-  # Point estimates
-  geom_point(aes(x=hr, y=index, color=index), size=3) +
-  
-  # Add labels under point estimates
-  geom_text(label=paste(round(exp(coef(tth_mod_sha))[[2]], 2)),
-            x=exp(coef(tth_mod_sha))[[2]], y=1.7, color="#619CFF") +
-  geom_text(label=paste(round(exp(coef(tth_mod_sha))[[1]], 2)),
-            x=exp(coef(tth_mod_sha))[[1]], y=0.7, color="#F8766D") +
-  
-  # Confidence intervals
-  geom_errorbarh(height=0.2, aes(y=index, xmin=low, xmax=hi, color=index), size=1, alpha=0.5) +
-  
-  # Hazard ratio = 1 line
-  geom_vline(xintercept=1, color="#00BA38", size=1, alpha=0.5) +
-  
-  # Other settings
-  scale_color_manual(values=c("#F8766D", "#619CFF")) +
-  scale_x_continuous(limits=c(-2.5, 4.5)) +
-  scale_y_discrete(labels=c("Negative exit\n(v. neutral)", "Positive exit\n(v. neutral)")) +
-  labs(x="Hazard ratio", title="SHA Only") +
-  theme_bw() +
-  theme(legend.position="none",
-        plot.title=element_text(hjust=0.5),
-        axis.title.y=element_blank(),
-        axis.ticks.y=element_blank(),
-        panel.grid=element_blank(),
-        panel.border=element_blank(),
-        axis.line=element_line())
-
-# ii) KCHA specific plot
-
+## 4c) PHA stratified analysis plots -----
+### KCHA specific plot ----
 # Create dataframe of results
 kcha <- data.frame(index=c("pos", "neg"),
                    hr=c(exp(coef(tth_mod_kcha))[[2]], exp(coef(tth_mod_kcha))[[1]]),
@@ -343,7 +315,7 @@ ggplot(data=kcha) +
             x=exp(coef(tth_mod_kcha))[[1]], y=0.7, color="#F8766D") +
   
   # Confidence intervals
-  geom_errorbarh(height=0.2, aes(y=index, xmin=low, xmax=hi, color=index), size=1, alpha=0.5) +
+  geom_errorbarh(height=0.05, aes(y=index, xmin=low, xmax=hi, color=index), size=1, alpha=0.5) +
   
   # Hazard ratio = 1 line
   geom_vline(xintercept=1, color="#00BA38", size=1, alpha=0.5) +
@@ -353,6 +325,46 @@ ggplot(data=kcha) +
   scale_x_continuous(limits=c(-2.5, 4.5)) +
   scale_y_discrete(labels=c("Negative exit\n(v. neutral)", "Positive exit\n(v. neutral)")) +
   labs(x="Hazard ratio", title="KCHA Only") +
+  theme_bw() +
+  theme(legend.position="none",
+        plot.title=element_text(hjust=0.5),
+        axis.title.y=element_blank(),
+        axis.ticks.y=element_blank(),
+        panel.grid=element_blank(),
+        panel.border=element_blank(),
+        axis.line=element_line())
+
+
+### SHA specific plot ----
+# Create dataframe of results
+sha <- data.frame(index=c("pos", "neg"),
+                  hr=c(exp(coef(tth_mod_sha))[[2]], exp(coef(tth_mod_sha))[[1]]),
+                  low=c(exp(confint(tth_mod_sha))[[2]], exp(confint(tth_mod_sha))[[1]]),
+                  hi=c(exp(confint(tth_mod_sha))[[4]], exp(confint(tth_mod_sha))[[3]]))
+
+# Create a boxplot with ggplot
+ggplot(data=sha) +
+  
+  # Point estimates
+  geom_point(aes(x=hr, y=index, color=index), size=3) +
+  
+  # Add labels under point estimates
+  geom_text(label=paste(round(exp(coef(tth_mod_sha))[[2]], 2)),
+            x=exp(coef(tth_mod_sha))[[2]], y=1.7, color="#619CFF") +
+  geom_text(label=paste(round(exp(coef(tth_mod_sha))[[1]], 2)),
+            x=exp(coef(tth_mod_sha))[[1]], y=0.7, color="#F8766D") +
+  
+  # Confidence intervals
+  geom_errorbarh(height=0.05, aes(y=index, xmin=low, xmax=hi, color=index), size=1, alpha=0.5) +
+  
+  # Hazard ratio = 1 line
+  geom_vline(xintercept=1, color="#00BA38", size=1, alpha=0.5) +
+  
+  # Other settings
+  scale_color_manual(values=c("#F8766D", "#619CFF")) +
+  scale_x_continuous(limits=c(-2.5, 4.5)) +
+  scale_y_discrete(labels=c("Negative exit\n(v. neutral)", "Positive exit\n(v. neutral)")) +
+  labs(x="Hazard ratio", title="SHA Only") +
   theme_bw() +
   theme(legend.position="none",
         plot.title=element_text(hjust=0.5),

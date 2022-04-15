@@ -18,7 +18,7 @@ options(dplyr.summarise.inform = FALSE)
 
 if (!require("pacman")) {install.packages("pacman")}
 pacman::p_load(tidyverse, odbc, glue, data.table, ggplot2, viridis, hrbrthemes,
-               knitr, kableExtra, rmarkdown)
+               knitr, kableExtra, rmarkdown, DiagrammeR)
 
 # Connect to HHSAW
 db_hhsaw <- DBI::dbConnect(odbc::odbc(),
@@ -75,9 +75,49 @@ exits_58 <- dbGetQuery(db_hhsaw,
                         ON y.id_kc_pha = z.id_kc_pha"
                        )
 
+# Set up flags for multiple exits
+set.seed(98104)
+exit_timevar <- exit_timevar %>% 
+  mutate(exit_pos = case_when(is.na(exit_category) ~ NA_integer_,
+                              exit_category == "Positive" ~ 1L,
+                              TRUE ~ 0L),
+         exit_neg = case_when(is.na(exit_category) ~ NA_integer_,
+                              exit_category == "Negative" ~ 1L,
+                              TRUE ~ 0L),
+         exit_neu = case_when(is.na(exit_category) ~ NA_integer_,
+                              exit_category == "Neutral" ~ 1L,
+                              TRUE ~ 0L),
+         decider = runif(nrow(exit_timevar), 0, 1)) %>%
+  group_by(id_hudhears, act_date) %>%
+  mutate(row_n = n(),
+         exit_pos_sum = sum(exit_pos, na.rm = T),
+         exit_neg_sum = sum(exit_neg, na.rm = T),
+         exit_neu_sum = sum(exit_neu, na.rm = T),
+         decider_max = max(decider)) %>%
+  ungroup()
+
+# Logic for keeping rows (there are only max 2 in a duplicate set)
+# 1) If one positive/negative and one neutral, keep the positive/negative
+#    (from review, these appear to be more descriptive)
+# 2) If one positive and one negative, take positive 
+#    (mostly over income/moved to non-subsidized rental vs. vaguer negative reason)
+# 3) If both one category, randomly select one
+exit_timevar <- exit_timevar %>%
+  mutate(drop = case_when(row_n == 1 ~ 0L,
+                          (exit_pos_sum == 1 | exit_neg_sum == 1) & exit_neu_sum == 1 &
+                            exit_category %in% c("Positive", "Negative") ~ 0L,
+                          (exit_pos_sum == 1 | exit_neg_sum == 1) & exit_neu_sum == 1 &
+                            exit_category == "Neutral" ~ 1L,
+                          exit_pos_sum == 1 & exit_neg_sum == 1 & exit_category == "Positive" ~ 0L,
+                          exit_pos_sum == 1 & exit_neg_sum == 1 & exit_category == "Negative" ~ 1L,
+                          (exit_pos_sum == 2 | exit_neg_sum == 2 | exit_neu_sum == 2) &
+                            decider == decider_max ~ 0L,
+                          (exit_pos_sum == 2 | exit_neg_sum == 2 | exit_neu_sum == 2) &
+                            decider != decider_max ~ 1L
+  ))
 
 
-# EXIT NUMBERS ----
+# EXIT NUMBERS/CONSORT DIAGRAM ----
 # Check how many exit events are captured in the timevar table
 exit_timevar %>%
   filter(!is.na(act_date)) %>%
@@ -114,6 +154,28 @@ exit_timevar %>%
   filter(true_exit == 1) %>%
   distinct(id_hudhears, act_date) %>%
   summarise(cnt = n())
+
+## CONSORT diagram ----
+## Set up values for each node ----
+# Set up DF to track counts
+consort_df <- exit_timevar %>% filter(!is.na(act_date))
+exits_tot <- nrow(consort_df)
+
+# Date range
+consort_period_excl_sha <- consort_df %>% filter(agency == "SHA" & (act_date < "2012-01-01" | act_date > "2018-12-31")) %>% nrow()
+consort_period_excl_kcha <- consort_df %>% filter(agency == "KCHA" & (act_date < "2016-01-01" | act_date > "2018-12-31")) %>% nrow()
+
+consort_df <- consort_df %>% filter((agency == "SHA" & act_date >= "2012-01-01" & act_date <= "2018-12-31") |
+                                      (agency == "KCHA" & act_date >= "2016-01-01" & act_date <= "2018-12-31"))
+
+exits_period <- nrow(consort_df)
+
+# True/false exits
+consort_df <- consort_df %>% filter(true_exit == 1)
+exits_true <- nrow(consort_df)
+exits_false <- exits_period - exits_true
+
+# One exit per person
 
 
 

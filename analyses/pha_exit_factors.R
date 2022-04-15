@@ -151,10 +151,11 @@ demog_pct_sum <- function(df,
 
 
 hh_los_sum <- function(df, ...) {
-  col_names <- df %>% select(...) %>% colnames()
+  col_names <- df %>% distinct(...) %>% colnames()
   
   output <- df %>% 
     filter(!is.na(housing_time_at_exit)) %>%
+    distinct(hh_id_kc_pha, housing_time_at_exit, ...) %>%
     group_by(...) %>%
     summarise(n = number(n(), big.mark = ","), 
               los_mean = round(mean(housing_time_at_exit), 1),
@@ -399,10 +400,10 @@ exp(cbind(OR = coef(anyexit_mcaid), confint(anyexit_mcaid)))
 exit_type_age <- age_sum(covariate_exits, exit_category)
 
 # Gender
-exit_type_gender <- demog_pct_sum(covariate_exits, demog = "gender", exit_category)
+exit_type_gender <- demog_pct_sum(covariate_exits, level = "ind", demog = "gender", exit_category)
 
 # Race/eth
-exit_type_race <- demog_pct_sum(covariate_exits, demog = "race", exit_category)
+exit_type_race <- demog_pct_sum(covariate_exits, level = "ind", demog = "race", exit_category)
 
 # Combine for R markdown
 exit_type_ind <- bind_rows(exit_type_age, exit_type_gender, exit_type_race) %>%
@@ -417,10 +418,10 @@ exit_type_hh_los <- hh_los_sum(covariate_exits, exit_category)
 exit_type_hh_demogs <- hh_demogs_sum(covariate_exits, level = "hh", exit_category)
 
 # Program type
-exit_type_hh_prog <- demog_pct_sum(covariate_exits, demog = "program", exit_category)
+exit_type_hh_prog <- demog_pct_sum(covariate_exits, level = "hh", demog = "program", exit_category)
 
 # Voucher type
-exit_type_hh_vouch <- demog_pct_sum(covariate_exits, demog = "voucher", exit_category)
+exit_type_hh_vouch <- demog_pct_sum(covariate_exits, level = "hh", demog = "voucher", exit_category)
 
 
 # Agency - this doesn't make sense to do because KCHA only runs 2016-2018
@@ -600,7 +601,7 @@ exit_mcaid_7prior_gender <- demog_pct_sum(covariate_exits, level = "ind", demog 
 exit_mcaid_7prior_race <- demog_pct_sum(covariate_exits, level = "ind", demog = "race", full_cov_7_prior)
 
 # Combine for Rmarkdown
-exit_mcaid_7prior_demogs <- bind_rows(exit_mcaid_age, exit_mcaid_gender, exit_mcaid_race) %>%
+exit_mcaid_7prior_demogs <- bind_rows(exit_mcaid_7prior_age, exit_mcaid_7prior_gender, exit_mcaid_7prior_race) %>%
   rename("no_7mth_cov_prior" = "FALSE", "had_7mth_cov_prior" = "TRUE") %>%
   filter(!group == "n")
 
@@ -614,7 +615,7 @@ exit_mcaid_7after_gender <- demog_pct_sum(covariate_exits, level = "ind", demog 
 exit_mcaid_7after_race <- demog_pct_sum(covariate_exits, level = "ind", demog = "race", full_cov_7_after)
 
 # Combine for Rmarkdown
-exit_mcaid_7after_demogs <- bind_rows(exit_mcaid_age, exit_mcaid_gender, exit_mcaid_race) %>%
+exit_mcaid_7after_demogs <- bind_rows(exit_mcaid_7after_age, exit_mcaid_7after_gender, exit_mcaid_7after_race) %>%
   rename("no_7mth_cov_after" = "FALSE", "had_7mth_cov_after" = "TRUE") %>%
   filter(!group == "n")
 

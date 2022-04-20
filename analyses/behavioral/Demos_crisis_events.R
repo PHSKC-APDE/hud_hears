@@ -1,7 +1,17 @@
 ##Making descriptive tables code
 ##Updated March 25, 2022
 
-# #Demographic tables included:
+#Steps
+#1) Write functions to summarize variables of interest
+# age_sum
+# condition_sum
+# outpatient_sum
+# demog_pct_sum
+# hh_los_sum
+# hh_demogs_sum
+# mcaid_outcomes
+
+#2 Demographic tables included:
 # 1)Comparison of people with and without the outcome
 # -basic demographics
 # -mental health conditions
@@ -306,10 +316,10 @@ all_pop %>% head()
 
 ## Demogs ----
 # Age
-crisis_age <- age_sum(all_pop, crisis_any)
+crisis_age <- age_sum(all_pop, outcome)
 
 # Gender
-crisis_gender <- demog_pct_sum(all_pop, level = "ind", demog = "gender", crisis_any)
+crisis_gender <- demog_pct_sum(all_pop, level = "ind", demog = "gender", outcome)
 
 # Race/eth
 crisis_race <- demog_pct_sum(all_pop, level = "ind", demog = "race", crisis_any)

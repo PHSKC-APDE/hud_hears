@@ -1,12 +1,14 @@
-# Code updated on 03/29/2022
-# 
-# #Make data frame for HUD HEARS Analysis
-# 
-# 1) Build crisis event outcome table
-# 2) Build BH regular care table
-# 3) Build BH conditions table
+## HUD HEARS Behavioral Health Exit Type Code ----
+#Code updated on 03/29/2022
+#Author: Megan Suter 
+
+#Code Purpose: Process data for HUD HEARS Behavioral Health Analysis
+
+# 1) Pull data from SQL tables to define crisis outcomes: Program codes, ITS, Medicaid ED visits
+# 2) Pull data from SQL tables to count and define behavioral health outpatient care
+# 3) Pull data from SQL tables to define behavioral health conditions
 # 4) Join the above to full covariates table
-# Note: 1-4 limited to those with an exit only
+# Note: Items 1-4 limited to those with an exit only
 
 
 
@@ -25,7 +27,6 @@ library(data.table)
 library(rsvg)
 library(lubridate)
 
-# Connect to HHSAW
 db_hhsaw <- DBI::dbConnect(odbc::odbc(),
                            driver = "ODBC Driver 17 for SQL Server",
                            server = "tcp:kcitazrhpasqlprp16.azds.kingcounty.gov,1433",
@@ -36,9 +37,11 @@ db_hhsaw <- DBI::dbConnect(odbc::odbc(),
                            TrustServerCertificate = "yes",
                            Authentication = "ActiveDirectoryPassword")
 
-##Crisis events
+# Pull data from SQL server ----
 
-##Join IDs to BH crisis events, ITAs, ED visits
+##Crisis events (From program codes, ITAs, ED visits----
+
+##Join IDs to BH crisis events, ITAs, ED visits (from Medicaid)
 crisis_events <- dbGetQuery(db_hhsaw,
                          "SELECT a.id_hudhears, a.gender_me, a.exit_date, a.exit_category, NULL as yr_before, DATEADD(year, 1, a.exit_date) AS yr_after, b.crisis_date AS event_date, b.source
 FROM
@@ -83,35 +86,18 @@ AND m.first_service_date <= z.exit_date AND m.first_service_date >= DATEADD(year
 WHERE m.source IS NOT NULL
 ")
 
-crisis_count <- crisis_events %>% group_by(id_hudhears, exit_date) %>% summarize(crisis_num=n_distinct(event_date))
-#Code indicator variable (Note everyone here should have a value of 1)
-crisis_count$crisis_any <-ifelse(crisis_count$crisis_num >=1, 1, 0)
+#Create two individual-level counts and indicators for crisis events: First includes Medicaid ED visits, second is all but Medicaid ED visits
+
+crisis_count <- left_join(crisis_events %>% group_by(id_hudhears, exit_date) %>% summarize(crisis_num_mcaid=n_distinct(event_date)),
+                          crisis_events %>% filter(source != "mcaid") %>% group_by(id_hudhears, exit_date) %>% summarize(crisis_num=n_distinct(event_date)),
+                          by=c("id_hudhears", "exit_date")) %>% 
+mutate(crisis_any_mcaid=ifelse(crisis_num_mcaid >=1, 1, 0), 
+       crisis_any=ifelse(crisis_num >=1, 1, 0))
 
 
-#####Outpatient care
-outpt_bh <- dbGetQuery(db_hhsaw,
-                       "
+## Behavioral Health Conditions----
 
-SELECT z.id_hudhears, z.gender_me, z.exit_date, z.exit_category, DATEADD(year, -1, z.exit_date) AS yr_before, NULL as yr_after, d.event_date AS event_date, d.source
-FROM
-(SELECT id_hudhears, exit_date, gender_me, exit_category
-  FROM hudhears.control_match_covariate 
-  WHERE id_type = 'id_exit' AND exit_death = 0) z
-LEFT JOIN
-(SELECT DISTINCT id_hudhears, event_date, 'outpt' AS source FROM hudhears.bh_outpatient_events WHERE event_date IS NOT NULL) d
-ON z.id_hudhears = d.id_hudhears
-AND d.event_date <= z.exit_date AND d.event_date >= DATEADD(year, -1, z.exit_date)
-WHERE d.source IS NOT NULL
-")
-
-##Events per person
-bh_outpt_count <- outpt_bh %>% group_by(id_hudhears, exit_date) %>% summarize(out_count=n_distinct(event_date))
-
-#Make indicator for people with 2+ visits
-bh_outpt_count$reg_care <-ifelse(bh_outpt_count$out_count >=2, 1, 0)
-
-
-#####Behavioral Health Conditions
+##Note: This is based on Medicaid data
 bh_conditions <- dbGetQuery(db_hhsaw,
                             "SELECT cov.id_hudhears, cov.gender_me, cov.exit_date, cov.exit_category, bh.from_date, bh.bh_cond
 FROM
@@ -132,54 +118,73 @@ WHERE bh.from_date IS NOT NULL
 ")
 
 #Number of conditions by person (N=6878 with at least 1 condition)
-condition_count_bh <- bh_conditions %>% group_by(id_hudhears, exit_date) %>% summarize(con_count=n_distinct(bh_cond))
-condition_count_bh$any_condition <-ifelse(condition_count_bh$con_count >=1, 1, 0)
+condition_count_bh <- bh_conditions %>% group_by(id_hudhears, exit_date) %>% summarize(con_count=n_distinct(bh_conditions))%>% mutate(any_condition=ifelse(con_count >=1, 1, 0))
 
 
-#####################################
 
-##Join all of the above with covariate table##
+## Outpatient care ----
+#note- This is not dependent on Medicaid data
+outpt_bh <- dbGetQuery(db_hhsaw,
+                       "
+
+SELECT z.id_hudhears, z.gender_me, z.exit_date, z.exit_category, DATEADD(year, -1, z.exit_date) AS yr_before, NULL as yr_after, d.event_date AS event_date, d.source
+FROM
+(SELECT id_hudhears, exit_date, gender_me, exit_category
+  FROM hudhears.control_match_covariate 
+  WHERE id_type = 'id_exit' AND exit_death = 0) z
+LEFT JOIN
+(SELECT DISTINCT id_hudhears, event_date, 'outpt' AS source FROM hudhears.bh_outpatient_events WHERE event_date IS NOT NULL) d
+ON z.id_hudhears = d.id_hudhears
+AND d.event_date <= z.exit_date AND d.event_date >= DATEADD(year, -1, z.exit_date)
+WHERE d.source IS NOT NULL
+")
+
+#Count behavioral health outpatient visits per person and make indicator for people with 2_ visits
+bh_outpt_count <- outpt_bh %>% group_by(id_hudhears, exit_date) %>% summarize(out_count=n_distinct(event_date)) %>% mutate(reg_care=ifelse(out_count >=2, 1, 0))
+
+
+
+## Join all of the above with covariate table----
+
 #Read in covariate table for exits only
 control_match_covariate <- dbGetQuery(db_hhsaw, "SELECT *, DATEADD(year, -1, exit_date) as yr_before, DATEADD(year, 1, exit_date) AS yr_later FROM hudhears.control_match_covariate
                                                  WHERE id_type = 'id_exit' AND exit_death = 0
                                       ")
 
-#Join control match covariate with CRISIS EVENTS
+#Join control match covariate with CRISIS EVENTS----
 all_pop <-left_join(control_match_covariate, crisis_count, by=c("id_hudhears", "exit_date"))
-#fix number and indicator variables for NAs
+
+#fix number and indicator variable NOT INCLUDING Medicaid events (Set NAs to zero)
 all_pop <- all_pop %>% mutate(crisis_any=ifelse(is.na(crisis_any), 0,crisis_any))%>% mutate(crisis_num=ifelse(is.na(crisis_num), 0,crisis_num))
 
+#fix number and indicator variable for crises INCLUDING Medicaid events
+#Only include individuals who have full coverage 7 months before and after exit, everyone else is set to NA
+all_pop <- all_pop %>%
+  mutate(crisis_any_mcaid = case_when(is.na(crisis_any_mcaid) & full_cov_7_prior == T & full_cov_7_after == T ~ 0L,
+                                      full_cov_7_prior == F | full_cov_7_after == F ~ NA_integer_,
+                                      TRUE ~ as.integer(crisis_any_mcaid)),
+         crisis_num_mcaid = case_when(is.na(crisis_num_mcaid) ~ 0L,
+                                      TRUE ~ as.integer(crisis_num_mcaid)))
 
-#Join control match covariate with BH OUTPATIENT visits
-all_pop <-left_join(all_pop, bh_outpt_count, by=c("id_hudhears", "exit_date"))
-#fix number and indicator variables for NAs
-all_pop <- all_pop %>% mutate(out_count=ifelse(is.na(out_count), 0, out_count))%>% mutate(reg_care=ifelse(is.na(reg_care), 0, reg_care))
-
-#Join control match covariate with BEHAVIORAL HEALTH CONDITIONS
+#Join control match covariate with BEHAVIORAL HEALTH CONDITIONS----
+#Create indicator for BH condition
+#fix number and indicator variable for BH conditions
+#Only include individuals who have full coverage 7 months before and after exit, everyone else is set to NA
 all_pop <-left_join(all_pop, condition_count_bh, by=c("id_hudhears", "exit_date"))
-#fix number and indicator variables for NAs
-all_pop <- all_pop %>% mutate(con_count=ifelse(is.na(con_count), 0, con_count))%>% mutate(any_condition=ifelse(is.na(any_condition), 0, any_condition))
-
+all_pop <- all_pop %>% mutate(any_cond=ifelse(condition_count_bh$con_count >=1, 1, 0))%>% mutate(any_cond= case_when(is.na(any_cond) & full_cov_7_prior == T & full_cov_7_after == T ~ 0L,
+                                      full_cov_7_prior == F | full_cov_7_after == F ~ NA_integer_,
+                                      TRUE ~ as.integer(any_cond)),
+         condition_count_bh = case_when(is.na(condition_count_bh) ~ 0L,
+                                      TRUE ~ as.integer(condition_count_bh)))
 
 #Make indicator for any condition
 condition_count_bh$any_cond <-ifelse(condition_count_bh$con_count >=1, 1, 0)
 
-####################################################
-#Preliminary Models
-####################################################
-#Change exit category to a factor variable
-all_pop$exit_category <- as.factor(all_pop$exit_category)
-##Run preliminary model (unadjusted)
-model2 <-glm(crisis_any ~ exit_category, family="binomial", data=all_pop)
-exp(cbind(OR = coef(model1), confint(model1)))
 
-model2 <- glm(crisis_any ~ exit_category*reg_care + reg_care + gender_me + age_at_exit + race_eth_me  + hh_size + any_condition, family="binomial", data=all_pop)
-exp(cbind(OR = coef(model2), confint(model2)))
+#Join control match covariate with BH OUTPATIENT visits----
+all_pop <-left_join(all_pop, bh_outpt_count, by=c("id_hudhears", "exit_date"))
+#fix number and indicator variables for NAs
+#Assume anyone without an entry has 0 outpatient visits because outpatient visits are not from Medicaid data
+all_pop <- all_pop %>% mutate(out_count=ifelse(is.na(out_count), 0, out_count))%>% mutate(reg_care=ifelse(is.na(reg_care), 0, reg_care))
 
-##association between any condition and exit type
-model3 <-polr(exit_category ~ any_condition, data=all_pop, Hess=T)
-exp(cbind(OR = coef(model3), confint(model3)))
 
-##association between routine care and exit type
-model4 <-polr(exit_category ~ reg_care, data=all_pop, Hess=T)
-exp(cbind(OR = coef(model4), confint(model4)))

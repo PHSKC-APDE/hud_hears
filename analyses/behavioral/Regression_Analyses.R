@@ -2,16 +2,12 @@
 ####################################################
 #Preliminary Models (With covariate adjustment)
 ####################################################
-#Eliminate those with race unknown category
-all_pop2<- all_pop %>%
-  filter(!(is.na(exit_category) | is.na(age_at_exit) | is.na(gender_me) | 
-             is.na(race_eth_me) | race_eth_me == "Unknown" | is.na(any_condition) | is.na(reg_care) |
-             is.na(hh_size)))
+#Set  unknown race==missing
 
 #Change exit category to a factor variable
 all_pop$exit_category <- as.factor(all_pop$exit_category)
 ##Run preliminary model (unadjusted)
-model1 <-glm(crisis_any_no_mcaid ~ exit_category, family="binomial", data=all_pop)
+model1 <-glm(crisis_any ~ exit_category, family="binomial", data=all_pop)
 exp(cbind(OR = coef(model1), confint(model1)))
 
 model2 <- glm(crisis_any ~ exit_category*reg_care + reg_care + gender_me + age_at_exit + race_eth_me  + hh_size + any_condition, family="binomial", data=all_pop)
@@ -40,8 +36,7 @@ all_pop2<- all_pop %>%
              is.na(hh_size)))
 
 # First, fit the multinomial logistic regression model, using GEE
-ps_mod <- nomLORgee(formula = exit_category ~ age_at_exit + gender_me + 
-                      race_eth_me + any_condition + hh_size + any_condition,
+ps_mod <- nomLORgee(formula = exit_category ~ age_at_exit + gender_me + race_eth_me  hh_size,
                     data = all_pop2,
                     id = hh_id_kc_pha,
                     LORstr = "independence")

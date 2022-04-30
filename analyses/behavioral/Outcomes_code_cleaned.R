@@ -86,7 +86,9 @@ AND m.first_service_date <= z.exit_date AND m.first_service_date >= DATEADD(year
 WHERE m.source IS NOT NULL
 ")
 
-#Create two individual-level counts and indicators for crisis events: First includes Medicaid ED visits, second is all but Medicaid ED visits
+#Create two individual-level counts and indicators for crisis events
+# First set DOES NOT include Medicaid events
+# Second DOES include Medicaid events
 
 crisis_count <- left_join(crisis_events %>% group_by(id_hudhears, exit_date) %>% summarize(crisis_num_mcaid=n_distinct(event_date)),
                           crisis_events %>% filter(source != "mcaid") %>% group_by(id_hudhears, exit_date) %>% summarize(crisis_num=n_distinct(event_date)),
@@ -117,7 +119,7 @@ AND bh.from_date <= cov.exit_date
 WHERE bh.from_date IS NOT NULL
 ")
 
-#Number of conditions by person (N=6878 with at least 1 condition)
+#Number of conditions by person (N=6878 with at least 1 condition)--Only includes Medicaid conditions
 condition_count_bh <- bh_conditions %>% group_by(id_hudhears, exit_date) %>% summarize(con_count=n_distinct(bh_conditions))%>% mutate(any_condition=ifelse(con_count >=1, 1, 0))
 
 
@@ -151,7 +153,7 @@ control_match_covariate <- dbGetQuery(db_hhsaw, "SELECT *, DATEADD(year, -1, exi
                                                  WHERE id_type = 'id_exit' AND exit_death = 0
                                       ")
 
-#Join control match covariate with CRISIS EVENTS----
+#Join control match covariate with NON MEDICAID CRISIS EVENTS----
 all_pop <-left_join(control_match_covariate, crisis_count, by=c("id_hudhears", "exit_date"))
 
 #fix number and indicator variable NOT INCLUDING Medicaid events (Set NAs to zero)
@@ -167,7 +169,6 @@ all_pop <- all_pop %>%
                                       TRUE ~ as.integer(crisis_num_mcaid)))
 
 #Join control match covariate with BEHAVIORAL HEALTH CONDITIONS----
-#Create indicator for BH condition
 #fix number and indicator variable for BH conditions
 #Only include individuals who have full coverage 7 months before and after exit, everyone else is set to NA
 all_pop <-left_join(all_pop, condition_count_bh, by=c("id_hudhears", "exit_date"))
@@ -177,8 +178,7 @@ all_pop <- all_pop %>% mutate(any_cond=ifelse(condition_count_bh$con_count >=1, 
          condition_count_bh = case_when(is.na(condition_count_bh) ~ 0L,
                                       TRUE ~ as.integer(condition_count_bh)))
 
-#Make indicator for any condition
-condition_count_bh$any_cond <-ifelse(condition_count_bh$con_count >=1, 1, 0)
+
 
 
 #Join control match covariate with BH OUTPATIENT visits----

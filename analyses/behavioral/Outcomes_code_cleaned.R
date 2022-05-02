@@ -16,7 +16,7 @@
 options(scipen = 6, digits = 4, warning.length = 8170)
 
 if (!require("pacman")) {install.packages("pacman")}
-pacman::p_load(tidyverse, odbc, glue, data.table, DiagrammeR, DiagrammeRsvg, rsvg, dplyr, lubridate)
+pacman::p_load(tidyverse, odbc, glue, data.table, DiagrammeR, DiagrammeRsvg, rsvg, dplyr, lubridate, MASS)
 #Need to load packages
 library(tidyverse)
 library(odbc)
@@ -43,7 +43,7 @@ db_hhsaw <- DBI::dbConnect(odbc::odbc(),
 
 ##Join IDs to BH crisis events, ITAs, ED visits (from Medicaid)
 crisis_events <- dbGetQuery(db_hhsaw,
-                         "SELECT a.id_hudhears, a.gender_me, a.exit_date, a.exit_category, NULL as yr_before, DATEADD(year, 1, a.exit_date) AS yr_after, b.crisis_date AS event_date, b.source
+                         "SELECT a.id_hudhears, a.gender_me, a.exit_date, a.exit_category, DATEADD(year, 1, a.exit_date) AS yr_after, b.crisis_date AS event_date, b.source
 FROM
 (SELECT id_hudhears, exit_date, gender_me, exit_category
   FROM hudhears.control_match_covariate 
@@ -58,7 +58,7 @@ WHERE b.source IS NOT NULL
 
 UNION
 
-SELECT x.id_hudhears, x.gender_me, x.exit_date, x.exit_category, NULL as yr_before, DATEADD(year, 1, x.exit_date) AS yr_after, y.call_date AS event_date, y.source
+SELECT x.id_hudhears, x.gender_me, x.exit_date, x.exit_category, DATEADD(year, 1, x.exit_date) AS yr_after, y.call_date AS event_date, y.source
 FROM
 (SELECT id_hudhears, exit_date, gender_me, exit_category
   FROM hudhears.control_match_covariate 
@@ -71,7 +71,7 @@ WHERE y.source IS NOT NULL
 
 UNION
 
-SELECT z.id_hudhears, z.gender_me, z.exit_date, z.exit_category, DATEADD(year, -1, z.exit_date) AS yr_before, NULL as yr_after, m.first_service_date AS event_date, m.source
+SELECT z.id_hudhears, z.gender_me, z.exit_date, z.exit_category, DATEADD(year, 1, z.exit_date) AS yr_after, m.first_service_date AS event_date, m.source
 FROM
 (SELECT id_hudhears, exit_date, gender_me, exit_category
   FROM hudhears.control_match_covariate 
@@ -82,7 +82,7 @@ ON z.id_hudhears= aa.id_hudhears
 LEFT JOIN
 (SELECT DISTINCT id_mcaid, first_service_date, ed_bh, 'mcaid' AS source FROM claims.final_mcaid_claim_header WHERE ed_bh = 1) m
 ON aa.id_mcaid = m.id_mcaid
-AND m.first_service_date <= z.exit_date AND m.first_service_date >= DATEADD(year, -1, z.exit_date)
+AND m.first_service_date >= z.exit_date AND m.first_service_date <= DATEADD(year, 1, z.exit_date)
 WHERE m.source IS NOT NULL
 ")
 
@@ -96,6 +96,60 @@ crisis_count <- left_join(crisis_events %>% group_by(id_hudhears, exit_date) %>%
 mutate(crisis_any_mcaid=ifelse(crisis_num_mcaid >=1, 1, 0), 
        crisis_any=ifelse(crisis_num >=1, 1, 0))
 
+#### Repeat for BEFORE exit (not limiting to 1 year----
+##Join IDs to BH crisis events, ITAs, ED visits (from Medicaid)
+crisis_events_before <- dbGetQuery(db_hhsaw,
+                            "SELECT a.id_hudhears, a.gender_me, a.exit_date, a.exit_category, b.crisis_date AS event_date, b.source
+FROM
+(SELECT id_hudhears, exit_date, gender_me, exit_category
+  FROM hudhears.control_match_covariate 
+  WHERE id_type = 'id_exit' AND exit_death = 0) a
+LEFT JOIN
+(SELECT DISTINCT id_hudhears, program, description, crisis_date, 'crisis' AS source
+  FROM hudhears.bh_crisis_events WHERE crisis_date IS NOT NULL) b
+ON a.id_hudhears = b.id_hudhears
+AND b.crisis_date <= a.exit_date
+WHERE b.source IS NOT NULL
+
+
+UNION
+
+SELECT x.id_hudhears, x.gender_me, x.exit_date, x.exit_category, y.call_date AS event_date, y.source
+FROM
+(SELECT id_hudhears, exit_date, gender_me, exit_category
+  FROM hudhears.control_match_covariate 
+  WHERE id_type = 'id_exit' AND exit_death = 0)  x
+LEFT JOIN
+(SELECT DISTINCT id_hudhears, call_date, 'ita' AS source FROM hudhears.bh_ita_events WHERE call_date IS NOT NULL) y
+ON x.id_hudhears = y.id_hudhears
+AND y.call_date <= x.exit_date
+WHERE y.source IS NOT NULL
+
+UNION
+
+SELECT z.id_hudhears, z.gender_me, z.exit_date, z.exit_category, m.first_service_date AS event_date, m.source
+FROM
+(SELECT id_hudhears, exit_date, gender_me, exit_category
+  FROM hudhears.control_match_covariate 
+  WHERE id_type = 'id_exit' AND exit_death = 0) z
+LEFT JOIN
+(SELECT DISTINCT id_hudhears, id_mcaid FROM claims.hudhears_id_xwalk) aa
+ON z.id_hudhears= aa.id_hudhears
+LEFT JOIN
+(SELECT DISTINCT id_mcaid, first_service_date, ed_bh, 'mcaid' AS source FROM claims.final_mcaid_claim_header WHERE ed_bh = 1) m
+ON aa.id_mcaid = m.id_mcaid
+AND m.first_service_date <= z.exit_date
+WHERE m.source IS NOT NULL
+")
+#Create two individual-level counts and indicators for crisis events
+# First set DOES NOT include Medicaid events
+# Second DOES include Medicaid events
+
+crisis_count_before <- left_join(crisis_events_before %>% group_by(id_hudhears, exit_date) %>% summarize(crisis_num_mcaid_before=n_distinct(event_date)),
+                          crisis_events_before %>% filter(source != "mcaid") %>% group_by(id_hudhears, exit_date) %>% summarize(crisis_num_before=n_distinct(event_date)),
+                          by=c("id_hudhears", "exit_date")) %>% 
+  mutate(crisis_any_mcaid_before=ifelse(crisis_num_mcaid_before >=1, 1, 0), 
+         crisis_any_before=ifelse(crisis_num_before >=1, 1, 0))
 
 ## Behavioral Health Conditions----
 
@@ -120,7 +174,7 @@ WHERE bh.from_date IS NOT NULL
 ")
 
 #Number of conditions by person (N=6878 with at least 1 condition)--Only includes Medicaid conditions
-condition_count_bh <- bh_conditions %>% group_by(id_hudhears, exit_date) %>% summarize(con_count=n_distinct(bh_conditions))%>% mutate(any_condition=ifelse(con_count >=1, 1, 0))
+condition_count_bh <- bh_conditions %>% group_by(id_hudhears, exit_date) %>% summarize(con_count=n_distinct(bh_conditions)) %>% mutate(any_cond=ifelse(con_count >=1, 1, 0))
 
 
 
@@ -168,15 +222,32 @@ all_pop <- all_pop %>%
          crisis_num_mcaid = case_when(is.na(crisis_num_mcaid) ~ 0L,
                                       TRUE ~ as.integer(crisis_num_mcaid)))
 
+####Add in crisis events before exit----
+#Join with NON MEDICAID CRISIS EVENTS
+all_pop <-left_join(all_pop, crisis_count_before, by=c("id_hudhears", "exit_date"))
+
+#fix number and indicator variable NOT INCLUDING Medicaid events (Set NAs to zero)
+all_pop <- all_pop %>% mutate(crisis_any_before=ifelse(is.na(crisis_any_before), 0,crisis_any_before))%>% mutate(crisis_num_before=ifelse(is.na(crisis_num_before), 0,crisis_num_before))
+
+#fix number and indicator variable for crises INCLUDING Medicaid events
+#Only include individuals who have full coverage 7 months before and after exit, everyone else is set to NA
+all_pop <- all_pop %>%
+  mutate(crisis_any_mcaid_before = case_when(is.na(crisis_any_mcaid_before) & full_cov_7_prior == T & full_cov_7_after == T ~ 0L,
+                                      full_cov_7_prior == F | full_cov_7_after == F ~ NA_integer_,
+                                      TRUE ~ as.integer(crisis_any_mcaid_before)),
+         crisis_num_mcaid_before = case_when(is.na(crisis_num_mcaid_before) ~ 0L,
+                                      TRUE ~ as.integer(crisis_num_mcaid_before)))
+
 #Join control match covariate with BEHAVIORAL HEALTH CONDITIONS----
 #fix number and indicator variable for BH conditions
 #Only include individuals who have full coverage 7 months before and after exit, everyone else is set to NA
 all_pop <-left_join(all_pop, condition_count_bh, by=c("id_hudhears", "exit_date"))
-all_pop <- all_pop %>% mutate(any_cond=ifelse(condition_count_bh$con_count >=1, 1, 0))%>% mutate(any_cond= case_when(is.na(any_cond) & full_cov_7_prior == T & full_cov_7_after == T ~ 0L,
+all_pop <- all_pop %>% 
+  mutate(any_cond= case_when(is.na(any_cond) & full_cov_7_prior == T & full_cov_7_after == T ~ 0L,
                                       full_cov_7_prior == F | full_cov_7_after == F ~ NA_integer_,
                                       TRUE ~ as.integer(any_cond)),
-         condition_count_bh = case_when(is.na(condition_count_bh) ~ 0L,
-                                      TRUE ~ as.integer(condition_count_bh)))
+         condition_count_bh = case_when(is.na(con_count) ~ 0L,
+                                      TRUE ~ as.integer(con_count)))
 
 
 

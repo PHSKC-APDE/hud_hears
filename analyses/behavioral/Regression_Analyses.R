@@ -107,7 +107,7 @@ all_pop2 <- all_pop2 %>%
 no_mcaid <-geepack::geeglm(formula = crisis_any ~ exit_category,
                            weights = iptw,
                            data = all_pop2,
-                           id = hh_id_kc_pha,
+                           id=hh_id_kc_pha,
                            family = "binomial")
 
               

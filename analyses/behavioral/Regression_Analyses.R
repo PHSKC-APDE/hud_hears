@@ -65,54 +65,154 @@ exp(cbind(OR = coef(model44), confint(model44)))
 #               family="binomial", 
 #               data=mcaid_subset7mo[(mcaid_subset7mo$gender_me != "Multiple" & mcaid_subset7mo$race_eth_me !="NH/PI"),])
 # exp(cbind(OR = coef(model5), confint(model5)))
-####################################################
-#Model with propensity score matching
-####################################################
+
+#Model with propensity score matching----
 library(multgee)
 library(geepack)
+##Models not including Medicaid ED visits ----
 
-## 1a) First, fit the multinomial logistic regression model, using GEE ----
+### 1a) First, fit the multinomial logistic regression model, using GEE ----
 
-# Remove anyone with missing variables
+##### Remove anyone with missing variables-----
 all_pop2<- all_pop %>%
   filter(!(is.na(exit_category) | is.na(gender_me) | is.na(age_at_exit) |
              is.na(race_eth_me) | race_eth_me == "Unknown" | is.na(hh_size) | is.na(single_caregiver) |
-             is.na(housing_time_at_exit) | is.na(reg_care)))
+             is.na(housing_time_at_exit) | is.na(reg_care) | is.na(crisis_any_before)
+             ))
 
-# First, fit the multinomial logistic regression model, using GEE
+##### Fit the multinomial logistic regression model, using GEE----
 ps_mod <- nomLORgee(formula = exit_category ~ gender_me + age_at_exit + race_eth_me + hh_size
-                    + single_caregiver + housing_time_at_exit + reg_care,
+                    + single_caregiver + housing_time_at_exit + reg_care + crisis_any_before,
                     data = all_pop2,
                     id = hh_id_kc_pha,
                     LORstr = "independence")
 
-# Next, calculate generalized propensity scores
+##### Next, calculate generalized propensity scores----
 ps <- as.data.frame(fitted(ps_mod))
 colnames(ps) <- c("Negative", "Neutral", "Positive")
 ps <- cbind("id_hudhears" = all_pop2$id_hudhears, ps)
 
 
-## 1b) Then, calculate inverse weights and assign to each observation  ----
+### 1b) Then, calculate inverse weights and assign to each observation  ----
 all_pop2 <- all_pop2 %>%
   left_join(., ps, by = "id_hudhears") %>%
   mutate(iptw = case_when(exit_category == "Neutral" ~ 1/Neutral,
                           exit_category == "Negative" ~ 1/Negative,
                           exit_category == "Positive" ~ 1/Positive))
 
-## 1c) Finally, fit model----
+### 1c) Finally, fit model----
 # This model does not account for clustering by household
-# no_mcaid <- glm(crisis_any ~ exit_category, 
-#                 family=quasibinomial, data=all_pop2, weights=iptw)
 
-no_mcaid <-geepack::geeglm(formula = crisis_any ~ exit_category,
-                           weights = iptw,
-                           data = all_pop2,
-                           id=hh_id_kc_pha,
-                           family = "binomial")
+#Change referent category
+all_pop2$exit_category <- relevel(all_pop2$exit_category, ref="Neutral")
+no_mcaid_neutral <- glm(crisis_any ~ exit_category, 
+                        family=quasibinomial, data=all_pop2, weights=iptw)
+exp(cbind(OR = coef(no_mcaid_neutral), confint(no_mcaid_neutral)))
+
+
+#This model includes everyone, but no Medicaid ED visit
+no_mcaid <- glm(crisis_any ~ exit_category + exit_category*reg_care, 
+                 family=quasibinomial, data=all_pop2, weights=iptw)
+exp(cbind(OR = coef(no_mcaid), confint(no_mcaid)))
+
+
+#This model includes Medicaid pop only, but NO Medicaid ED visits
+no_mcaid_fullcov <- glm(crisis_any ~ exit_category, 
+                family=quasibinomial, 
+                data=all_pop2[(all_pop2$full_cov_7_prior== T & all_pop2$full_cov_7_after ==T),], 
+                weights=iptw)
+exp(cbind(OR = coef(no_mcaid_fullcov), confint(no_mcaid_fullcov)))
+
+#Change referent category
+all_pop2$exit_category <- relevel(all_pop2$exit_category, ref="Neutral")
+no_mcaid_neutral <- glm(crisis_any ~ exit_category, 
+                family=quasibinomial, data=all_pop2, weights=iptw)
+exp(cbind(OR = coef(no_mcaid_neutral), confint(no_mcaid_neutral)))
+
+
+#Note this model is not working !
+# no_mcaid <-geepack::geeglm(formula = crisis_any ~ exit_category,
+#                            weights = iptw,
+#                            data = all_pop2,
+#                            id=hh_id_kc_pha,
+#                            family = "binomial")
 
               
-#Repeat with Medicaid Coverage group
+#Repeat propensity score models with Medicaid Coverage group ----
+
+##This version DOES NOT adjust for BH conditions
+
+### 1a) First, fit the multinomial logistic regression model, using GEE ----
+
+##### Remove anyone with missing variables-----
+
+mcaid_subset7mo2<- mcaid_subset7mo %>%
+  filter(!(is.na(exit_category) | is.na(gender_me) | is.na(age_at_exit) |
+             is.na(race_eth_me) | race_eth_me == "Unknown" | is.na(hh_size) | is.na(single_caregiver) |
+             is.na(housing_time_at_exit) | is.na(reg_care) | is.na (any_cond)) | is.na (crisis_any_mcaid_before))
+
+##### Fit the multinomial logistic regression model, using GEE----
+ps_mod2 <- nomLORgee(formula = exit_category ~ gender_me + age_at_exit + race_eth_me + hh_size
+                    + single_caregiver + housing_time_at_exit + reg_care + any_cond + crisis_any_mcaid_before,
+                    data = mcaid_subset7mo2,
+                    id = hh_id_kc_pha,
+                    LORstr = "independence")
+
+##### Next, calculate generalized propensity scores----
+ps2 <- as.data.frame(fitted(ps_mod2))
+colnames(ps2) <- c("Negative", "Neutral", "Positive")
+ps2 <- cbind("id_hudhears" = mcaid_subset7mo2$id_hudhears, ps2)
 
 
+### 1b) Then, calculate inverse weights and assign to each observation  ----
+mcaid_subset7mo2 <- mcaid_subset7mo2 %>%
+  left_join(., ps2, by = "id_hudhears") %>%
+  mutate(iptw2 = case_when(exit_category == "Neutral" ~ 1/Neutral,
+                          exit_category == "Negative" ~ 1/Negative,
+                          exit_category == "Positive" ~ 1/Positive))
 
+### 1c) Finally, fit model----
+# This model does not account for clustering by household
+#Change referent category
+mcaid_subset7mo2$exit_category <- relevel(mcaid_subset7mo2$exit_category, ref="Neutral")
+no_mcaid_neutral <- glm(crisis_any ~ exit_category, 
+                        family=quasibinomial, data=a, weights=iptw)
+exp(cbind(OR = coef(no_mcaid_neutral), confint(no_mcaid_neutral)))
+mcaid <- glm(crisis_any ~ exit_category, 
+                family=quasibinomial, mcaid_subset7mo2, weights=iptw2)
+exp(cbind(OR = coef(mcaid), confint(mcaid)))
+
+#Note this model is not working !
+#mcaid2 <-geepack::geeglm(formula = crisis_any ~ exit_category,
+                           # weights = iptw2,
+                           # data = mcaid_subset7mo2,
+                           # id=hh_id_kc_pha,
+                           # family = "binomial")
+
+
+#Now calculate Medicaid subset, not adjustinhg for BH conditions, but including ED outcomes
+mcaid_subset7mo2<- mcaid_subset7mo %>%
+  filter(!(is.na(exit_category) | is.na(gender_me) | is.na(age_at_exit) |
+             is.na(race_eth_me) | race_eth_me == "Unknown" | is.na(hh_size) | is.na(single_caregiver) |
+             is.na(housing_time_at_exit) | is.na(reg_care) | is.na (crisis_any_mcaid_before)))
+
+##### Fit the multinomial logistic regression model, using GEE----
+ps_mod2 <- nomLORgee(formula = exit_category ~ gender_me + age_at_exit + race_eth_me + hh_size
+                     + single_caregiver + housing_time_at_exit + reg_care + crisis_any_mcaid_before,
+                     data = mcaid_subset7mo2,
+                     id = hh_id_kc_pha,
+                     LORstr = "independence")
+
+##### Next, calculate generalized propensity scores----
+ps2 <- as.data.frame(fitted(ps_mod2))
+colnames(ps2) <- c("Negative", "Neutral", "Positive")
+ps2 <- cbind("id_hudhears" = mcaid_subset7mo2$id_hudhears, ps2)
+
+
+### 1b) Then, calculate inverse weights and assign to each observation  ----
+mcaid_subset7mo2 <- mcaid_subset7mo2 %>%
+  left_join(., ps2, by = "id_hudhears") %>%
+  mutate(iptw2 = case_when(exit_category == "Neutral" ~ 1/Neutral,
+                           exit_category == "Negative" ~ 1/Negative,
+                           exit_category == "Positive" ~ 1/Positive))
 

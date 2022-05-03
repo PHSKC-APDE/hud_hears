@@ -316,16 +316,16 @@ all_pop %>% head()
 
 ## Demogs ----
 # Age
-crisis_age <- age_sum(all_pop, outcome)
+crisis_age <- age_sum(all_pop, crisis_any)
 
 # Gender
 crisis_gender <- demog_pct_sum(all_pop, level = "ind", demog = "gender", outcome)
 
 # Race/eth
-crisis_race <- demog_pct_sum(all_pop, level = "ind", demog = "race", crisis_any)
+crisis_race <- demog_pct_sum(all_pop, level = "ind", demog = "race", outcome)
 
 #Any BH condition
-crisis_cond_any <- demog_pct_sum(all_pop, level= "ind", demog = "bh_condition", crisis_any)
+crisis_cond_any <- demog_pct_sum(all_pop, level= "ind", demog = "bh_condition", outcome)
 
 #Number of conditions
 crisis_cond <- condition_count(all_pop, crisis_any)
@@ -348,7 +348,7 @@ crisis_ind <- bind_rows(crisis_age, crisis_gender, crisis_race, crisis_cond_any,
 crisis_hh_los <- hh_los_sum(all_pop, crisis_any)
 
 # Size and composition
-crisis_hh_demogs <- hh_demogs_sum(all_pop, level = "hh", demog= "crisis_any)
+crisis_hh_demogs <- hh_demogs_sum(all_pop, level = "hh", demog= "crisis_any")
 
 # Program type
 crisis_hh_prog <- demog_pct_sum(all_pop, level = "hh", demog = "program", crisis_any)

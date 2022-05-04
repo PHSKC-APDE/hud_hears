@@ -104,7 +104,7 @@ all_pop2 <- all_pop2 %>%
 # This model does not account for clustering by household
 
 #Change referent category
-all_pop2$exit_category <- relevel(all_pop2$exit_category, ref="Neutral")
+all_pop2$exit_category <- relevel(all_pop2$exit_category*reg_care, ref="Neutral")
 no_mcaid_neutral <- glm(crisis_any ~ exit_category, 
                         family=quasibinomial, data=all_pop2, weights=iptw)
 exp(cbind(OR = coef(no_mcaid_neutral), confint(no_mcaid_neutral)))

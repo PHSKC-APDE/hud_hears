@@ -24,7 +24,7 @@
 
 # BRING IN PACKAGES ----
 if (!require("pacman")) {install.packages("pacman")}
-pacman::p_load(tidyverse, multgee, survival)
+pacman::p_load(tidyverse, multgee, survival, data.table)
 
 # Connect to HHSAW
 db_hhsaw <- DBI::dbConnect(odbc::odbc(),
@@ -117,6 +117,19 @@ tth_mod_overlap <- coxph(formula = Surv(tt_homeless, event) ~ exit_category,
                          cluster = hh_id_kc_pha)
 
 summary(tth_mod_overlap)
+
+  # Create de-identified version for export
+    tth_data_export <- copy(tth_data)
+    tth_data_export[, hh_id := .GRP, by = "hh_id_kc_pha"]
+    tth_data_export <- tth_data_export[, .(hh_id, tt_homeless, event, exit_category, overlap)]
+    
+    tth_mod_overlap_export <- coxph(formula = Surv(tt_homeless, event) ~ exit_category,
+                             data = tth_data_export,
+                             weights = overlap,
+                             cluster = hh_id)
+    
+    summary(tth_mod_overlap_export)
+    # save(tth_mod_overlap_export, tth_data_export, file = "C:/temp/tth_mod_overlap.R")
 
 
 #--------------------------------------------------

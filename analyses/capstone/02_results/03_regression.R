@@ -129,7 +129,7 @@ summary(tth_mod_overlap)
                              cluster = hh_id)
     
     summary(tth_mod_overlap_export)
-    # save(tth_mod_overlap_export, tth_data_export, file = "C:/temp/tth_mod_overlap.R")
+    # save(tth_mod_overlap_export, tth_data_export, file = "C:/temp/tth_mod_overlap.RData")
 
 
 #--------------------------------------------------

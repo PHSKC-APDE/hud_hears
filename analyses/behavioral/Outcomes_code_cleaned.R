@@ -179,25 +179,32 @@ condition_count_bh <- bh_conditions %>% group_by(id_hudhears, exit_date) %>% sum
 
 
 ## Outpatient care ----
+
+##PULL in auth number and group by this variable when counting BH events (auth_no)
+
 #note- This is not dependent on Medicaid data
 outpt_bh <- dbGetQuery(db_hhsaw,
                        "
 
-SELECT z.id_hudhears, z.gender_me, z.exit_date, z.exit_category, DATEADD(year, -1, z.exit_date) AS yr_before, NULL as yr_after, d.event_date AS event_date, d.source
+SELECT z.id_hudhears, z.gender_me, z.exit_date, z.exit_category, DATEADD(year, -1, z.exit_date) AS yr_before, NULL as yr_after, d.event_date AS event_date, d.source, d.auth_no
 FROM
 (SELECT id_hudhears, exit_date, gender_me, exit_category
   FROM hudhears.control_match_covariate 
   WHERE id_type = 'id_exit' AND exit_death = 0) z
 LEFT JOIN
-(SELECT DISTINCT id_hudhears, event_date, 'outpt' AS source FROM hudhears.bh_outpatient_events WHERE event_date IS NOT NULL) d
+(SELECT DISTINCT id_hudhears, event_date, auth_no, 'outpt' AS source FROM hudhears.bh_outpatient_events WHERE event_date IS NOT NULL) d
 ON z.id_hudhears = d.id_hudhears
 AND d.event_date <= z.exit_date AND d.event_date >= DATEADD(year, -1, z.exit_date)
 WHERE d.source IS NOT NULL
 ")
 
 #Count behavioral health outpatient visits per person and make indicator for people with 2_ visits
-bh_outpt_count <- outpt_bh %>% group_by(id_hudhears, exit_date) %>% summarize(out_count=n_distinct(event_date)) %>% mutate(reg_care=ifelse(out_count >=2, 1, 0))
-
+bh_outpt_count <- outpt_bh %>% group_by(id_hudhears, exit_date, auth_no) %>% 
+  summarize(out_count=n_distinct(event_date)) %>% group_by(id_hudhears, exit_date)%>%
+ mutate(out_count2=max(out_count, na.rm=T), 
+        reg_care2=ifelse(out_count2 >=2, 1, 0), 
+        reg_care=ifelse(out_count >=2, 1, 0)) %>% ungroup()
+##NOTE: reg_care2 and out_count2 
 
 
 ## Join all of the above with covariate table----
@@ -259,3 +266,4 @@ all_pop <-left_join(all_pop, bh_outpt_count, by=c("id_hudhears", "exit_date"))
 all_pop <- all_pop %>% mutate(out_count=ifelse(is.na(out_count), 0, out_count))%>% mutate(reg_care=ifelse(is.na(reg_care), 0, reg_care))
 
 
+table(bh_conditions$bh_cond)

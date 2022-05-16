@@ -24,10 +24,10 @@ db_hhsaw <- DBI::dbConnect(odbc::odbc(),
                            server = "tcp:kcitazrhpasqlprp16.azds.kingcounty.gov,1433",
                            database = "hhs_analytics_workspace",
                            uid = keyring::key_list("hhsaw")[["username"]],
-                           pwd = keyring::key_get("hhsaw", keyring::key_list("hhsaw")[["username"]]),
+                           #pwd = keyring::key_get("hhsaw", keyring::key_list("hhsaw")[["username"]]),
                            Encrypt = "yes",
                            TrustServerCertificate = "yes",
-                           Authentication = "ActiveDirectoryPassword")
+                           Authentication = "ActiveDirectoryInteractive")
 
 
 # BRING IN DATA ----
@@ -47,9 +47,9 @@ exits <- dbGetQuery(db_hhsaw, "SELECT DISTINCT agency, id_hudhears, act_date, ex
 kc_opp_index_data <- read_csv(file.path(here::here(), "analyses/capstone/00_opportunity_index",
                                         "kc_opp_indices_scaled.csv")) %>%
   # create variables for state, county, and tract identifies
-  mutate(GEO_STATE= substr(kc_opp_index_data$GEOID10, 1, 2),
-         GEO_COUNTY= substr(kc_opp_index_data$GEOID10, 3, 5),
-         GEO_TRACT= substr(kc_opp_index_data$GEOID10, 6, 11)) %>%
+  mutate(GEO_STATE= substr(GEOID10, 1, 2),
+         GEO_COUNTY= substr(GEOID10, 3, 5),
+         GEO_TRACT= substr(GEOID10, 6, 11)) %>%
   select(GEOID10, GEO_STATE, GEO_COUNTY, GEO_TRACT, everything()) %>%
   rename(kc_opp_index_score = OPP_Z)
 
@@ -100,7 +100,7 @@ exits <- exits %>%
 
 ## Add exit type and opportunity index ----
 exit_nodeath <- covariate %>% filter(exit_death != 1 & exit == 1) %>%
-  left_join(., exits, by = c("id_hudhears", "exit_date" = "act_date", "exit_reason_clean"))
+  left_join(., exits, by = c("id_hudhears", "exit_date" = "act_date", "exit_reason_clean", "exit_category"))
 
 exit_nodeath <- left_join(exit_nodeath,
                           distinct(kc_opp_index_data, GEO_TRACT, kc_opp_index_score),
@@ -168,6 +168,7 @@ exit_los <- exit_nodeath %>%
 
 
 ## Demogs by exit ----
+# Functions are found in the pha_exit_factors.R code
 # Age
 exit_type_age <- age_sum(exit_nodeath %>% filter(include_cov == T & include_demog == T), exit_category)
 
@@ -319,6 +320,11 @@ model_data_mcaid <- model_data_mcaid %>%
  
 
 model_data_mcaid$exit_category <- relevel(factor(model_data_mcaid$exit_category), ref = "Neutral")
+
+
+## Evaluate propensity scores ----
+
+
 
 
 ## ED visits ----

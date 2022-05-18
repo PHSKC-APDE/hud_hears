@@ -206,7 +206,6 @@ hudhears_ids <- dbGetQuery(db_hhsaw, "SELECT DISTINCT id_hudhears, id_kc_pha
                            FROM amatheson.hudhears_xwalk_ids
                            WHERE id_kc_pha IS NOT NULL")
 
-
 ## Exit data ----
 pha_exit <- dbGetQuery(db_hhsaw, "SELECT * FROM pha.stage_pha_exit") %>%
   mutate(hh_female = case_when(hh_gender == "Female" ~ 1L,
@@ -819,7 +818,7 @@ timevar_repeat[is.infinite(period_gap), period_gap := NA_real_]
 #     need at least 12 months between the end of a period and the next period if
 #     the exit occurs in the earlier period.
 #     Using 12 months because this is the follow up time for most study outcomes.
-# 2) Assume people short gaps (<1 year) between exit date and max date for that period
+# 2) Assume people short gaps (182 days) between exit date and max date for that period
 #      were a true exit.
 #    This is to catch the people whose act_date was not in the final from/to date range for that period
 #      or there was a gap between act_date and move out (e.g., if a voucher expired 
@@ -828,7 +827,7 @@ timevar_repeat[is.infinite(period_gap), period_gap := NA_real_]
 #    (e.g., some exits due to death have a later act_date than the final to_date)
 timevar_repeat[, true_exit := case_when(is.na(activity_mismatch) | is.na(act_date) ~ NA_integer_,
                                         !is.na(period_gap) & period_gap <= 365 ~ 0L,
-                                        activity_gap_max < 365 ~ 1L, 
+                                        activity_gap_max < 182 ~ 1L, 
                                         max_in_period == T & act_date > to_date & lead(id_kc_pha, 1) != id_kc_pha & 
                                           interval(start = to_date, end = act_date) / ddays(1) + 1 <= 182 ~ 1L,
                                         TRUE ~ 0L)]
@@ -902,6 +901,88 @@ timevar_exit_final <- timevar_exit_final %>%
   mutate(chooser_max = ifelse(is.na(act_date), chooser, chooser_max))
 
 
+## Flag people with multiple exit dates ----
+# Add in additional columns to flag exits within the study period
+multi_exit <- timevar_exit_final %>% 
+  filter(true_exit == 1 & !is.na(act_date)) %>%
+  distinct(id_hudhears, act_date) %>%
+  arrange(id_hudhears, act_date) %>%
+  group_by(id_hudhears) %>%
+  mutate(exit_order = row_number(),
+         exit_order_max = max(exit_order)) %>%
+  ungroup()
+
+multi_exit_study <- timevar_exit_final %>% 
+  filter(true_exit == 1 & !is.na(act_date) & 
+           ((act_date >= '2016-01-01' & act_date <= '2018-12-31' & agency == 'KCHA') |
+              (act_date >= '2012-01-01' & act_date <= '2018-12-31' & agency == 'SHA'))) %>%
+  distinct(id_hudhears, act_date) %>%
+  arrange(id_hudhears, act_date) %>%
+  group_by(id_hudhears) %>%
+  mutate(exit_order_study = row_number(),
+         exit_order_max_study = max(exit_order_study)) %>%
+  ungroup()
+
+  
+# Add back to main data
+timevar_exit_final <- left_join(timevar_exit_final, multi_exit, by = c("id_hudhears", "act_date")) %>%
+  left_join(., multi_exit_study, by = c("id_hudhears", "act_date"))
+
+
+## Sort out multiple exit types ----
+# Filter and run distinct to get nrows
+type_exits <- timevar_exit_final %>% 
+  filter(true_exit == 1 & !is.na(act_date)) %>%
+  distinct(id_hudhears, act_date, exit_category)
+
+set.seed(98104)
+type_exits <- type_exits %>%
+  mutate(exit_pos = case_when(is.na(exit_category) ~ NA_integer_,
+                              exit_category == "Positive" ~ 1L,
+                              TRUE ~ 0L),
+         exit_neg = case_when(is.na(exit_category) ~ NA_integer_,
+                              exit_category == "Negative" ~ 1L,
+                              TRUE ~ 0L),
+         exit_neu = case_when(is.na(exit_category) ~ NA_integer_,
+                              exit_category == "Neutral" ~ 1L,
+                              TRUE ~ 0L),
+         decider = runif(nrow(type_exits), 0, 1)) %>%
+  group_by(id_hudhears, act_date) %>%
+  mutate(row_n = n(),
+         exit_pos_sum = sum(exit_pos, na.rm = T),
+         exit_neg_sum = sum(exit_neg, na.rm = T),
+         exit_neu_sum = sum(exit_neu, na.rm = T),
+         decider_max = max(decider)) %>%
+  ungroup()
+
+# Logic for keeping rows (there are only max 2 in a duplicate set)
+# 1) If one positive/negative and one neutral, keep the positive/negative
+#    (from review, these appear to be more descriptive)
+# 2) If one positive and one negative, take positive 
+#    (mostly over income/moved to non-subsidized rental vs. vaguer negative reason)
+# 3) If both one category, randomly select one (no cases of this)
+type_exits <- type_exits %>%
+  mutate(exit_type_keep = case_when(row_n == 1 ~ 1L,
+                          (exit_pos_sum == 1 | exit_neg_sum == 1) & exit_neu_sum == 1 &
+                            exit_category %in% c("Positive", "Negative") ~ 1L,
+                          (exit_pos_sum == 1 | exit_neg_sum == 1) & exit_neu_sum == 1 &
+                            exit_category == "Neutral" ~ 0L,
+                          exit_pos_sum == 1 & exit_neg_sum == 1 & exit_category == "Positive" ~ 1L,
+                          exit_pos_sum == 1 & exit_neg_sum == 1 & exit_category == "Negative" ~ 0L,
+                          (exit_pos_sum == 2 | exit_neg_sum == 2 | exit_neu_sum == 2) &
+                            decider == decider_max ~ 1L,
+                          (exit_pos_sum == 2 | exit_neg_sum == 2 | exit_neu_sum == 2) &
+                            decider != decider_max ~ 0L
+  )) %>%
+  distinct(id_hudhears, act_date, exit_category, exit_type_keep)
+
+
+# Add back to main data
+# Because no exits have multiple rows for the same category, can just join back on that (plus ID and date)
+timevar_exit_final <- left_join(timevar_exit_final, type_exits, by = c("id_hudhears", "act_date", "exit_category"))
+
+
+
 ## Reorder columns ----
 # Also replace Infinite values
 timevar_exit_final <- timevar_exit_final %>%
@@ -912,7 +993,7 @@ timevar_exit_final <- timevar_exit_final %>%
          true_exit, exit_reason, exit_reason_clean, exit_category_pha, exit_category, 
          pha_source, disability, major_prog, subsidy_type, prog_type, operator_type, vouch_type_final, 
          geo_hash_clean, geo_kc_area, portfolio_final,
-         chooser, chooser_max) %>%
+         chooser, chooser_max, exit_order, exit_order_max, exit_order_study, exit_order_max_study, exit_type_keep) %>%
   distinct() %>%
   mutate(last_run = Sys.time())
 

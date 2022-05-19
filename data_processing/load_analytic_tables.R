@@ -89,9 +89,8 @@ exit_timevar <- dbGetQuery(db_hhsaw,
 
 # Set up list of IDs, exits, and dates
 exits <- exit_timevar %>% 
-  filter(true_exit == 1 & 
-           ((agency == "SHA" & act_date >= "2012-01-01" & act_date <= "2018-12-31") | 
-              (agency == "KCHA" & act_date >= "2016-01-01" & act_date <= "2018-12-31"))) %>%
+  filter(true_exit == 1 & exit_type_keep == 1 & 
+           exit_order_study == exit_order_max_study & !is.na(exit_order_study)) %>%
   distinct(id_kc_pha, act_date) %>%
   arrange(id_kc_pha, act_date) %>%
   # Take the most recent exit for the ~200 people with multiple exits
@@ -103,7 +102,7 @@ exits <- exit_timevar %>%
 # Set up a list of controls
 # This will be everyone at first (including people who eventually exit) 
 # but as controls are sampled they will be removed from this data frame
-controls <- setDT(exit_timevar %>% select(id_kc_pha, from_date, to_date, period, true_exit, act_date))
+controls <- setDT(exit_timevar %>% distinct(id_kc_pha, from_date, to_date, period, true_exit, act_date))
   # Add in the max date by a person's period in housing to make things easier
 controls[, max_period_date := max(to_date), by = .(id_kc_pha, period)]
 

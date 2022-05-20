@@ -40,71 +40,13 @@ exits <- dbGetQuery(db_hhsaw, "SELECT DISTINCT agency, id_hudhears, act_date, ex
                     FROM pha.stage_pha_exit_timevar
                     WHERE chooser = chooser_max AND
                     true_exit = 1 AND act_date IS NOT NULL AND
-                    ((act_date >= '2016-01-01' AND act_date <= '2018-12-31' AND agency = 'KCHA') OR
-                    (act_date >= '2012-01-01' AND act_date <= '2018-12-31' AND agency = 'SHA'))")
-
-# load opportunity index data (version standardized in King County)
-kc_opp_index_data <- read_csv(file.path(here::here(), "analyses/capstone/00_opportunity_index",
-                                        "kc_opp_indices_scaled.csv")) %>%
-  # create variables for state, county, and tract identifies
-  mutate(GEO_STATE= substr(GEOID10, 1, 2),
-         GEO_COUNTY= substr(GEOID10, 3, 5),
-         GEO_TRACT= substr(GEOID10, 6, 11)) %>%
-  select(GEOID10, GEO_STATE, GEO_COUNTY, GEO_TRACT, everything()) %>%
-  rename(kc_opp_index_score = OPP_Z)
-
-
-## Sort out multiple exit types ----
-set.seed(98104)
-exits <- exits %>% 
-  mutate(exit_pos = case_when(is.na(exit_category) ~ NA_integer_,
-                              exit_category == "Positive" ~ 1L,
-                              TRUE ~ 0L),
-         exit_neg = case_when(is.na(exit_category) ~ NA_integer_,
-                              exit_category == "Negative" ~ 1L,
-                              TRUE ~ 0L),
-         exit_neu = case_when(is.na(exit_category) ~ NA_integer_,
-                              exit_category == "Neutral" ~ 1L,
-                              TRUE ~ 0L),
-         decider = runif(nrow(exits), 0, 1)) %>%
-  group_by(id_hudhears, act_date) %>%
-  mutate(row_n = n(),
-         exit_pos_sum = sum(exit_pos, na.rm = T),
-         exit_neg_sum = sum(exit_neg, na.rm = T),
-         exit_neu_sum = sum(exit_neu, na.rm = T),
-         decider_max = max(decider)) %>%
-  ungroup()
-
-# Logic for keeping rows (there are only max 2 in a duplicate set)
-# 1) If one positive/negative and one neutral, keep the positive/negative
-#    (from review, these appear to be more descriptive)
-# 2) If one positive and one negative, take positive 
-#    (mostly over income/moved to non-subsidized rental vs. vaguer negative reason)
-# 3) If both one category, randomly select one
-exits <- exits %>%
-  mutate(drop = case_when(row_n == 1 ~ 0L,
-                          (exit_pos_sum == 1 | exit_neg_sum == 1) & exit_neu_sum == 1 &
-                            exit_category %in% c("Positive", "Negative") ~ 0L,
-                          (exit_pos_sum == 1 | exit_neg_sum == 1) & exit_neu_sum == 1 &
-                            exit_category == "Neutral" ~ 1L,
-                          exit_pos_sum == 1 & exit_neg_sum == 1 & exit_category == "Positive" ~ 0L,
-                          exit_pos_sum == 1 & exit_neg_sum == 1 & exit_category == "Negative" ~ 1L,
-                          (exit_pos_sum == 2 | exit_neg_sum == 2 | exit_neu_sum == 2) &
-                            decider == decider_max ~ 0L,
-                          (exit_pos_sum == 2 | exit_neg_sum == 2 | exit_neu_sum == 2) &
-                            decider != decider_max ~ 1L
-                          )) %>%
-  filter(drop == 0) %>%
-  select(id_hudhears:exit_neu)
+                    exit_type_keep = 1 AND 
+                    exit_order_study = exit_order_max_study AND exit_order_study IS NOT NULL")
 
 
 ## Add exit type and opportunity index ----
 exit_nodeath <- covariate %>% filter(exit_death != 1 & exit == 1) %>%
   left_join(., exits, by = c("id_hudhears", "exit_date" = "act_date", "exit_reason_clean", "exit_category"))
-
-exit_nodeath <- left_join(exit_nodeath,
-                          distinct(kc_opp_index_data, GEO_TRACT, kc_opp_index_score),
-                          by= c("geo_tractce10" = "GEO_TRACT"))
 
 
 ## Set up outcomes and inclusion flag ----
@@ -321,6 +263,8 @@ model_data_mcaid <- model_data_mcaid %>%
 
 model_data_mcaid$exit_category <- relevel(factor(model_data_mcaid$exit_category), ref = "Neutral")
 
+model_data_mcaid_pn <- model_data_mcaid %>% filter(exit_category != "Neutral")
+
 
 ## Evaluate propensity scores ----
 
@@ -336,8 +280,10 @@ ed <- geepack::geeglm(formula = ed_any_after ~ exit_category,
                       family = "binomial")
 
 ### Crude ----
-ed_crude <- glm(ed_any_after ~ exit_category, 
-                data = model_data_mcaid[model_data_mcaid$exit_category != "Neutral", ], family = "binomial")
+ed_crude <- geepack::geeglm(ed_any_after ~ exit_category, 
+                data = model_data_mcaid[model_data_mcaid$exit_category != "Neutral", ],
+                id = hh_id_kc_pha,
+                family = "binomial")
 
 summary(ed_crude)
 exp(cbind(OR = coef(ed_crude), confint(ed_crude)))
@@ -347,7 +293,8 @@ exp(cbind(OR = coef(ed_crude), confint(ed_crude)))
 ed_adj <- glm(ed_any_after ~ exit_category + gender_me + race_eth_me + agegrp + los + 
                        major_prog + hh_size + single_caregiver + hh_disability + 
                        ed_cnt_prior + ccw_flag, 
-                     data = model_data_mcaid[model_data_mcaid$exit_category != "Neutral", ], family = "binomial")
+                     data = model_data_mcaid[model_data_mcaid$exit_category != "Neutral", ], 
+              family = "binomial")
 
 summary(ed_adj)
 ed_adj_p <- summary(ed_adj)[["coefficients"]][2, 4]

@@ -331,49 +331,27 @@ control_match_id_mcaid <- dbGetQuery(db_hhsaw,
 
 mcaid_elig <- claims::elig_timevar_collapse(db_hhsaw, server = "hhsaw", source = "mcaid",
                                             full_benefit = T, dual = T,
-                                            ids = unique(control_match_id_mcaid$id_mcaid))
+                                            ids = unique(control_match_id_mcaid$id_mcaid[!is.na(control_match_id_mcaid$id_mcaid)]))
 
 
-# Join and keep Mcaid rows that partially overlap in the past
-# Use sqldf for non-equi join
-mcaid_elig_prior <- sqldf("SELECT a.*, b.from_date, b.to_date, b.dual, b.full_benefit
-                          FROM 
-                          (SELECT * FROM control_match_id_mcaid) a
-                          LEFT JOIN
-                          (SELECT * FROM mcaid_elig) b
-                          ON a.id_mcaid = b.id_mcaid AND 
-                          (a.exit_date >= b.from_date AND a.exit_date <= b.to_date OR
-                            a.exit_1yr_prior >= b.from_date AND a.exit_1yr_prior <= b.to_date)") %>%
-  mutate(full_coverage = case_when(is.na(from_date) ~ 0,
+# Join and count overlapping time with non-dual full coverage
+mcaid_elig_overlap <- left_join(control_match_id_mcaid, mcaid_elig, by = "id_mcaid") %>%
+  mutate(full_coverage_prior = case_when(is.na(from_date) ~ 0,
                                    dual == 1 | full_benefit == 0 ~ 0,
                                    TRUE ~ intersect(interval(exit_1yr_prior, exit_date),
-                                                    interval(from_date, to_date)) / ddays(1) + 1)) %>%
-  group_by(id_hudhears, exit_date) %>%
-  summarise(full_cov_days = sum(full_coverage)) %>%
-  ungroup() %>%
-  mutate(full_cov_11_prior = full_cov_days >= 11/12 * 365,
-         full_cov_7_prior = full_cov_days >= 7/12 * 365)
-
-
-# Join and keep Mcaid rows that partially overlap in the past
-# Use sqldf for non-equi join
-mcaid_elig_after <- sqldf("SELECT a.*, b.from_date, b.to_date, b.dual, b.full_benefit
-                          FROM 
-                          (SELECT * FROM control_match_id_mcaid) a
-                          LEFT JOIN
-                          (SELECT * FROM mcaid_elig) b
-                          ON a.id_mcaid = b.id_mcaid AND 
-                          (a.exit_date >= b.from_date AND a.exit_date <= b.to_date OR
-                            a.exit_1yr_after >= b.from_date AND a.exit_1yr_after <= b.to_date)") %>%
-  mutate(full_coverage = case_when(is.na(from_date) ~ 0,
+                                                    interval(from_date, to_date)) / ddays(1) + 1),
+         full_coverage_after = case_when(is.na(from_date) ~ 0,
                                    dual == 1 | full_benefit == 0 ~ 0,
                                    TRUE ~ intersect(interval(exit_date, exit_1yr_after),
                                                     interval(from_date, to_date)) / ddays(1) + 1)) %>%
   group_by(id_hudhears, exit_date) %>%
-  summarise(full_cov_days = sum(full_coverage)) %>%
+  summarise(full_cov_days_prior = sum(full_coverage_prior, na.rm = T),
+            full_cov_days_after = sum(full_coverage_after, na.rm = T)) %>%
   ungroup() %>%
-  mutate(full_cov_11_after = full_cov_days >= 11/12 * 365,
-         full_cov_7_after = full_cov_days >= 7/12 * 365)
+  mutate(full_cov_11_prior = full_cov_days_prior >= 11/12 * 365,
+         full_cov_7_prior = full_cov_days_prior >= 7/12 * 365,
+         full_cov_11_after = full_cov_days_after >= 11/12 * 365,
+         full_cov_7_after = full_cov_days_after >= 7/12 * 365)
 
 
 ## Medicaid ED visits and hospitalizations ----
@@ -555,9 +533,9 @@ covariate <- covariate %>%
   select(id_hudhears:exit_date, exit_reason_clean, exit_category, exit_death, gender_me:age_at_exit,  
          housing_time_at_exit, hh_id_kc_pha, hh_demog_date, agency:geo_tractce10, kc_opp_index_score, 
          hh_size:single_caregiver) %>%
-  left_join(., select(mcaid_elig_prior, id_hudhears, exit_date, full_cov_11_prior, full_cov_7_prior), 
-            by = c("id_hudhears", "exit_date")) %>%
-  left_join(., select(mcaid_elig_after, id_hudhears, exit_date, full_cov_11_after, full_cov_7_after), 
+  left_join(., 
+            select(mcaid_elig_overlap, id_hudhears, exit_date, full_cov_11_prior, full_cov_7_prior, 
+                   full_cov_11_after, full_cov_7_after), 
             by = c("id_hudhears", "exit_date")) %>%
   left_join(., mcaid_visits_prior, by = c("id_hudhears", "exit_date")) %>%
   left_join(., mcaid_visits_after, by = c("id_hudhears", "exit_date")) %>%

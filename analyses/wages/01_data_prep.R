@@ -29,6 +29,8 @@
 #          - exit quarter
 #        id_individual
 #        id_hh
+#
+# Remember! HHSAW20 is DEV and HHSAW16 is PROD 
 
 
 # Set-up ----
@@ -128,16 +130,16 @@
 # Tidy datasets ----
     # ESD wage data (wage) ----
       # create quarter as a date
-      wage[, qdate := lubridate::yq(paste0(yr, ":Q", qtr))]
+      wage[, qtr_date := lubridate::yq(paste0(yr, ":Q", qtr))]
       wage[, c("yr", "qtr") := NULL]
       
       # end before 2020 due to COVID-19 pandemic
-      wage <- wage[qdate < "2020-01-01"]
-      wage[, qdate2 := qdate] # needed because data.table::foverlaps needs start and end to interval
+      wage <- wage[qtr_date < "2020-01-01"]
+      wage[, qtr_date2 := qtr_date] # needed because data.table::foverlaps needs start and end to interval
       
       # collapse wages from multiple jobs into a single row per id and time period
-      setorder(wage, id_esd, qdate)
-      wage <- wage[, .(wage = sum(wages), hrs = sum(hrs)), .(id_esd, qdate, qdate2)]
+      setorder(wage, id_esd, qtr_date)
+      wage <- wage[, .(wage = sum(wages), hrs = sum(hrs)), .(id_esd, qtr_date, qtr_date2)]
       
       wage <- unique(wage)
     
@@ -165,12 +167,12 @@
       
     # PHA exit data (exits) ----
       # baseline count of exits
-        count1_baseline <- rbind(copy(exits)[, .N, agency], data.table(agency = "Either", N = nrow(exits)))
+        count01_baseline <- rbind(copy(exits)[, .N, agency], data.table(agency = "Either", N = nrow(exits)))
       
       # ??? limit dates to when have data for BOTH KCHA and SHA to avoid temporal biases in use of agency in model as a confounder
         exits <- exits[exit_date >= "2016-01-01"]
         
-        count2_limit_dates <- rbind(copy(exits)[, .N, agency], data.table(agency = "Either", N = nrow(exits)))
+        count02_limit_dates <- rbind(copy(exits)[, .N, agency], data.table(agency = "Either", N = nrow(exits)))
         
       # Note to my future self that the max date in the exit data prepared by Alastair is 2018-12-31 (as of 2022-05-18)
         
@@ -180,16 +182,16 @@
       # drop when reason for exits prohibits ability to identify future wages
         exits <- exits[exit_reason_clean != "Deceased"]
         
-        count3_drop_deceased <- rbind(copy(exits)[, .N, agency], data.table(agency = "Either", N = nrow(exits)))
+        count03_drop_deceased <- rbind(copy(exits)[, .N, agency], data.table(agency = "Either", N = nrow(exits)))
         
       # keep only positive and negative exits (for simpler binary comparison & because moving in with family / friends will confuse analysis)
         exits <- exits[exit_category != "Neutral"]
         
-        count4_drop_neutral <- rbind(copy(exits)[, .N, agency], data.table(agency = "Either", N = nrow(exits)))
+        count04_drop_neutral <- rbind(copy(exits)[, .N, agency], data.table(agency = "Either", N = nrow(exits)))
         
         exits <- unique(exits)
         
-        count5_unique <- rbind(copy(exits)[, .N, agency], data.table(agency = "Either", N = nrow(exits)))
+        count05_unique <- rbind(copy(exits)[, .N, agency], data.table(agency = "Either", N = nrow(exits)))
         
     # PHA Demographic data (demographics) ----
       demographics <- unique(demographics)
@@ -238,7 +240,7 @@
         
         combo <- combo[!is.na(id_esd)]
         
-        count6_xwalk_esd <- rbind(copy(combo)[, .N, agency], data.table(agency = "Either", N = nrow(combo)))
+        count06_xwalk_esd <- rbind(copy(combo)[, .N, agency], data.table(agency = "Either", N = nrow(combo)))
         
     # merge demographics onto exit_xwalk ----
         combo <- merge(combo, demographics, by = c("id_hudhears", "exit_date"), all.x = TRUE, all.y = FALSE)
@@ -251,7 +253,7 @@
         
         combo <- combo[!is.na(hh_id_kc_pha)]
         
-        count7_add_demog <- rbind(copy(combo)[, .N, agency], data.table(agency = "Either", N = nrow(combo)))
+        count07_add_demog <- rbind(copy(combo)[, .N, agency], data.table(agency = "Either", N = nrow(combo)))
 
     # merge geocodes onto ESD address data ----
         address <- merge(esd_address, geocodes, by = "geo_hash_geocode", all.x = F, all.y = F)
@@ -260,11 +262,11 @@
     # merge ESD address info onto wage data accounting for specific time windows ----
         # use data.table::foverlaps to limit when wage date is in the address time window
         # addresses from ESD data
-        setkey(wage, id_esd, qdate, qdate2) # keys define the foverlaps 'by' variable, with final two designating the interval 
+        setkey(wage, id_esd, qtr_date, qtr_date2) # keys define the foverlaps 'by' variable, with final two designating the interval 
         setkey(address, id_esd, start_date, end_date)
         wage_address = foverlaps(wage, address, mult = "last", nomatch = NA) # keeps all the wage data and just the address data that can be merged by id_esd and date
         
-        wage_address <- wage_address[, .(id_esd, qdate, qdate2, wage, hrs, geo_countyfp10, geo_tractce10)]
+        wage_address <- wage_address[, .(id_esd, qtr_date, qtr_date2, wage, hrs, geo_countyfp10, geo_tractce10)]
         
     # merge PHA addresses onto wage data by date to get most complete list of addresses ----
         # rename geographies to distinguish from those in wage data
@@ -274,7 +276,7 @@
         wage_address <- wage_address[id_esd %in% unique(combo$id_esd)]
         
         # use data.table::foverlaps to limit when wage date is in the address time window
-        setkey(wage_address, id_esd, qdate, qdate2)
+        setkey(wage_address, id_esd, qtr_date, qtr_date2)
         setkey(combo_address, id_esd, from_date, exit_date)
         wage_combo_address = foverlaps(wage_address, combo_address, nomatch = NA)
         
@@ -283,7 +285,7 @@
         wage_combo_address[!is.na(combo_geo_countyfp10), geo_countyfp10 := combo_geo_countyfp10]
         
         # keep specific columns
-        wage_combo_address <- wage_combo_address[, .(id_esd, qdate, wage, hrs, wage_geo_countyfp10 = geo_countyfp10, wage_geo_tractce10 = geo_tractce10)]
+        wage_combo_address <- wage_combo_address[, .(id_esd, qtr_date, wage, hrs, wage_geo_countyfp10 = geo_countyfp10, wage_geo_tractce10 = geo_tractce10)]
         
     # merge wage onto exit_xwalk_demographics ----
       # (1) create template of id_hudhears and all relevant quarters (+/- 4 quarters from exit) ----
@@ -298,9 +300,9 @@
           template <- melt(template, 
                          id.vars = c("id_hudhears", "exit_qtr"), 
                          measure.vars = grep("^t", names(template), value = T),
-                         value.name = "qdate")
+                         value.name = "qtr_date")
         # tidy and create quarter indicator
-          template <- setorder(template[, .(id_hudhears, qdate)], id_hudhears, qdate)
+          template <- setorder(template[, .(id_hudhears, qtr_date)], id_hudhears, qtr_date)
           template[, qtr := -4:4, id_hudhears]
 
       # (2) merge template of all quarters of interest onto exit_xwalk_demographics ----
@@ -311,7 +313,7 @@
             combo[qtr %in% 1:4, c("geo_tractce10", "geo_countyfp10") := NA ]
       
       # (3) merge on wages based on id_esd and specific quarters of interest ----
-          combo <- merge(combo, copy(wage_combo_address), by = c("id_esd", "qdate"), all.x = T, all.y = F)
+          combo <- merge(combo, copy(wage_combo_address), by = c("id_esd", "qtr_date"), all.x = T, all.y = F)
         
       # (4) fill in tract and county from ESD wage data addresses when possible for any qtr 1+ ----
         combo[qtr > 0 & !is.na(wage_geo_tractce10), geo_tractce10 := wage_geo_tractce10]
@@ -324,18 +326,18 @@
           unique(combo[!is.na(wage) & qtr %in% 1:4]$id_esd))
         combo <- combo[id_esd %in% usable_id_esd]
         
-        count8_add_wages <- rbind(unique(combo[, .(id_esd, agency)])[, .N, agency], data.table(agency = "Either", N = length(unique(combo$id_esd)) ))
+        count08_add_wages <- rbind(unique(combo[, .(id_esd, agency)])[, .N, agency], data.table(agency = "Either", N = length(unique(combo$id_esd)) ))
 
 # Tidy combined data.table ----
     # drop if have not been in public housing for at least one year ----
         combo <- combo[housing_time_at_exit >= 1]
         
-        count9_min_1yr <- rbind(unique(combo[, .(id_esd, agency)])[, .N, agency], data.table(agency = "Either", N = length(unique(combo$id_esd)) ))
+        count09_min_1yr <- rbind(unique(combo[, .(id_esd, agency)])[, .N, agency], data.table(agency = "Either", N = length(unique(combo$id_esd)) ))
         
     # fill in missing wage, hrs, & address data when possible ----
       # wage data ----
         setorder(combo[is.na(wage), .N, qtr], qtr)[]
-        setorder(combo, id_esd, qdate, qtr)
+        setorder(combo, id_esd, qtr_date, qtr)
         combo[, wage  := nafill(wage, type = 'locf'), by = "id_esd" ] # fill geoid forward / downward
         combo[, wage  := nafill(wage, type = 'nocb'), by = "id_esd" ] # fill geoid backward / upward
         combo[, hrs  := nafill(hrs, type = 'locf'), by = "id_esd" ] # fill geoid forward / downward
@@ -376,28 +378,50 @@
           Raj Chetty's Opportunity Atlast / Opportunity Insights is available by census tract for the whole country
           but does not provide a singluar index / composite indicator.")
           
-          # Note that kc_opp_index_score only definitely applies to the geography at the time of exit, 
-          # and therefore to the 4 quarters prior to exit. 
-          combo[, scorediff := kc_opp_index_score - opportunity_index]
-          
-          nrow(combo)
-          nrow(combo[is.na(opportunity_index)])
-          nrow(combo[is.na(kc_opp_index_score)])
-          nrow(combo[kc_opp_index_score != opportunity_index])
-
-          # would expect the following to match because, so zero rows ... which is true except for rounding errors far out
-          View(setorder(combo[id_esd %in% unique(combo[kc_opp_index_score != opportunity_index,]$id_esd) & 
-                                qtr %in% -4:0, 
-                              .(id_esd, qtr, geo_countyfp10, geo_tractce10, scorediff, kc_opp_index_score, opportunity_index)], 
-                        id_esd, qtr))
+          # ignore kc_opp_index_score bc copies opportunity_index, but only for quarters -4:0 and only for KC
+          combo[, kc_opp_index_score := NULL]
 
 # Select/order columns in final dataset ----
-    blah <- combo[, .(hh_id_kc_pha, id_kc_pha, 
-                      exit_category, exit_date, exit_qtr, qtr, exit_reason_clean,
-                      wage, ami, percent_ami, opportunity_index,
+    setorder(combo, hh_id_kc_pha, id_kc_pha, qtr)
+    combo <- combo[, .(hh_id_kc_pha, id_kc_pha, 
+                      exit_category, exit_date, exit_qtr, qtr, qtr_date,
+                      wage, hrs, ami, percent_ami, opportunity_index,
                       race_eth_me, gender_me, age_at_exit, hh_size, hh_disability, n_disability, 
                       single_caregiver, housing_time_at_exit, 
-                      agency, major_prog, subsidy_type)]
-    setorder(combo, hh_id_kc_pha, id_kc_pha, qtr)
+                      agency, major_prog, subsidy_type, exit_reason_clean)]
 
+    count10_final <- rbind(unique(combo[, .(id_kc_pha, agency)])[, .N, agency], data.table(agency = "Either", N = length(unique(combo$id_kc_pha)) ))
+    
+# Write analytic table ----
+    # open connection to prod----
+      hhsaw16 = create_db_connection( # this is dev
+        server = "hhsaw", 
+        prod = T, 
+        interactive = F
+      )
+    
+    # write table to T ----
+    DBI::dbWriteTable(conn = hhsaw16, 
+                      name = DBI::Id(schema = "hudhears", table = "wage_analytic_table"), 
+                      value = setDF(copy(combo)), 
+                      append = F, 
+                      overwrite = T)
+      
+# Get summary of all counts as data set is processed ----
+    counts <- grep("^count", ls(), value = T)
+    count.history <- data.table(source = NA_character_, agency = NA_character_, N = NA_integer_)
+    for(cc in counts){
+      tempy <- get(cc)
+      tempy[, source := cc]
+      count.history <- rbind(count.history, tempy)
+    }
+    
+    # reshape long to wide
+    count.history <- dcast(county.history, source ~ agency, value.var = "N")
+    count.history[, "NA" := NULL]
+    count.history <- count.history[!is.na(source)]
+    
+# Print summary of all counts as data is processed ----    
+    print(count.history)
+    
 # The end! ----

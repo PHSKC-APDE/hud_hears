@@ -46,7 +46,7 @@ exits <- dbGetQuery(db_hhsaw, "SELECT DISTINCT agency, id_hudhears, act_date, ex
 
 ## Add exit type and opportunity index ----
 exit_nodeath <- covariate %>% filter(exit_death != 1 & exit == 1) %>%
-  left_join(., exits, by = c("id_hudhears", "exit_date" = "act_date", "exit_reason_clean", "exit_category"))
+  left_join(., exits, by = c("agency", "id_hudhears", "exit_date" = "act_date", "exit_reason_clean", "exit_category"))
 
 
 ## Set up outcomes and inclusion flag ----
@@ -72,45 +72,23 @@ exit_nodeath <- exit_nodeath %>%
 
 
 # DEMOGRAPHICS ----
+# Functions are found in the pha_exit_factors.R code
+
 ## Demogs by Medicaid status ----
 # Age
-exit_age <- exit_nodeath %>% 
-  mutate(senior = case_when(age_at_exit >= 62 ~ 1L, age_at_exit < 62 ~ 0L),
-         child = case_when(age_at_exit < 18 ~ 1L, age_at_exit >= 18 ~ 0L)) %>%
-  filter(!is.na(age_at_exit)) %>%
-  group_by(full_cov_7_prior, full_cov_7_after) %>%
-  summarise(n = n(), 
-            age_mean = mean(age_at_exit),
-            age_med = median(age_at_exit),
-            age_min = min(age_at_exit),
-            age_max = max(age_at_exit),
-            senior = mean(senior),
-            child = mean(child))
+exit_age <- age_sum(exit_nodeath, full_cov_7_prior, full_cov_7_after)
 
 # Gender
-exit_gender <- exit_nodeath %>% 
-  count(full_cov_7_prior, full_cov_7_after, gender_me) %>%
-  group_by(full_cov_7_prior, full_cov_7_after) %>%
-  mutate(tot = sum(n), pct = round(n/tot*100,1))
+exit_gender <- demog_pct_sum(exit_nodeath, level = "ind", demog = "gender", full_cov_7_prior, full_cov_7_after)
 
 # Race/eth
-exit_race <- exit_nodeath %>% 
-  count(full_cov_7_prior, full_cov_7_after, race_eth_me) %>%
-  group_by(full_cov_7_prior, full_cov_7_after) %>%
-  mutate(tot = sum(n), pct = round(n/tot*100,1)) %>%
-  as.data.frame()
+exit_gender <- demog_pct_sum(exit_nodeath, level = "ind", demog = "race", full_cov_7_prior, full_cov_7_after)
 
-# Time in housing
-exit_los <- exit_nodeath %>% 
-  filter(!is.na(housing_time_at_exit)) %>%
-  group_by(full_cov_7_prior, full_cov_7_after) %>%
-  summarise(n = n(),
-            los_mean = mean(housing_time_at_exit),
-            los_med = median(housing_time_at_exit))
+# Time in housing (measured for head of household)
+exit_los <- hh_los_sum(exit_nodeath, full_cov_7_prior, full_cov_7_after)
 
 
 ## Demogs by exit ----
-# Functions are found in the pha_exit_factors.R code
 # Age
 exit_type_age <- age_sum(exit_nodeath %>% filter(include_cov == T & include_demog == T), exit_category)
 
@@ -160,7 +138,7 @@ outcome_sum <- function(df,
     cat_text <- "Hospitalizations after exit"
     output <- df %>% 
       distinct(id_kc_pha, exit_date, ..., hosp_cnt_after, hosp_any_after) %>%
-      mutate(cnt = hosp_cnt_prior, any = hosp_any_prior)
+      mutate(cnt = hosp_cnt_after, any = hosp_any_after)
   } else if (outcome == "wc_prior") {
     cat_text <- "Well child checks prior to exit"
     output <- df %>% 
@@ -175,18 +153,26 @@ outcome_sum <- function(df,
       mutate(cnt = wc_cnt_after, any = wc_any_after)
   }
   
+  if (str_detect(outcome, "hosp")) {
+    multiplier <- 100
+  } else {
+    multiplier <- 1
+  }
+  
   output <- output %>% 
     group_by(...) %>%
     summarise(n = number(n(), big.mark = ","), 
               any = scales::percent(mean(any, na.rm = T), accuracy = 0.1L),
-              visit_mean = round(mean(cnt, na.rm = T), 1), 
-              vist_med = median(cnt, na.rm = T),
+              visit_mean = round(mean(cnt * multiplier, na.rm = T), 1), 
+              vist_med = median(cnt * multiplier, na.rm = T),
               visit_range = paste0(min(cnt, na.rm = T), "-", max(cnt, na.rm = T))) %>% 
     pivot_longer(cols = !col_names, values_transform = list(value = as.character)) %>%
     pivot_wider(id_cols = "name", names_from = col_names) %>%
     mutate(category = cat_text, .before = "name",
            name = case_when(name == "any" ~ "Proportion with 1+ event",
+                            str_detect(outcome, "hosp") & name == "visit_mean" ~ "Mean number events (per 100)",
                             name == "visit_mean" ~ "Mean number events",
+                            str_detect(outcome, "hosp") & name == "vist_med" ~ "Median number events (per 100)",
                             name == "vist_med" ~ "Median number events",
                             name == "visit_range" ~ "Range of event numbers",
                             TRUE ~ name)) %>%
@@ -206,7 +192,7 @@ hosp_type_prior <- outcome_sum(df = exit_nodeath %>% filter(include_cov == T & i
                              outcome = "hosp_prior", exit_category)
 
 hosp_type_after <- outcome_sum(df = exit_nodeath %>% filter(include_cov == T & include_demog == T),
-                             outcome = "hosp_prior", exit_category)
+                             outcome = "hosp_after", exit_category)
 
 wc_type_prior <- outcome_sum(df = exit_nodeath %>% filter(include_cov == T & include_demog == T),
                              outcome = "wc_prior", exit_category)
@@ -218,7 +204,7 @@ wc_type_after <- outcome_sum(df = exit_nodeath %>% filter(include_cov == T & inc
 # Combine outcomes
 outcomes_type <- bind_rows(ed_type_prior, ed_type_after, hosp_type_prior,
                            hosp_type_after, wc_type_prior, wc_type_after) %>%
-  filter(!group == "n")
+  filter(!group == "n" | str_detect(category, "Well child"))
 
 
 # REGRESSION MODEL ----
@@ -259,11 +245,11 @@ model_data_mcaid <- model_data_mcaid %>%
   mutate(iptw = case_when(exit_category == "Neutral" ~ 1/neutral,
                           exit_category == "Negative" ~ 1/negative,
                           exit_category == "Positive" ~ 1/positive))
- 
+
+# Set up version with no neutral
+model_data_mcaid_pn <- model_data_mcaid %>% filter(exit_category != "Neutral")
 
 model_data_mcaid$exit_category <- relevel(factor(model_data_mcaid$exit_category), ref = "Neutral")
-
-model_data_mcaid_pn <- model_data_mcaid %>% filter(exit_category != "Neutral")
 
 
 ## Evaluate propensity scores ----
@@ -281,7 +267,7 @@ ed <- geepack::geeglm(formula = ed_any_after ~ exit_category,
 
 ### Crude ----
 ed_crude <- geepack::geeglm(ed_any_after ~ exit_category, 
-                data = model_data_mcaid[model_data_mcaid$exit_category != "Neutral", ],
+                data = model_data_mcaid_pn,
                 id = hh_id_kc_pha,
                 family = "binomial")
 
@@ -290,6 +276,7 @@ exp(cbind(OR = coef(ed_crude), confint(ed_crude)))
 
 
 ### Adjusted ----
+# Positive vs negative model
 ed_adj <- glm(ed_any_after ~ exit_category + gender_me + race_eth_me + agegrp + los + 
                        major_prog + hh_size + single_caregiver + hh_disability + 
                        ed_cnt_prior + ccw_flag, 
@@ -303,6 +290,23 @@ ed_adj_results <- data.frame(Category = names(coef(ed_adj)),
                              exp(confint(ed_adj)), 
                              p_value = summary(ed_adj)[["coefficients"]][, 4]) %>%
   rename(ci_lb = X2.5.., ci_ub = X97.5..)
+
+
+# Multinomial model
+ed_adj_mult <- glm(ed_any_after ~ exit_category + gender_me + race_eth_me + agegrp + los + 
+                     major_prog + hh_size + single_caregiver + hh_disability + 
+                     ed_cnt_prior + ccw_flag, 
+                   data = model_data_mcaid, 
+                   family = "binomial")
+
+summary(ed_adj)
+ed_adj_p <- summary(ed_adj)[["coefficients"]][2, 4]
+ed_adj_results <- data.frame(Category = names(coef(ed_adj)), 
+                             OR = exp(coef(ed_adj)), 
+                             exp(confint(ed_adj)), 
+                             p_value = summary(ed_adj)[["coefficients"]][, 4]) %>%
+  rename(ci_lb = X2.5.., ci_ub = X97.5..)
+
 
 
 ## Hospitalizations visits ----

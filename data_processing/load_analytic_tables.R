@@ -89,9 +89,8 @@ exit_timevar <- dbGetQuery(db_hhsaw,
 
 # Set up list of IDs, exits, and dates
 exits <- exit_timevar %>% 
-  filter(true_exit == 1 & 
-           ((agency == "SHA" & act_date >= "2012-01-01" & act_date <= "2018-12-31") | 
-              (agency == "KCHA" & act_date >= "2016-01-01" & act_date <= "2018-12-31"))) %>%
+  filter(true_exit == 1 & exit_type_keep == 1 & 
+           exit_order_study == exit_order_max_study & !is.na(exit_order_study)) %>%
   distinct(id_kc_pha, act_date) %>%
   arrange(id_kc_pha, act_date) %>%
   # Take the most recent exit for the ~200 people with multiple exits
@@ -103,7 +102,7 @@ exits <- exit_timevar %>%
 # Set up a list of controls
 # This will be everyone at first (including people who eventually exit) 
 # but as controls are sampled they will be removed from this data frame
-controls <- setDT(exit_timevar %>% select(id_kc_pha, from_date, to_date, period, true_exit, act_date))
+controls <- setDT(exit_timevar %>% distinct(id_kc_pha, from_date, to_date, period, true_exit, act_date))
   # Add in the max date by a person's period in housing to make things easier
 controls[, max_period_date := max(to_date), by = .(id_kc_pha, period)]
 
@@ -493,6 +492,19 @@ wc_visits_after <- dbGetQuery(db_hhsaw,
                            GROUP BY x.id_hudhears, x.exit_date")
 
 
+## Opportunity index ----
+# load opportunity index data (version standardized in King County)
+kc_opp_index_data <- read_csv(file.path(here::here(), "analyses/capstone/00_opportunity_index",
+                                        "kc_opp_indices_scaled.csv")) %>%
+  # create variables for state, county, and tract identifies
+  mutate(GEO_STATE= substr(GEOID10, 1, 2),
+         GEO_COUNTY= substr(GEOID10, 3, 5),
+         GEO_TRACT= substr(GEOID10, 6, 11)) %>%
+  select(GEOID10, GEO_STATE, GEO_COUNTY, GEO_TRACT, everything()) %>%
+  rename(kc_opp_index_score = OPP_Z)
+
+
+
 
 ## Final table ----
 covariate <- control_match_long %>%
@@ -538,8 +550,10 @@ covariate <- covariate %>%
          vouch_type_final = coalesce(vouch_type_final.x, vouch_type_final.y),
          portfolio_final = coalesce(portfolio_final.x, portfolio_final.y),
          geo_tractce10 = coalesce(geo_tractce10.x, geo_tractce10.y)) %>%
+  left_join(., distinct(kc_opp_index_data, GEO_TRACT, kc_opp_index_score),
+            by= c("geo_tractce10" = "GEO_TRACT")) %>%
   select(id_hudhears:exit_date, exit_reason_clean, exit_category, exit_death, gender_me:age_at_exit,  
-         housing_time_at_exit, hh_id_kc_pha, hh_demog_date, agency:geo_tractce10, 
+         housing_time_at_exit, hh_id_kc_pha, hh_demog_date, agency:geo_tractce10, kc_opp_index_score, 
          hh_size:single_caregiver) %>%
   left_join(., select(mcaid_elig_prior, id_hudhears, exit_date, full_cov_11_prior, full_cov_7_prior), 
             by = c("id_hudhears", "exit_date")) %>%

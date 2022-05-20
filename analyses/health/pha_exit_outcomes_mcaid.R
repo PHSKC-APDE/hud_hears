@@ -40,71 +40,13 @@ exits <- dbGetQuery(db_hhsaw, "SELECT DISTINCT agency, id_hudhears, act_date, ex
                     FROM pha.stage_pha_exit_timevar
                     WHERE chooser = chooser_max AND
                     true_exit = 1 AND act_date IS NOT NULL AND
-                    ((act_date >= '2016-01-01' AND act_date <= '2018-12-31' AND agency = 'KCHA') OR
-                    (act_date >= '2012-01-01' AND act_date <= '2018-12-31' AND agency = 'SHA'))")
-
-# load opportunity index data (version standardized in King County)
-kc_opp_index_data <- read_csv(file.path(here::here(), "analyses/capstone/00_opportunity_index",
-                                        "kc_opp_indices_scaled.csv")) %>%
-  # create variables for state, county, and tract identifies
-  mutate(GEO_STATE= substr(GEOID10, 1, 2),
-         GEO_COUNTY= substr(GEOID10, 3, 5),
-         GEO_TRACT= substr(GEOID10, 6, 11)) %>%
-  select(GEOID10, GEO_STATE, GEO_COUNTY, GEO_TRACT, everything()) %>%
-  rename(kc_opp_index_score = OPP_Z)
-
-
-## Sort out multiple exit types ----
-set.seed(98104)
-exits <- exits %>% 
-  mutate(exit_pos = case_when(is.na(exit_category) ~ NA_integer_,
-                              exit_category == "Positive" ~ 1L,
-                              TRUE ~ 0L),
-         exit_neg = case_when(is.na(exit_category) ~ NA_integer_,
-                              exit_category == "Negative" ~ 1L,
-                              TRUE ~ 0L),
-         exit_neu = case_when(is.na(exit_category) ~ NA_integer_,
-                              exit_category == "Neutral" ~ 1L,
-                              TRUE ~ 0L),
-         decider = runif(nrow(exits), 0, 1)) %>%
-  group_by(id_hudhears, act_date) %>%
-  mutate(row_n = n(),
-         exit_pos_sum = sum(exit_pos, na.rm = T),
-         exit_neg_sum = sum(exit_neg, na.rm = T),
-         exit_neu_sum = sum(exit_neu, na.rm = T),
-         decider_max = max(decider)) %>%
-  ungroup()
-
-# Logic for keeping rows (there are only max 2 in a duplicate set)
-# 1) If one positive/negative and one neutral, keep the positive/negative
-#    (from review, these appear to be more descriptive)
-# 2) If one positive and one negative, take positive 
-#    (mostly over income/moved to non-subsidized rental vs. vaguer negative reason)
-# 3) If both one category, randomly select one
-exits <- exits %>%
-  mutate(drop = case_when(row_n == 1 ~ 0L,
-                          (exit_pos_sum == 1 | exit_neg_sum == 1) & exit_neu_sum == 1 &
-                            exit_category %in% c("Positive", "Negative") ~ 0L,
-                          (exit_pos_sum == 1 | exit_neg_sum == 1) & exit_neu_sum == 1 &
-                            exit_category == "Neutral" ~ 1L,
-                          exit_pos_sum == 1 & exit_neg_sum == 1 & exit_category == "Positive" ~ 0L,
-                          exit_pos_sum == 1 & exit_neg_sum == 1 & exit_category == "Negative" ~ 1L,
-                          (exit_pos_sum == 2 | exit_neg_sum == 2 | exit_neu_sum == 2) &
-                            decider == decider_max ~ 0L,
-                          (exit_pos_sum == 2 | exit_neg_sum == 2 | exit_neu_sum == 2) &
-                            decider != decider_max ~ 1L
-                          )) %>%
-  filter(drop == 0) %>%
-  select(id_hudhears:exit_neu)
+                    exit_type_keep = 1 AND 
+                    exit_order_study = exit_order_max_study AND exit_order_study IS NOT NULL")
 
 
 ## Add exit type and opportunity index ----
 exit_nodeath <- covariate %>% filter(exit_death != 1 & exit == 1) %>%
-  left_join(., exits, by = c("id_hudhears", "exit_date" = "act_date", "exit_reason_clean", "exit_category"))
-
-exit_nodeath <- left_join(exit_nodeath,
-                          distinct(kc_opp_index_data, GEO_TRACT, kc_opp_index_score),
-                          by= c("geo_tractce10" = "GEO_TRACT"))
+  left_join(., exits, by = c("agency", "id_hudhears", "exit_date" = "act_date", "exit_reason_clean", "exit_category"))
 
 
 ## Set up outcomes and inclusion flag ----
@@ -130,45 +72,23 @@ exit_nodeath <- exit_nodeath %>%
 
 
 # DEMOGRAPHICS ----
+# Functions are found in the pha_exit_factors.R code
+
 ## Demogs by Medicaid status ----
 # Age
-exit_age <- exit_nodeath %>% 
-  mutate(senior = case_when(age_at_exit >= 62 ~ 1L, age_at_exit < 62 ~ 0L),
-         child = case_when(age_at_exit < 18 ~ 1L, age_at_exit >= 18 ~ 0L)) %>%
-  filter(!is.na(age_at_exit)) %>%
-  group_by(full_cov_7_prior, full_cov_7_after) %>%
-  summarise(n = n(), 
-            age_mean = mean(age_at_exit),
-            age_med = median(age_at_exit),
-            age_min = min(age_at_exit),
-            age_max = max(age_at_exit),
-            senior = mean(senior),
-            child = mean(child))
+exit_age <- age_sum(exit_nodeath, full_cov_7_prior, full_cov_7_after)
 
 # Gender
-exit_gender <- exit_nodeath %>% 
-  count(full_cov_7_prior, full_cov_7_after, gender_me) %>%
-  group_by(full_cov_7_prior, full_cov_7_after) %>%
-  mutate(tot = sum(n), pct = round(n/tot*100,1))
+exit_gender <- demog_pct_sum(exit_nodeath, level = "ind", demog = "gender", full_cov_7_prior, full_cov_7_after)
 
 # Race/eth
-exit_race <- exit_nodeath %>% 
-  count(full_cov_7_prior, full_cov_7_after, race_eth_me) %>%
-  group_by(full_cov_7_prior, full_cov_7_after) %>%
-  mutate(tot = sum(n), pct = round(n/tot*100,1)) %>%
-  as.data.frame()
+exit_gender <- demog_pct_sum(exit_nodeath, level = "ind", demog = "race", full_cov_7_prior, full_cov_7_after)
 
-# Time in housing
-exit_los <- exit_nodeath %>% 
-  filter(!is.na(housing_time_at_exit)) %>%
-  group_by(full_cov_7_prior, full_cov_7_after) %>%
-  summarise(n = n(),
-            los_mean = mean(housing_time_at_exit),
-            los_med = median(housing_time_at_exit))
+# Time in housing (measured for head of household)
+exit_los <- hh_los_sum(exit_nodeath, full_cov_7_prior, full_cov_7_after)
 
 
 ## Demogs by exit ----
-# Functions are found in the pha_exit_factors.R code
 # Age
 exit_type_age <- age_sum(exit_nodeath %>% filter(include_cov == T & include_demog == T), exit_category)
 
@@ -218,7 +138,7 @@ outcome_sum <- function(df,
     cat_text <- "Hospitalizations after exit"
     output <- df %>% 
       distinct(id_kc_pha, exit_date, ..., hosp_cnt_after, hosp_any_after) %>%
-      mutate(cnt = hosp_cnt_prior, any = hosp_any_prior)
+      mutate(cnt = hosp_cnt_after, any = hosp_any_after)
   } else if (outcome == "wc_prior") {
     cat_text <- "Well child checks prior to exit"
     output <- df %>% 
@@ -233,18 +153,26 @@ outcome_sum <- function(df,
       mutate(cnt = wc_cnt_after, any = wc_any_after)
   }
   
+  if (str_detect(outcome, "hosp")) {
+    multiplier <- 100
+  } else {
+    multiplier <- 1
+  }
+  
   output <- output %>% 
     group_by(...) %>%
     summarise(n = number(n(), big.mark = ","), 
               any = scales::percent(mean(any, na.rm = T), accuracy = 0.1L),
-              visit_mean = round(mean(cnt, na.rm = T), 1), 
-              vist_med = median(cnt, na.rm = T),
+              visit_mean = round(mean(cnt * multiplier, na.rm = T), 1), 
+              vist_med = median(cnt * multiplier, na.rm = T),
               visit_range = paste0(min(cnt, na.rm = T), "-", max(cnt, na.rm = T))) %>% 
     pivot_longer(cols = !col_names, values_transform = list(value = as.character)) %>%
     pivot_wider(id_cols = "name", names_from = col_names) %>%
     mutate(category = cat_text, .before = "name",
            name = case_when(name == "any" ~ "Proportion with 1+ event",
+                            str_detect(outcome, "hosp") & name == "visit_mean" ~ "Mean number events (per 100)",
                             name == "visit_mean" ~ "Mean number events",
+                            str_detect(outcome, "hosp") & name == "vist_med" ~ "Median number events (per 100)",
                             name == "vist_med" ~ "Median number events",
                             name == "visit_range" ~ "Range of event numbers",
                             TRUE ~ name)) %>%
@@ -264,7 +192,7 @@ hosp_type_prior <- outcome_sum(df = exit_nodeath %>% filter(include_cov == T & i
                              outcome = "hosp_prior", exit_category)
 
 hosp_type_after <- outcome_sum(df = exit_nodeath %>% filter(include_cov == T & include_demog == T),
-                             outcome = "hosp_prior", exit_category)
+                             outcome = "hosp_after", exit_category)
 
 wc_type_prior <- outcome_sum(df = exit_nodeath %>% filter(include_cov == T & include_demog == T),
                              outcome = "wc_prior", exit_category)
@@ -276,7 +204,7 @@ wc_type_after <- outcome_sum(df = exit_nodeath %>% filter(include_cov == T & inc
 # Combine outcomes
 outcomes_type <- bind_rows(ed_type_prior, ed_type_after, hosp_type_prior,
                            hosp_type_after, wc_type_prior, wc_type_after) %>%
-  filter(!group == "n")
+  filter(!group == "n" | str_detect(category, "Well child"))
 
 
 # REGRESSION MODEL ----
@@ -317,7 +245,9 @@ model_data_mcaid <- model_data_mcaid %>%
   mutate(iptw = case_when(exit_category == "Neutral" ~ 1/neutral,
                           exit_category == "Negative" ~ 1/negative,
                           exit_category == "Positive" ~ 1/positive))
- 
+
+# Set up version with no neutral
+model_data_mcaid_pn <- model_data_mcaid %>% filter(exit_category != "Neutral")
 
 model_data_mcaid$exit_category <- relevel(factor(model_data_mcaid$exit_category), ref = "Neutral")
 
@@ -336,18 +266,22 @@ ed <- geepack::geeglm(formula = ed_any_after ~ exit_category,
                       family = "binomial")
 
 ### Crude ----
-ed_crude <- glm(ed_any_after ~ exit_category, 
-                data = model_data_mcaid[model_data_mcaid$exit_category != "Neutral", ], family = "binomial")
+ed_crude <- geepack::geeglm(ed_any_after ~ exit_category, 
+                data = model_data_mcaid_pn,
+                id = hh_id_kc_pha,
+                family = "binomial")
 
 summary(ed_crude)
 exp(cbind(OR = coef(ed_crude), confint(ed_crude)))
 
 
 ### Adjusted ----
+# Positive vs negative model
 ed_adj <- glm(ed_any_after ~ exit_category + gender_me + race_eth_me + agegrp + los + 
                        major_prog + hh_size + single_caregiver + hh_disability + 
                        ed_cnt_prior + ccw_flag, 
-                     data = model_data_mcaid[model_data_mcaid$exit_category != "Neutral", ], family = "binomial")
+                     data = model_data_mcaid[model_data_mcaid$exit_category != "Neutral", ], 
+              family = "binomial")
 
 summary(ed_adj)
 ed_adj_p <- summary(ed_adj)[["coefficients"]][2, 4]
@@ -356,6 +290,23 @@ ed_adj_results <- data.frame(Category = names(coef(ed_adj)),
                              exp(confint(ed_adj)), 
                              p_value = summary(ed_adj)[["coefficients"]][, 4]) %>%
   rename(ci_lb = X2.5.., ci_ub = X97.5..)
+
+
+# Multinomial model
+ed_adj_mult <- glm(ed_any_after ~ exit_category + gender_me + race_eth_me + agegrp + los + 
+                     major_prog + hh_size + single_caregiver + hh_disability + 
+                     ed_cnt_prior + ccw_flag, 
+                   data = model_data_mcaid, 
+                   family = "binomial")
+
+summary(ed_adj)
+ed_adj_p <- summary(ed_adj)[["coefficients"]][2, 4]
+ed_adj_results <- data.frame(Category = names(coef(ed_adj)), 
+                             OR = exp(coef(ed_adj)), 
+                             exp(confint(ed_adj)), 
+                             p_value = summary(ed_adj)[["coefficients"]][, 4]) %>%
+  rename(ci_lb = X2.5.., ci_ub = X97.5..)
+
 
 
 ## Hospitalizations visits ----

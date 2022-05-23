@@ -36,7 +36,7 @@
 # Set-up ----
     rm(list=ls())
     options("scipen" = 999) # turn off scientific notation
-    pacman::p_load(lubridate, httr, rads, data.table, DBI, odbc)
+    pacman::p_load(lubridate, httr, rads, data.table, DBI, odbc, consort)
     
     # output folder
       outputdir <- "C:/Users/dcolombara/King County/DPH Health And Housing - Documents/HUD HEARS Study/wage_analysis/output/"
@@ -91,16 +91,58 @@
       # there is also a `to_date` and `max_in_period` column which is usually, but not always
       # the same as exit_date (i.e., act_date). Following example in the capstone project of only
       # using exit_date(act_date).
+      # limit both PHA data to 2016-01-01 <> 20218-12-31 to avoid temporal biases
       exits <- setDT(DBI::dbGetQuery(conn = hhsaw16, 
                               "SELECT id_hudhears, id_kc_pha, from_date, exit_date = act_date,
                                       exit_reason_clean, exit_category, agency, subsidy_type, major_prog
                               FROM [pha].[stage_pha_exit_timevar]
-                              WHERE true_exit = 1 AND chooser = chooser_max AND
-                              true_exit = 1 AND 
+                              WHERE true_exit = 1 AND 
+                              chooser = chooser_max AND
                               act_date IS NOT NULL AND
+                              act_date >= '2016-01-01' AND act_date <= '2018-12-31' AND
                               exit_type_keep = 1 AND 
                               exit_order_study = exit_order_max_study AND 
                               exit_order_study IS NOT NULL"))
+
+    # Get PHA data for counts for CONSORT diagram ----
+        consort.dt <- setDT(DBI::dbGetQuery(conn = hhsaw16, 
+                                       "SELECT id_hudhears, id_kc_pha, from_date, exit_date = act_date,
+                                      exit_reason_clean, exit_category, agency, subsidy_type, major_prog, 
+                                      true_exit, exit_type_keep, exit_order_study,
+                                      exit_order_max_study
+                              FROM [pha].[stage_pha_exit_timevar]
+                                    WHERE chooser = chooser_max AND act_date IS NOT NULL"))    
+        
+        consort01_total_exits <- nrow(consort.dt)
+        
+        consort.dt[, outside_period := agency]
+        consort.dt[(agency == "KCHA" & exit_date >= as.Date("2016-01-01") & exit_date <= as.Date("2018-12-31")) |
+             (agency == "SHA" & exit_date >= as.Date("2016-01-01") & exit_date <= as.Date("2018-12-31")), 
+           outside_period := NA]
+        consort01_side_outside_period <- nrow(consort.dt[!is.na(outside_period)])
+        consort01_side_KCHA_outside <- nrow(consort.dt[outside_period == "KCHA"])
+        consort01_side_SHA_outside <- nrow(consort.dt[outside_period == "SHA"])
+        consort02_outside_period <- nrow(consort.dt[is.na(outside_period)])
+        
+        consort.dt[true_exit == 0 & is.na(outside_period), false_exit := "False exit"]
+        consort02_side_false_exit <- nrow(consort.dt[!is.na(false_exit)])
+        consort03_false_exit <- nrow(consort.dt[is.na(outside_period) & is.na(false_exit)])
+        
+        
+        consort.dt[, multiple_exits := "Multiple exits"]
+        consort.dt[is.na(outside_period) & is.na(false_exit) & 
+             exit_order_study == exit_order_max_study & exit_type_keep == 1, 
+           multiple_exits := NA]
+        consort03_side_multiple_exits <- nrow(consort.dt[is.na(outside_period) & is.na(false_exit) & !is.na(multiple_exits)])
+        consort04_multiple_exits <- nrow(consort.dt[is.na(outside_period) & is.na(false_exit) & is.na(multiple_exits)])
+
+        
+        consort.dt[, exit_reasons := "Missing or neutral deaths"]
+        consort.dt[is.na(outside_period) & is.na(false_exit) & is.na(multiple_exits) &
+             exit_category %in% c("Positive", "Negative"),
+           exit_reasons := NA]
+        consort04_side_exit_reasons <- nrow(consort.dt[is.na(outside_period) & is.na(false_exit) & is.na(multiple_exits) & !is.na(exit_reasons)])
+        consort05_exit_reasons <- nrow(consort.dt[is.na(outside_period) & is.na(false_exit) & is.na(multiple_exits) & is.na(exit_reasons)])
 
     # PHA Demographic data ----
       demographics <- setDT(DBI::dbGetQuery(conn = hhsaw16, 
@@ -169,15 +211,7 @@
       xwalk <- unique(xwalk)
       
     # PHA exit data (exits) ----
-      # baseline count of exits
-        count01_baseline <- rbind(copy(exits)[, .N, agency], data.table(agency = "Either", N = nrow(exits)))
-      
-      # ??? limit dates to when have data for BOTH KCHA and SHA to avoid temporal biases in use of agency in model as a confounder
-        exits <- exits[exit_date >= "2016-01-01"]
-        
-        count02_limit_dates <- rbind(copy(exits)[, .N, agency], data.table(agency = "Either", N = nrow(exits)))
-        
-      # Note to my future self that the max date in the exit data prepared by Alastair is 2018-12-31 (as of 2022-05-18)
+       # Note to my future self that the max date in the exit data prepared by Alastair is 2018-12-31 (as of 2022-05-18)
         
       # identify the quarter in which the exits took places 
         exits[, exit_qtr := lubridate::yq(paste0(year(exit_date), ":Q", quarter(exit_date)))]
@@ -185,16 +219,17 @@
       # drop when reason for exits prohibits ability to identify future wages
         exits <- exits[exit_reason_clean != "Deceased"]
         
-        count03_drop_deceased <- rbind(copy(exits)[, .N, agency], data.table(agency = "Either", N = nrow(exits)))
-        
       # keep only positive and negative exits (for simpler binary comparison & because moving in with family / friends will confuse analysis)
         exits <- exits[exit_category != "Neutral"]
-        
-        count04_drop_neutral <- rbind(copy(exits)[, .N, agency], data.table(agency = "Either", N = nrow(exits)))
         
         exits <- unique(exits)
         
         count05_unique <- rbind(copy(exits)[, .N, agency], data.table(agency = "Either", N = nrow(exits)))
+        if(count05_unique != consort05_exit_reasons){
+          stop("The rows counts at this stage should match
+               consort05_exit_reasons")
+        }
+        
         
     # PHA Demographic data (demographics) ----
       demographics <- unique(demographics)
@@ -245,6 +280,9 @@
         
         count06_xwalk_esd <- rbind(copy(combo)[, .N, agency], data.table(agency = "Either", N = nrow(combo)))
         
+        consort06_match_id_esd <- nrow(combo)
+        consort05_side_match_id_esd <- consort05_exit_reasons - nrow(combo)
+
     # merge demographics onto exit_xwalk ----
         combo <- merge(combo, demographics, by = c("id_hudhears", "exit_date"), all.x = TRUE, all.y = FALSE)
         
@@ -257,6 +295,9 @@
         combo <- combo[!is.na(hh_id_kc_pha)]
         
         count07_add_demog <- rbind(copy(combo)[, .N, agency], data.table(agency = "Either", N = nrow(combo)))
+        
+        consort07_demographics <- nrow(combo)
+        consort06_side_demographics <- consort06_match_id_esd - nrow(combo)
 
     # merge geocodes onto ESD address data ----
         address <- merge(esd_address, geocodes, by = "geo_hash_geocode", all.x = F, all.y = F)
@@ -331,11 +372,17 @@
         
         count08_add_wages <- rbind(unique(combo[, .(id_esd, agency)])[, .N, agency], data.table(agency = "Either", N = length(unique(combo$id_esd)) ))
 
+        consort08_wages <- length(unique(combo$id_esd))
+        consort07_side_wages <- consort07_demographics - consort08_wages
+        
 # Tidy combined data.table ----
     # drop if have not been in public housing for at least one year ----
         combo <- combo[housing_time_at_exit >= 1]
         
         count09_min_1yr <- rbind(unique(combo[, .(id_esd, agency)])[, .N, agency], data.table(agency = "Either", N = length(unique(combo$id_esd)) ))
+        
+        consort09_min_1yr <- length(unique(combo$id_esd))
+        consort09_side_min_1yr <- consort08_wages - consort09_min_1yr
         
     # fill in missing wage, hrs, & address data when possible ----
       # wage data ----
@@ -410,22 +457,50 @@
                       append = F, 
                       overwrite = T)
       
-# Get summary of all counts as data set is processed ----
-    counts <- grep("^count", ls(), value = T)
-    count.history <- data.table(source = NA_character_, agency = NA_character_, N = NA_integer_)
-    for(cc in counts){
-      tempy <- get(cc)
-      tempy[, source := cc]
-      count.history <- rbind(count.history, tempy)
-    }
-    
-    # reshape long to wide
-    count.history <- dcast(count.history, source ~ agency, value.var = "N")
-    count.history[, "NA" := NULL]
-    count.history <- count.history[!is.na(source)]
-    
-# Save & print summary of all counts as data is processed ----
-    write.csv(count.history, paste0(outputdir, "count_history.csv"))
-    print(count.history)
+# Create consort diagram ----
+    # nicely format all consort counts ----
+      counts <- sort(grep("^consort[0-9][0-9]", ls(), value = T))
+      for(uglynum in counts){
+        assign(uglynum, format(get(uglynum), big.mark = ',', trim = T))
+      }
+      
+    # create consort diagram ----
+      consort.complete <- 
+        add_box(txt = paste0("Total exits: ", consort01_total_exits)) |>
+        add_side_box(txt = c(paste0("Exits outside study period: ", consort01_side_outside_period, 
+                                    "\n\u2022 KCHA: ", consort01_side_KCHA_outside, 
+                                    "\n\u2022 SHA: ", consort01_side_SHA_outside)))  |>
+        add_box(txt = paste0("Exits in study period: ", consort02_outside_period))   |>
+        add_side_box(txt = paste0("False exits: ", consort02_side_false_exit))   |>
+        add_box(txt = paste0("True exits: ", consort03_false_exit))   |>
+        add_side_box(txt = paste0("Multiple exits per person: ", consort03_side_multiple_exits))   |>
+        add_box(txt = paste0("Single exit per person: ", consort04_multiple_exits))   |>
+        add_side_box(txt = paste0("Neutral or missing exits: ", consort04_side_exit_reasons))   |>
+        add_box(txt = paste0("Positive and negative exits reasons: ", consort05_exit_reasons))   |>
+        add_side_box(txt = paste0("Could not link with ESD data: ", consort05_side_match_id_esd))   |>
+        add_box(txt = paste0("Linked to ESD data: ", consort06_match_id_esd))   |>
+        add_side_box(txt = paste0("Could not link with demographics: ", consort06_side_demographics))   |>
+        add_box(txt = paste0("Linked to demographics: ", consort07_demographics))   |>
+        add_side_box(txt = paste0("Could not link with wages: ", consort07_side_wages))   |>
+        add_box(txt = paste0("Linked to wages: ", consort08_wages))   |>
+        add_side_box(txt = paste0("Less than 1 year in public housing: ", consort09_side_min_1yr))   |>
+        add_box(txt = paste0("At least one year in public housing: ", consort09_min_1yr))
+        
+      myplot <- plot(consort.complete)
+      
+    # save consort diagram ----
+      ggsave(paste0(outputdir, "consort_diagram.pdf"),
+             plot = consort.complete, 
+             dpi=600, 
+             width = 6.5, 
+             height = 9, 
+             units = "in") 
+      ggsave(paste0(outputdir, "consort_diagram.png"),
+             plot = consort.complete, 
+             dpi=600, 
+             width = 6.5, 
+             height = 9, 
+             units = "in") 
+      
     
 # The end! ----

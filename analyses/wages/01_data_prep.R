@@ -38,6 +38,9 @@
     options("scipen" = 999) # turn off scientific notation
     pacman::p_load(lubridate, httr, rads, data.table, DBI, odbc)
     
+    # output folder
+      outputdir <- "C:/Users/dcolombara/King County/DPH Health And Housing - Documents/HUD HEARS Study/wage_analysis/output/"
+    
     # dictionary from GitHub
       dict <- fread("https://raw.githubusercontent.com/PHSKC-APDE/esd_etl/main/ref/esd_blob_dictionary.csv")
     
@@ -374,7 +377,7 @@
           combo <- merge(combo, opportunity, by = c("geo_tractce10"), all.x =  T, all.y = F)  
           message("!!!NOTE!!!
           Opportunity Index is only available for 4 counties identified by the Puget Sound Regional Council.
-          King (33), Kitsap (35), Pierce (53), Snohomish (61). \n
+          King (33), Kitsap (35), Pierce (53), Snohomish (61). /n
           Raj Chetty's Opportunity Atlast / Opportunity Insights is available by census tract for the whole country
           but does not provide a singluar index / composite indicator.")
           
@@ -417,11 +420,12 @@
     }
     
     # reshape long to wide
-    count.history <- dcast(county.history, source ~ agency, value.var = "N")
+    count.history <- dcast(count.history, source ~ agency, value.var = "N")
     count.history[, "NA" := NULL]
     count.history <- count.history[!is.na(source)]
     
-# Print summary of all counts as data is processed ----    
+# Save & print summary of all counts as data is processed ----
+    write.csv(count.history, paste0(outputdir, "count_history.csv"))
     print(count.history)
     
 # The end! ----

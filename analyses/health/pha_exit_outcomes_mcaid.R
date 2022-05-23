@@ -320,40 +320,66 @@ model_run <- function(outcome = c("ed", "hosp", "wc"), neutral = T) {
 }
 
 
-test <- model_run(outcome = "ed")
-summary(test)
-broom::tidy(test, conf.int = TRUE, exponentiate = T)
-
-test2 <- model_run(outcome = "ed", neutral = F)
-summary(test2)
-broom::tidy(test2, conf.int = TRUE, exponentiate = T)
-
 
 
 ## Evaluate propensity scores ----
-ps_chk1 <- nomLORgee(formula = exit_category ~ age_at_exit + gender_me + 
+ps_chk1_model <- nomLORgee(formula = exit_category ~ age_at_exit + gender_me + 
                         race_eth_me + agency + single_caregiver + hh_size +
                         hh_disability + housing_time_at_exit + major_prog +
                         ed_cnt_prior + ccw_flag + kc_opp_index_score,
                       data = model_data_mcaid,
                       id = id_hh,
                       LORstr = "independence")
-ps_chk1 <- as.data.frame(fitted(ps_chk1))
+ps_chk1 <- as.data.frame(fitted(ps_chk1_model))
 colnames(ps_chk1) <- c("neutral", "negative", "positive")
 
 summarytools::dfSummary(ps_chk1)
 
-ps_chk2 <- nomLORgee(formula = exit_category ~ age_at_exit + gender_me + 
+ps_chk2_model <- nomLORgee(formula = exit_category ~ age_at_exit + gender_me + 
                         race_eth_me + agency + single_caregiver + hh_size +
                         hh_disability + housing_time_at_exit + major_prog +
                         ed_cnt_prior + ccw_flag + kc_opp_index_score,
                       data = model_data_mcaid,
                       id = hh_id_kc_pha,
                       LORstr = "independence")
-ps_chk2 <- as.data.frame(fitted(ps_chk2))
+ps_chk2 <- as.data.frame(fitted(ps_chk2_model))
 colnames(ps_chk2) <- c("neutral", "negative", "positive")
 
 summarytools::dfSummary(ps_chk2)
+
+
+
+## Testing ----
+# Test with PS cluster = hh_id_kc_pha
+test <- model_run(outcome = "ed")
+summary(test)
+broom::tidy(test, conf.int = TRUE, exponentiate = T)
+
+# Test with PS cluster = id_hh
+test2 <- model_run(outcome = "ed")
+summary(test2)
+broom::tidy(test2, conf.int = TRUE, exponentiate = T)
+
+
+# Test running things manually
+ps_chk1_bind <- cbind("id_kc_pha" = sort(model_data_mcaid$id_kc_pha), ps_chk1)
+
+chk <-  left_join(model_data_mcaid, ps_chk1_bind, by = "id_kc_pha") %>%
+  mutate(iptw = case_when(exit_category == "Neutral" ~ 1/neutral,
+                          exit_category == "Negative" ~ 1/negative,
+                          exit_category == "Positive" ~ 1/positive)) %>%
+  arrange(id_hh, id_kc_pha)
+
+chk$exit_category <- relevel(factor(chk$exit_category), ref = "Negative")
+
+chk_model <- geepack::geeglm(formula = ed_any_after ~ exit_category,
+                             weights = iptw,
+                             data = chk,
+                             id = id_hh,
+                             family = "binomial")
+
+summary(chk_model)
+broom::tidy(chk_model, conf.int = TRUE, exponentiate = T)
 
 
 ## ED visits ----
@@ -365,7 +391,7 @@ broom::tidy(ed, conf.int = TRUE, exponentiate = T)
 
 ### Crude ----
 ed_crude <- geepack::geeglm(ed_any_after ~ exit_category, 
-                data = model_data_mcaid_pn,
+                data = model_data_mcaid,
                 id = id_hh,
                 family = "binomial")
 
@@ -386,15 +412,16 @@ ed_adj_bin <- geepack::geeglm(ed_any_after ~ exit_category + gender_me + race_et
 
 broom::tidy(ed_adj_bin, conf.int = TRUE, exponentiate = T)
 
+
 # Multinomial model
 ed_adj_mult <- geepack::geeglm(ed_any_after ~ exit_category + gender_me + race_eth_me + age_at_exit + housing_time_at_exit + 
                                  agency + major_prog + hh_size + single_caregiver + hh_disability + 
                                  ed_cnt_prior + ccw_flag, 
-                               data = model_data_mcaid[model_data_mcaid$full_cov_7_prior == T & 
-                                                         model_data_mcaid$full_cov_7_after == T, ], 
+                               data = model_data_mcaid, 
                                id = id_hh,
                                family = "binomial")
 
+summary(ed_adj_mult)
 broom::tidy(ed_adj_mult, conf.int = TRUE, exponentiate = T)
 
 

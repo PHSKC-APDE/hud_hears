@@ -24,8 +24,7 @@
     options(scipen = 999)
     pacman::p_load(lubridate, rads, data.table, DBI, odbc, ggplot2, lme4, margins)
     # library(lmerTest)  # commented out because want to be sure lmer function is called from lme4 by default
-    
-    
+
     # output folder
     outputdir <- "C:/Users/dcolombara/King County/DPH Health And Housing - Documents/HUD HEARS Study/wage_analysis/output/"
     
@@ -58,8 +57,8 @@
     step1 <- copy(raw)
     
     # create binaries for DiD ----
-    step1[qtr == -4, time := 0]
-    step1[qtr == 0, time := 1]
+    step1[qtr == -4, time := -1]
+    step1[qtr == -1, time := 0]
     step1[exit_category == "Negative", exit := 0]
     step1[exit_category == "Positive", exit := 1]
     
@@ -76,7 +75,7 @@
       mod1 <- lme4::lmer(mod1.formula, data = step1)
       mod1.tidy <- as.data.table(broom.mixed::tidy(mod1, conf.int = T))
 
-    # Test if p-value for interaction term is < 0.05 ----
+    # test if p-value for interaction term is < 0.05 ----
       mod1.test <- suppressWarnings(lmerTest::lmer(mod1.formula, data = step1, REML = FALSE))
       mod1.test <- as.data.table(coef(summary(mod1.test)), keep.rownames = T)    
       if( mod1.test[rn == "exit:time"][["Pr(>|t|)"]] < 0.05) {
@@ -89,15 +88,49 @@
       mod1.margin.summary[]
     
     # create table of predictions for slopes in ggplot ... use setDF b/c can't use data.table ----
-      mod1.pred.exit = summary(margins::prediction(mod1, data = setDF(copy(step1)), at = list(exit=c(0, 1))))
-      mod1.pred.time = summary(margins::prediction(mod1, data = setDF(copy(step1)), at = list(time=c(0, 1))))
-    
+      mod1.preds <- as.data.table(summary(margins::prediction(mod1, data = setDF(copy(step1)), at = list(time=c(-1, 0), exit = c(0, 1)))))
+      mod1.preds[`at(exit)` == 0, exit_category := "Negative"][`at(exit)` == 1, exit_category := "Positive"]
+      mod1.preds <- mod1.preds[, .(time = `at(time)`, exit_category, wage = Prediction)]
+      mod1.preds[]
+      
     # Plot data prior to exit ----
       step1.plot = copy(step1)
-      step1.plot[exit == 0, time := time - .01] # add tiny shift for easier visualization
-      step1.plot[exit == 1, time := time + .01] # add tiny shift for easier visualization
-      plot1 <- ggplot(data = step1.plot, aes(x = time, y = wage, color = exit_category)) +
-        geom_point() 
-      plot(plot1)
+      step1.plot[exit == 0, time := time - .015] # add tiny shift for easier visualization
+      step1.plot[exit == 1, time := time + .015] # add tiny shift for easier visualization
+      plot1 <- ggplot() +
+        geom_point(data = step1.plot, aes(x = time, y = wage, color = exit_category)) + 
+        geom_line(data = mod1.preds, aes(x = time, y = wage, color = exit_category), size = 1) +
+        labs(title = paste0("Trends 1 year prior to exit"), 
+             subtitle = "Positive exits had greater mean wage increases", 
+             x = "Year", 
+             y = "Quarterly wages") +
+        scale_x_continuous(breaks = c(-1, 0)) +
+        scale_color_discrete("Exit type") +
+        theme(panel.grid.major = element_line(color = "white"), 
+              panel.background = element_rect(fill = "white"), 
+              panel.border = element_rect(colour = "black", fill=NA, size=.5),  
+              plot.title = element_text(hjust = 0.5), 
+              plot.subtitle = element_text(hjust = 0.5),
+              plot.caption = element_text(size=10),
+              legend.position = "right",
+              legend.background = element_rect(fill="white", size=0.5, linetype="solid", color ="white"), 
+              legend.title = element_text(size = 12), 
+              legend.key = element_rect(fill = "white", color = "white"),
+              legend.text = element_text(size = 10))
 
+      plot(plot1)
+      
+    # Save plot ----
+      ggsave(paste0(outputdir, "figure_1_prior_trends.pdf"),
+             plot = plot1, 
+             dpi=600, 
+             width = 6.5, 
+             height = 6.5, 
+             units = "in") 
+      ggsave(paste0(outputdir, "figure_1_prior_trends.png"),
+             plot = plot1, 
+             dpi=600, 
+             width = 6.5, 
+             height = 6.5, 
+             units = "in") 
 # The end ----

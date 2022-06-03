@@ -104,9 +104,9 @@ all_pop2 <- all_pop2 %>%
 # This model does not account for clustering by household
 
 #Change referent category
-all_pop2$exit_category <- relevel(all_pop2$exit_category*reg_care, ref="Neutral")
+all_pop2$exit_category <- relevel(all_pop2$exit_category, ref="Negative")
 no_mcaid_neutral <- glm(crisis_any ~ exit_category, 
-                        family=quasibinomial, data=all_pop2, weights=iptw)
+                        family=quasibinomial, data=all_pop2, weights=iptw, id = hh_id_kc_pha)
 exp(cbind(OR = coef(no_mcaid_neutral), confint(no_mcaid_neutral)))
 
 
@@ -130,12 +130,7 @@ no_mcaid_neutral <- glm(crisis_any ~ exit_category,
 exp(cbind(OR = coef(no_mcaid_neutral), confint(no_mcaid_neutral)))
 
 
-#Note this model is not working !
-# no_mcaid <-geepack::geeglm(formula = crisis_any ~ exit_category,
-#                            weights = iptw,
-#                            data = all_pop2,
-#                            id=hh_id_kc_pha,
-#                            family = "binomial")
+
 
               
 #Repeat propensity score models with Medicaid Coverage group ----
@@ -174,7 +169,7 @@ mcaid_subset7mo2 <- mcaid_subset7mo2 %>%
 ### 1c) Finally, fit model----
 # This model does not account for clustering by household
 #Change referent category
-mcaid_subset7mo2$exit_category <- relevel(mcaid_subset7mo2$exit_category, ref="Neutral")
+mcaid_subset7mo2$exit_category <- relevel(mcaid_subset7mo2$exit_category, ref="Negative")
 no_mcaid_neutral <- glm(crisis_any ~ exit_category, 
                         family=quasibinomial, data=a, weights=iptw)
 exp(cbind(OR = coef(no_mcaid_neutral), confint(no_mcaid_neutral)))

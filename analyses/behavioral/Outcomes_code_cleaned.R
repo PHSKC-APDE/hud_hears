@@ -1,5 +1,5 @@
 ## HUD HEARS Behavioral Health Exit Type Code ----
-#Code updated on 03/29/2022
+#Code updated on June 3 2022
 #Author: Megan Suter 
 
 #Code Purpose: Process data for HUD HEARS Behavioral Health Analysis
@@ -87,8 +87,8 @@ WHERE m.source IS NOT NULL
 ")
 
 #Create two individual-level counts and indicators for crisis events
-# First set DOES NOT include Medicaid events
-# Second DOES include Medicaid events
+# First set DOES NOT include Medicaid events (crisis_any, crisis_num)
+# Second DOES include Medicaid events (crisis_any_mcaid, crisis_num_mcaid)
 
 crisis_count <- left_join(crisis_events %>% group_by(id_hudhears, exit_date) %>% summarize(crisis_num_mcaid=n_distinct(event_date)),
                           crisis_events %>% filter(source != "mcaid") %>% group_by(id_hudhears, exit_date) %>% summarize(crisis_num=n_distinct(event_date)),
@@ -142,14 +142,16 @@ AND m.first_service_date <= z.exit_date
 WHERE m.source IS NOT NULL
 ")
 #Create two individual-level counts and indicators for crisis events
-# First set DOES NOT include Medicaid events
-# Second DOES include Medicaid events
+# First set DOES NOT include Medicaid events (crisis_any_before, crisis_num_before)
+# Second DOES include Medicaid events (crisis_any_mcaid_before, crisis_num_mcaid_before)
 
 crisis_count_before <- left_join(crisis_events_before %>% group_by(id_hudhears, exit_date) %>% summarize(crisis_num_mcaid_before=n_distinct(event_date)),
                           crisis_events_before %>% filter(source != "mcaid") %>% group_by(id_hudhears, exit_date) %>% summarize(crisis_num_before=n_distinct(event_date)),
                           by=c("id_hudhears", "exit_date")) %>% 
   mutate(crisis_any_mcaid_before=ifelse(crisis_num_mcaid_before >=1, 1, 0), 
          crisis_any_before=ifelse(crisis_num_before >=1, 1, 0))
+
+
 
 ## Behavioral Health Conditions----
 
@@ -178,9 +180,7 @@ condition_count_bh <- bh_conditions %>% group_by(id_hudhears, exit_date) %>% sum
 
 
 
-## Outpatient care ----
-
-##PULL in auth number and group by this variable when counting BH events (auth_no)
+## Outpatient visits ----
 
 #note- This is not dependent on Medicaid data
 outpt_bh <- dbGetQuery(db_hhsaw,
@@ -198,16 +198,17 @@ AND d.event_date <= z.exit_date AND d.event_date >= DATEADD(year, -1, z.exit_dat
 WHERE d.source IS NOT NULL
 ")
 
-#Count behavioral health outpatient visits per person and make indicator for people with 2_ visits
+#Count behavioral health outpatient visits per person and make indicator for people with 2+ visits
+#These variables group visits by auth number
+#reg_care2 is indicator for 2+ visits; out_count2 is count of outpt visits by auth number
 bh_outpt_count <- outpt_bh %>% group_by(id_hudhears, exit_date, auth_no) %>% 
   summarize(out_count=n_distinct(event_date)) %>% group_by(id_hudhears, exit_date)%>%
  mutate(out_count2=max(out_count, na.rm=T), 
         reg_care2=ifelse(out_count2 >=2, 1, 0), 
         reg_care=ifelse(out_count >=2, 1, 0)) %>% ungroup()
-##NOTE: reg_care2 and out_count2 
 
 
-## Join all of the above with covariate table----
+## Join all of the above with covariate table made by Alastair----
 
 #Read in covariate table for exits only
 control_match_covariate <- dbGetQuery(db_hhsaw, "SELECT *, DATEADD(year, -1, exit_date) as yr_before, DATEADD(year, 1, exit_date) AS yr_later FROM hudhears.control_match_covariate
@@ -264,6 +265,3 @@ all_pop <-left_join(all_pop, bh_outpt_count, by=c("id_hudhears", "exit_date"))
 #fix number and indicator variables for NAs
 #Assume anyone without an entry has 0 outpatient visits because outpatient visits are not from Medicaid data
 all_pop <- all_pop %>% mutate(out_count=ifelse(is.na(out_count), 0, out_count))%>% mutate(reg_care=ifelse(is.na(reg_care), 0, reg_care))
-
-
-table(bh_conditions$bh_cond)

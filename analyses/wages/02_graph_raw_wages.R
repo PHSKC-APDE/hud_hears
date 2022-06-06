@@ -39,6 +39,22 @@
       return(stderr/sqrt(vnx))  
     }
     
+# Create function to save plots with proper dimensions ----
+    saveplots <- function(plot.object = NULL, plot.name = NULL){
+      ggsave(paste0(outputdir, plot.name, ".pdf"),
+             plot = plot.object, 
+             dpi=600, 
+             width = 6.5, 
+             height = 6.5, 
+             units = "in") 
+      ggsave(paste0(outputdir, plot.name, ".png"),
+             plot = plot.object, 
+             dpi=600, 
+             width = 6.5, 
+             height = 6.5, 
+             units = "in") 
+    }
+
 # Load data ----
     # open connection 
     hhsaw16 = create_db_connection( # this is prod
@@ -73,28 +89,28 @@
     raw.stats[exit_category == "Negative", time := time - 0.17]
     raw.stats[exit_category == "Positive", time := time + 0.17]
     
-      
+    raw[, exit_category := factor(exit_category, levels = c("Positive", "Negative"))] # to force specific order in graph  
+    
 # Plot ----
     plot.new()      
-    dev.new(width = 6,  height = 4, unit = "in", noRStudioGD = TRUE)
     
     set.seed(98104) # because jitter is 'random'
     plot1 <- ggplot() +
       geom_point(data = raw[!is.na(time)],  aes(x = time, y = wage, color = exit_category), 
                  position=position_jitterdodge(dodge.width=0.65, jitter.height=0, jitter.width=0.15), alpha=0.7) +
-      geom_point(data = raw.stats[exit_category == 'Negative'],  
-                 aes(x = time, y = mean), 
-                 size = 0.5) +
-      geom_errorbar(data = raw.stats[exit_category == 'Negative'],  
-                    stat = 'identity', aes(x = time, ymax = upper, ymin = lower), 
-                    size = 0.4, 
-                    width = .12) +
       geom_point(data = raw.stats[exit_category == 'Positive'],  
                  aes(x = time, y = mean), 
                  size = 0.5) +
       geom_errorbar(data = raw.stats[exit_category == 'Positive'],  
                     stat = 'identity', 
                     aes(x = time, ymax = upper, ymin = lower), 
+                    size = 0.4, 
+                    width = .12) +      
+      geom_point(data = raw.stats[exit_category == 'Negative'],  
+                 aes(x = time, y = mean), 
+                 size = 0.5) +
+      geom_errorbar(data = raw.stats[exit_category == 'Negative'],  
+                    stat = 'identity', aes(x = time, ymax = upper, ymin = lower), 
                     size = 0.4, 
                     width = .12) +
       labs(title = paste0("Raw quarterly wages"), 
@@ -103,8 +119,7 @@
            y = "", 
            caption = "The black points and error bars are the mean and 95% confidence interval, respectively.") +
       scale_color_manual("Exit type", 
-                         values=c('Negative' = '#2ca25f',
-                                  'Positive' = '#2c7fb8')) +
+                         values=c('Positive' = '#2c7fb8', 'Negative' = '#2ca25f')) +
       scale_y_continuous(labels=scales::dollar_format())+
       scale_x_continuous(labels=c("1 year prior", "Exit", "1 year post"), breaks=c(-1, 0, 1)) +
       theme(panel.grid.major = element_line(color = "white"), 
@@ -118,8 +133,12 @@
             legend.title = element_text(size = 12), 
             legend.key = element_rect(fill = "white", color = "white"),
             legend.text = element_text(size = 10))
+    
+    dev.new(width = 6,  height = 4, unit = "in", noRStudioGD = TRUE)
+    
     plot(plot1)
     
-    ggsave(filename = paste0(outputdir, "figure_0_raw_wages.pdf"), plot = last_plot(), dpi=600, width = 6, height = 4, units = "in")
+    saveplots(plot.object = plot1, plot.name = 'figure_0_raw_wages')
+    
 
 # the end ----

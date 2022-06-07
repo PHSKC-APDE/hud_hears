@@ -68,52 +68,77 @@
                                  "SELECT * FROM [hudhears].[wage_analytic_table]"))
     
 # Preparatory data manipulation ----
-    raw[, quarter := as.factor(quarter(exit_date))]
-    
-    raw[qtr == -4, time := -1]
-    raw[qtr == 0, time := 0]
-    raw[qtr == 4, time := 1]
-    raw[, time2 := factor(time, levels = seq(-1, 1, 1), labels = c("1 year prior", "Exit", "1 year post"))]
-    
+    raw[, wage.hourly := wage / hrs]
+    raw[id_kc_pha %in% unique(raw[wage.hourly > 100 | wage.hourly < 9]$id_kc_pha), wage.hourly := NA] # remove outliers in hourly wages because irrational
+    raw[, exit_category := factor(exit_category, levels = c("Positive", "Negative"))] # to force specific order in graph  
     raw[exit_category == "Negative", exit := 0]
     raw[exit_category == "Positive", exit := 1]
+
+    dt1 <- copy(raw) # for plots of positive and negative at 1 year prior, at exit, and 1 year post
+        dt1[, quarter := as.factor(quarter(exit_date))]
+        
+        dt1[qtr == -4, time := -1]
+        dt1[qtr == 0, time := 0]
+        dt1[qtr == 4, time := 1]
+        dt1[, time2 := factor(time, levels = seq(-1, 1, 1), labels = c("1 year prior", "Exit", "1 year post"))]
+        
+        dt1[, se := std.error(wage), .(qtr, exit_category)]
+        dt1[, mean := mean(wage), .(qtr, exit_category)]
+        dt1[, upper := mean + (qnorm(.975) * se)]
+        dt1[, lower := mean - (qnorm(.975) * se)]
+        
+        dt1[!is.na(wage.hourly) & !is.nan(wage.hourly) & !is.infinite(wage.hourly), se.hourly := std.error(wage.hourly), .(qtr, exit_category)]
+        dt1[!is.na(wage.hourly) & !is.nan(wage.hourly) & !is.infinite(wage.hourly), mean.hourly := mean(wage.hourly), .(qtr, exit_category)]
+        dt1[, upper.hourly := mean.hourly + (qnorm(.975) * se.hourly)]
+        dt1[, lower.hourly := mean.hourly - (qnorm(.975) * se.hourly)]
+        
+        dt1 <- dt1[, .(time, exit_category, wage, mean, se, upper, lower, wage.hourly, mean.hourly, se.hourly, upper.hourly, lower.hourly)]
+        
+        dt1.stats <- unique(dt1[!is.na(time), .(time, exit_category, mean, se, upper, lower, wage.hourly, mean.hourly, se.hourly, upper.hourly, lower.hourly)])
+        dt1.stats[exit_category == "Negative", time := time - 0.17]
+        dt1.stats[exit_category == "Positive", time := time + 0.17]
+        
     
-    raw[, se := std.error(wage), .(qtr, exit_category)]
-    raw[, mean := mean(wage), .(qtr, exit_category)]
-    raw[, upper := mean + (qnorm(.975) * se)]
-    raw[, lower := mean - (qnorm(.975) * se)]
-    
-    raw <- raw[, .(time, exit_category, wage, mean, se, upper, lower)]
-    
-    raw.stats <- unique(raw[!is.na(time), .(time, exit_category, mean, se, upper, lower)])
-    raw.stats[exit_category == "Negative", time := time - 0.17]
-    raw.stats[exit_category == "Positive", time := time + 0.17]
-    
-    raw[, exit_category := factor(exit_category, levels = c("Positive", "Negative"))] # to force specific order in graph  
-    
-# Plot ----
+    dt2 <- copy(raw) # for viewing secular changes 
+        dt2[, se := std.error(wage), .(exit_qtr, exit_category)]
+        dt2[, mean := mean(wage), .(exit_qtr, exit_category)]
+        dt2[, upper := mean + (qnorm(.975) * se)]
+        dt2[, lower := mean - (qnorm(.975) * se)]
+        
+        dt2[!is.na(wage.hourly) & !is.nan(wage.hourly) & !is.infinite(wage.hourly), se.hourly := std.error(wage.hourly), .(exit_qtr, exit_category)]
+        dt2[!is.na(wage.hourly) & !is.nan(wage.hourly) & !is.infinite(wage.hourly), mean.hourly := mean(wage.hourly), .(exit_qtr, exit_category)]
+        dt2[, upper.hourly := mean.hourly + (qnorm(.975) * se.hourly)]
+        dt2[, lower.hourly := mean.hourly - (qnorm(.975) * se.hourly)]
+        
+        dt2 <- dt2[, .(time = exit_qtr, exit_category, wage, mean, se, upper, lower, wage.hourly, mean.hourly, se.hourly, upper.hourly, lower.hourly)]
+        
+        dt2.stats <- unique(dt2[!is.na(time), .(time, exit_category, mean, se, upper, lower, wage.hourly, mean.hourly, se.hourly, upper.hourly, lower.hourly)])
+        dt2.stats[exit_category == "Negative", time := time - 7]
+        dt2.stats[exit_category == "Positive", time := time + 7]
+        
+# Plot quarterly wages----
     plot.new()      
     
     set.seed(98104) # because jitter is 'random'
     plot1 <- ggplot() +
-      geom_point(data = raw[!is.na(time)],  aes(x = time, y = wage, color = exit_category), 
+      geom_point(data = dt1[!is.na(time)],  aes(x = time, y = wage, color = exit_category), 
                  position=position_jitterdodge(dodge.width=0.65, jitter.height=0, jitter.width=0.15), alpha=0.7) +
-      geom_point(data = raw.stats[exit_category == 'Positive'],  
+      geom_point(data = dt1.stats[exit_category == 'Positive'],  
                  aes(x = time, y = mean), 
-                 size = 0.5) +
-      geom_errorbar(data = raw.stats[exit_category == 'Positive'],  
+                 size = 1) +
+      geom_errorbar(data = dt1.stats[exit_category == 'Positive'],  
                     stat = 'identity', 
                     aes(x = time, ymax = upper, ymin = lower), 
-                    size = 0.4, 
-                    width = .12) +      
-      geom_point(data = raw.stats[exit_category == 'Negative'],  
+                    size = 0.5, 
+                    width = .03) +      
+      geom_point(data = dt1.stats[exit_category == 'Negative'],  
                  aes(x = time, y = mean), 
-                 size = 0.5) +
-      geom_errorbar(data = raw.stats[exit_category == 'Negative'],  
+                 size = 1) +
+      geom_errorbar(data = dt1.stats[exit_category == 'Negative'],  
                     stat = 'identity', aes(x = time, ymax = upper, ymin = lower), 
-                    size = 0.4, 
-                    width = .12) +
-      labs(title = paste0("Raw quarterly wages"), 
+                    size = 0.5, 
+                    width = .03) +
+      labs(title = paste0("dt1 quarterly wages"), 
            subtitle = "", 
            x = "", 
            y = "", 
@@ -138,7 +163,152 @@
     
     plot(plot1)
     
-    saveplots(plot.object = plot1, plot.name = 'figure_0_raw_wages')
+    saveplots(plot.object = plot1, plot.name = 'figure_0_dt1_wages_quarterly')
+    
+# Plot hourly wages----
+    plot.new()      
+    
+    set.seed(98104) # because jitter is 'random'
+    plot2 <- ggplot() +
+      geom_point(data = dt1[!is.na(time)],  aes(x = time, y = wage.hourly, color = exit_category), 
+                 position=position_jitterdodge(dodge.width=0.65, jitter.height=0, jitter.width=0.15), alpha=0.7) +
+      geom_point(data = dt1.stats[exit_category == 'Positive'],  
+                 aes(x = time, y = mean.hourly), 
+                 size = 1) +
+      geom_errorbar(data = dt1.stats[exit_category == 'Positive'],  
+                    stat = 'identity', 
+                    aes(x = time, ymax = upper.hourly, ymin = lower.hourly), 
+                    size = .5, 
+                    width = .03) +      
+      geom_point(data = dt1.stats[exit_category == 'Negative'],  
+                 aes(x = time, y = mean.hourly), 
+                 size = 1) +
+      geom_errorbar(data = dt1.stats[exit_category == 'Negative'],  
+                    stat = 'identity', aes(x = time, ymax = upper.hourly, ymin = lower.hourly), 
+                    size = .5, 
+                    width = .03) +
+      labs(title = paste0("dt1 hourly wages"), 
+           subtitle = "", 
+           x = "", 
+           y = "", 
+           caption = "The black points and error bars are the mean and 95% confidence interval, respectively.") +
+      scale_color_manual("Exit type", 
+                         values=c('Positive' = '#2c7fb8', 'Negative' = '#2ca25f')) +
+      scale_y_continuous(labels=scales::dollar_format())+
+      scale_x_continuous(labels=c("1 year prior", "Exit", "1 year post"), breaks=c(-1, 0, 1)) +
+      theme(panel.grid.major = element_line(color = "white"), 
+            panel.background = element_rect(fill = "white"), 
+            panel.border = element_rect(colour = "black", fill=NA, size=.5),  
+            plot.title = element_text(hjust = 0.5), 
+            plot.subtitle = element_text(hjust = 0.5),
+            plot.caption = element_text(size=8),
+            legend.position = "right",
+            legend.background = element_rect(fill="white", size=0.5, linetype="solid", color ="white"), 
+            legend.title = element_text(size = 12), 
+            legend.key = element_rect(fill = "white", color = "white"),
+            legend.text = element_text(size = 10))
+    
+    dev.new(width = 6,  height = 4, unit = "in", noRStudioGD = TRUE)
+    
+    plot(plot2)
+    
+    saveplots(plot.object = plot2, plot.name = 'figure_0_dt1_wages_hourly')
+
+# Plot quarterly wages (calendar time) ----
+    plot.new()      
+    
+    set.seed(98104) # because jitter is 'random'
+    plot3 <- ggplot() +
+      geom_point(data = dt2[!is.na(time)],  aes(x = time, y = wage, color = exit_category), 
+                 position=position_jitterdodge(dodge.width=25, jitter.height=0, jitter.width=10), alpha=0.7) +
+      geom_point(data = dt2.stats[exit_category == 'Positive'],  
+                 aes(x = time, y = mean), 
+                 size = 1.5) +
+      geom_errorbar(data = dt2.stats[exit_category == 'Positive'],  
+                    stat = 'identity', 
+                    aes(x = time, ymax = upper, ymin = lower), 
+                    size = .75, 
+                    width = .25) +      
+      geom_point(data = dt2.stats[exit_category == 'Negative'],  
+                 aes(x = time, y = mean), 
+                 size = 1.5) +
+      geom_errorbar(data = dt2.stats[exit_category == 'Negative'],  
+                    stat = 'identity', aes(x = time, ymax = upper, ymin = lower), 
+                    size = .75, 
+                    width = .25) +
+      labs(title = paste0("dt2 quarterly wages"), 
+           subtitle = "calendar time", 
+           x = "", 
+           y = "", 
+           caption = "The black points and error bars are the mean and 95% confidence interval, respectively.") +
+      scale_color_manual("Exit type", 
+                         values=c('Positive' = '#2c7fb8', 'Negative' = '#2ca25f')) +
+      scale_y_continuous(labels=scales::dollar_format())+
+      theme(panel.grid.major = element_line(color = "white"), 
+            panel.background = element_rect(fill = "white"), 
+            panel.border = element_rect(colour = "black", fill=NA, size=.5),  
+            plot.title = element_text(hjust = 0.5), 
+            plot.subtitle = element_text(hjust = 0.5),
+            plot.caption = element_text(size=8),
+            legend.position = "right",
+            legend.background = element_rect(fill="white", size=0.5, linetype="solid", color ="white"), 
+            legend.title = element_text(size = 12), 
+            legend.key = element_rect(fill = "white", color = "white"),
+            legend.text = element_text(size = 10))
+    
+    dev.new(width = 6,  height = 4, unit = "in", noRStudioGD = TRUE)
+    
+    plot(plot3)
+    
+    saveplots(plot.object = plot3, plot.name = 'figure_0_dt2_wages_quarterly_calendar')
+    
+# Plot hourly wages (calendar time) ----
+    plot.new()      
+    
+    set.seed(98104) # because jitter is 'random'
+    plot4 <- ggplot() +
+      geom_point(data = dt2[!is.na(time)],  aes(x = time, y = wage.hourly, color = exit_category), 
+                 position=position_jitterdodge(dodge.width=25, jitter.height=0, jitter.width=10), alpha=0.7) +
+      geom_point(data = dt2.stats[exit_category == 'Positive'],  
+                 aes(x = time, y = mean.hourly), 
+                 size = 1.5) +
+      geom_errorbar(data = dt2.stats[exit_category == 'Positive'],  
+                    stat = 'identity', 
+                    aes(x = time, ymax = upper.hourly, ymin = lower.hourly), 
+                    size = .75, 
+                    width = .25) +      
+      geom_point(data = dt2.stats[exit_category == 'Negative'],  
+                 aes(x = time, y = mean.hourly), 
+                 size = 1.5) +
+      geom_errorbar(data = dt2.stats[exit_category == 'Negative'],  
+                    stat = 'identity', aes(x = time, ymax = upper.hourly, ymin = lower.hourly), 
+                    size = .75, 
+                    width = .25) +
+      labs(title = paste0("dt2 hourly wages"), 
+           subtitle = "calendar time", 
+           x = "", 
+           y = "", 
+           caption = "The black points and error bars are the mean and 95% confidence interval, respectively.") +
+      scale_color_manual("Exit type", 
+                         values=c('Positive' = '#2c7fb8', 'Negative' = '#2ca25f')) +
+      scale_y_continuous(labels=scales::dollar_format())+
+      theme(panel.grid.major = element_line(color = "white"), 
+            panel.background = element_rect(fill = "white"), 
+            panel.border = element_rect(colour = "black", fill=NA, size=.5),  
+            plot.title = element_text(hjust = 0.5), 
+            plot.subtitle = element_text(hjust = 0.5),
+            plot.caption = element_text(size=8),
+            legend.position = "right",
+            legend.background = element_rect(fill="white", size=0.5, linetype="solid", color ="white"), 
+            legend.title = element_text(size = 12), 
+            legend.key = element_rect(fill = "white", color = "white"),
+            legend.text = element_text(size = 10))
+    
+    dev.new(width = 6,  height = 4, unit = "in", noRStudioGD = TRUE)
+    
+    plot(plot4)
+    
+    saveplots(plot.object = plot4, plot.name = 'figure_0_dt2_wages_hourly_calendar')
     
 
 # the end ----

@@ -11,7 +11,7 @@ vars:
     qtr_date: DATE
     wage: INT
     hrs: INT
-    wage.hourly: NUMERIC(38,5)
+    wage_hourly: NUMERIC(4,2)
     ami: NUMERIC(38,5)
     percent_ami: NUMERIC(38,5)
     opportunity_index: NUMERIC(38,5)

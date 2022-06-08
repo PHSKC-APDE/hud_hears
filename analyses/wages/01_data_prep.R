@@ -393,6 +393,12 @@
         combo[, hrs  := nafill(hrs, type = 'locf'), by = "id_esd" ] # fill geoid forward / downward
         combo[, hrs  := nafill(hrs, type = 'nocb'), by = "id_esd" ] # fill geoid backward / upward
         
+        combo[, wage_hourly := rads::round2(wage / hrs, 2)]
+        combo[is.nan(wage_hourly) | id_kc_pha %in% unique(combo[wage_hourly > 100 | wage_hourly < 9]$id_kc_pha), wage_hourly := NA] # remove outliers in hourly wages because irrational
+        combo[, exit_category := factor(exit_category, levels = c("Positive", "Negative"))] # to force specific order in graph  
+        combo[exit_category == "Negative", exit := 0]
+        combo[exit_category == "Positive", exit := 1]
+        
       # address data ----
           # check if have address for each quarter of exit (qtr == 0)
           setorder(combo[is.na(geo_tractce10), .N, qtr])[] # rarely missing baseline address and when missing, always missing, so leave as is.
@@ -435,7 +441,7 @@
     setorder(combo, hh_id_kc_pha, id_kc_pha, qtr)
     combo <- combo[, .(hh_id_kc_pha, id_kc_pha, 
                       exit_category, exit_date, exit_qtr, qtr, qtr_date,
-                      wage, hrs, ami, percent_ami, opportunity_index,
+                      wage, hrs, wage_hourly, ami, percent_ami, opportunity_index,
                       race_eth_me, gender_me, age_at_exit, hh_size, hh_disability, n_disability, 
                       single_caregiver, housing_time_at_exit, 
                       agency, major_prog, subsidy_type, exit_reason_clean)]
@@ -450,13 +456,16 @@
         interactive = F
       )
     
-    # write table to T ----
-    DBI::dbWriteTable(conn = hhsaw16, 
-                      name = DBI::Id(schema = "hudhears", table = "wage_analytic_table"), 
-                      value = setDF(copy(combo)), 
+    # write table to Azure 16 (production) SQL server ----
+    table_config <- yaml::yaml.load(httr::GET(url = "https://raw.githubusercontent.com/PHSKC-APDE/hud_hears/main/analyses/wages/ref/wage_analytic_table.yaml", 
+                                              httr::authenticate(Sys.getenv("GITHUB_TOKEN"), "")))
+    DBI::dbWriteTable(conn = hhsaw16,
+                      name = DBI::Id(schema = table_config$schema, table = table_config$table),
+                      value = setDF(copy(combo)),
+                      overwrite = T,
                       append = F, 
-                      overwrite = T)
-      
+                      field.types = unlist(table_config$vars)) 
+
 # Create consort diagram ----
     # nicely format all consort counts ----
       counts <- sort(grep("^consort[0-9][0-9]", ls(), value = T))
@@ -489,13 +498,13 @@
       myplot <- plot(consort.complete)
       
     # save consort diagram ----
-      ggsave(paste0(outputdir, "consort_diagram.pdf"),
+      ggplot2::ggsave(paste0(outputdir, "consort_diagram.pdf"),
              plot = consort.complete, 
              dpi=600, 
              width = 6.5, 
              height = 9, 
              units = "in") 
-      ggsave(paste0(outputdir, "consort_diagram.png"),
+      ggplot2::ggsave(paste0(outputdir, "consort_diagram.png"),
              plot = consort.complete, 
              dpi=600, 
              width = 6.5, 

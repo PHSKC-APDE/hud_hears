@@ -4,6 +4,7 @@ table: wage_analytic_table
 vars: 
     hh_id_kc_pha: NVARCHAR(22)
     id_kc_pha: NVARCHAR(22)
+    exit: BIT
     exit_category: NVARCHAR(18)
     exit_date: DATE
     exit_qtr: DATE

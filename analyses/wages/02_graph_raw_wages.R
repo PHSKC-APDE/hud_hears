@@ -78,7 +78,7 @@
         dt1[qtr == -4, time := -1]
         dt1[qtr == 0, time := 0]
         dt1[qtr == 4, time := 1]
-        dt1[, time2 := factor(time, levels = seq(-1, 0, 1), labels = c("1 year prior", "Exit", "1 year post"))]
+        dt1[, time2 := factor(time, levels = c(-1, 0, 1), labels = c("1 year prior", "Exit", "1 year post"))]
         
         dt1[, se := std.error(wage), .(qtr, exit_category)]
         dt1[, mean := mean(wage), .(qtr, exit_category)]
@@ -98,17 +98,17 @@
         
     
     dt2 <- copy(raw) # for viewing secular changes 
-        dt2[, se := std.error(wage), .(exit_qtr, exit_category)]
-        dt2[, mean := mean(wage), .(exit_qtr, exit_category)]
+        dt2[, se := std.error(wage), .(qtr_date , exit_category)]
+        dt2[, mean := mean(wage), .(qtr_date , exit_category)]
         dt2[, upper := mean + (qnorm(.975) * se)]
         dt2[, lower := mean - (qnorm(.975) * se)]
         
-        dt2[!is.na(wage_hourly) & !is.nan(wage_hourly) & !is.infinite(wage_hourly), se.hourly := std.error(wage_hourly), .(exit_qtr, exit_category)]
-        dt2[!is.na(wage_hourly) & !is.nan(wage_hourly) & !is.infinite(wage_hourly), mean.hourly := mean(wage_hourly), .(exit_qtr, exit_category)]
+        dt2[!is.na(wage_hourly) & !is.nan(wage_hourly) & !is.infinite(wage_hourly), se.hourly := std.error(wage_hourly), .(qtr_date , exit_category)]
+        dt2[!is.na(wage_hourly) & !is.nan(wage_hourly) & !is.infinite(wage_hourly), mean.hourly := mean(wage_hourly), .(qtr_date , exit_category)]
         dt2[, upper.hourly := mean.hourly + (qnorm(.975) * se.hourly)]
         dt2[, lower.hourly := mean.hourly - (qnorm(.975) * se.hourly)]
         
-        dt2 <- dt2[, .(time = exit_qtr, exit_category, wage, mean, se, upper, lower, wage_hourly, mean.hourly, se.hourly, upper.hourly, lower.hourly)]
+        dt2 <- dt2[, .(time = qtr_date , exit_category, wage, mean, se, upper, lower, wage_hourly, mean.hourly, se.hourly, upper.hourly, lower.hourly)]
         
         dt2.stats <- unique(dt2[!is.na(time), .(time, exit_category, mean, se, upper, lower, wage_hourly, mean.hourly, se.hourly, upper.hourly, lower.hourly)])
         dt2.stats[exit_category == "Negative", time := time - 7]
@@ -235,7 +235,7 @@
                       stat = 'identity', aes(x = time, ymax = upper, ymin = lower), 
                       size = .75, 
                       width = .25) +
-        labs(title = paste0("quarterly wages"), 
+        labs(title = paste0("quarterly wages secular trend"), 
              subtitle = "calendar time", 
              x = "", 
              y = "", 
@@ -283,7 +283,7 @@
                       stat = 'identity', aes(x = time, ymax = upper.hourly, ymin = lower.hourly), 
                       size = .75, 
                       width = .25) +
-        labs(title = paste0("hourly wages"), 
+        labs(title = paste0("hourly wages secular trend"), 
              subtitle = "calendar time", 
              x = "", 
              y = "", 
@@ -395,5 +395,7 @@
                               dt.diff.qtr, 
                               dt.diff.hrs)
     
+  # save wage difference table ----
+    openxlsx::write.xlsx(wage.differences, paste0(outputdir, "wage_differences_raw.xlsx"), asTable = T, overwrite = T)
     
 # the end ----

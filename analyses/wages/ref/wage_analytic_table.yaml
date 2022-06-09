@@ -7,6 +7,7 @@ vars:
     exit: BIT
     exit_category: NVARCHAR(18)
     exit_date: DATE
+    exit_year: INT
     exit_qtr: DATE
     qtr: INT
     qtr_date: DATE

@@ -33,6 +33,7 @@
     
 # Preparatory data manipulation ----
     raw[, quarter := as.factor(quarter(exit_date))]
+    raw[, exit_year := as.factor(exit_year)]
     
 # Table 1: Descriptive statistics by Exit Type ----
   # configure arsenal::tableby ----
@@ -63,7 +64,8 @@
                          housing_time_at_exit +
                          agency +
                          major_prog +
-                         quarter, 
+                         quarter +
+                         exit_year, 
                        data = raw[qtr == 0], 
                        control = my_controls)
       ))
@@ -103,7 +105,7 @@
       
     # split categorical from continuous ----
       # identify definite categorical vars ----
-        categorical <- exposure.associated[sapply(raw[, ..exposure.associated], class) %in% c("character", "factor")]
+        categorical <- exposure.associated[sapply(raw[, ..exposure.associated], class) %in% c("character", "factor", "logical")]
         exposure.associated <- setdiff(exposure.associated, categorical) # remove definite categorical from pool
       
       # partition remaining vars into categorical and continutous ----

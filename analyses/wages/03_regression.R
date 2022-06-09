@@ -45,7 +45,7 @@
               panel.border = element_rect(colour = "black", fill=NA, size=.5),  
               plot.title = element_text(hjust = 0.5), 
               plot.subtitle = element_text(hjust = 0.5),
-              plot.caption = element_text(size=8),
+              plot.caption = element_text(size=6),
               legend.position = "right",
               legend.background = element_rect(fill="white", size=0.5, linetype="solid", color ="white"), 
               legend.title = element_text(size = 12), 
@@ -91,7 +91,8 @@
       }
     
 # Preparatory data manipulation ----
-    raw[, quarter := as.factor(quarter(exit_date))]
+    raw[, exit_year := as.factor(exit_year)]
+    raw[, exit := as.integer(exit)]
 
 # Create dt1 for assessing parallel trend assumption from quarter -4 to quarter 0 (exit) ----
     dt1 <- copy(raw)

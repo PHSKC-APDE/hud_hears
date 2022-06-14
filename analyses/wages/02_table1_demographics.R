@@ -55,6 +55,8 @@
     table1 <- as.data.table(summary(
       arsenal::tableby(exit_category ~ 
                          wage + 
+                         wage_hourly +
+                         hrs +
                          percent_ami +
                          race_eth_me +
                          gender_me +
@@ -78,6 +80,8 @@
     
   # Tidy table ----
     table1[, col1 := gsub("wage", "Wages", col1)]
+    table1[, col1 := gsub("Wages_hourly", "Wages hourly", col1)]
+    table1[, col1 := gsub("hrs", "Hours", col1)]
     table1[, col1 := gsub("percent_ami", "Percent AMI", col1)]
     table1[, col1 := gsub("race_eth_me", "Race/ethnicity", col1)]
     table1[, col1 := gsub("gender_me", "Gender", col1)]
@@ -88,6 +92,7 @@
     table1[, col1 := gsub("agency", "Agency", col1)]
     table1[, col1 := gsub("major_prog", "Major program", col1)]
     table1[, col1 := gsub("quarter", "Quarter", col1)]
+    table1[, col1 := gsub("exit_year", "Exit Year", col1)]
     
     table1[, col1 := gsub("&nbsp;|\\*\\*", "", col1)]
     table1[ !is.na(`p value`) & `p value` != "", variable := col1]

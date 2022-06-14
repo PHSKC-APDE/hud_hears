@@ -592,7 +592,10 @@
         mod5.counterfactual[time != -4])
       setorder(mod5.preds, exit, exit_category, time)
       
-      mod5.preds[, time := as.integer(as.character(time))] # convert time back to numeric for graphing
+      mod5.preds[, time := as.numeric(as.character(time))] # convert time back to numeric for graphing
+      
+      mod5.preds[exit_category == "Positive", time := time - .05]
+      mod5.preds[exit_category == "Negative", time := time + .05]
       
       mod5.preds[]
       
@@ -613,7 +616,7 @@
              caption = caption.text, 
              x = "", 
              y = "Quarterly wages") +
-        scale_x_continuous(breaks=c(-4:4))
+        scale_x_continuous(labels=c("1 year prior", "Exit", "1 year post"), breaks=c(-4, 0, 4))
       
       plot5 <- formatplots(plot5) + 
         scale_color_manual("Exit type", 
@@ -641,7 +644,7 @@
              caption = caption.text, 
              x = "", 
              y = "Quarterly wages") +
-        scale_x_continuous(breaks=c(-4:4))
+        scale_x_continuous(labels=c("1 year prior", "Exit", "1 year post"), breaks=c(-4, 0, 4))
       
       plot5.alt <- formatplots(plot5.alt) + 
         scale_color_manual("Exit type", 
@@ -656,6 +659,152 @@
       saveplots(plot.object = plot5, plot.name = 'figure_5_pre_post_by_qtr')      
       saveplots(plot.object = plot5.alt, plot.name = 'figure_5_pre_post_by_qtr_alt')      
       
+# Model 6: Model for all available quarterly wage data ----
+    # Create dt6 for complete quarterly analysis ----
+      dt6 <- copy(raw)
+      dt6 <- dt6[!is.na(wage_hourly)]
+      dt6[exit_category == "Negative", exit := 0]
+      dt6[exit_category == "Positive", exit := 1]
+      dt6[, time := factor(qtr)]
+      
+    # model ----
+      mod6.formula <- paste0("wage_hourly ~ ",
+                             "exit*time + ", 
+                             confounders, " + ",
+                             "(1 | id_kc_pha) + ", # random intercept for persons
+                             "(1 + exit | hh_id_kc_pha)") # random intercept and slope for households
+      mod6 <- lme4::lmer(mod6.formula, data = dt6)
+      mod6.tidy <- as.data.table(broom.mixed::tidy(mod6, conf.int = T))
+      
+    # test if p-value for interaction term is < 0.05 ----
+      mod6.formula.alt <- paste0("wage_hourly ~ ",
+                                 "exit + time + ", 
+                                 confounders, " + ",
+                                 "(1 | id_kc_pha) + ", # random intercept for persons
+                                 "(1 + exit | hh_id_kc_pha)") # random intercept and slope for households
+      mod6.alt <- lme4::lmer(mod6.formula.alt, data = dt6)
+      
+      mod6.test = anova(mod6, mod6.alt, test = 'LRT')
+      
+      if( mod6.test[["Pr(>Chisq)"]][2] < 0.05 ) {
+        print("\nThe exit:time interaction term is significant, so keep the full model with the interaction term")
+        caption.text <- paste0("", mod6.formula)
+      } else {
+        print("\nThe exit:time interaction term is NOT significant, so use more parsimonuous model.")
+        mod6.formula <- paste0("wage_hourly ~ ",
+                               "exit + time + ", 
+                               confounders, " + ",
+                               "(1 | id_kc_pha) + ", # random intercept for persons
+                               "(1 + exit | hh_id_kc_pha)") # random intercept and slope for households
+        mod6 <- lme4::lmer(mod6.formula, data = dt6)
+        mod6.tidy <- as.data.table(broom.mixed::tidy(mod6, conf.int = T))
+        caption.text <- paste0("", mod6.formula)
+      }
+      
+    # predictions ----
+      # standard predictions ----
+      mod6.preds <- as.data.table(predictions(mod6, 
+                                              newdata = datagrid(time=c(-4:4), # set to -4, 0, 4 because the time scale is in quarters, so -/+ 1 year
+                                                                 exit = c(0, 1)), 
+                                              re.form=~0)) # re.form=~0 means include no random effects, so population level estimates
+      mod6.preds[exit == 0, exit_category := "Negative"][exit == 1, exit_category := "Positive"]
+      print('wages are actually hourly, but will label `wage` so that can reuse code from above.')
+      mod6.preds <- mod6.preds[, .(time, exit, exit_category, wage = predicted, se = std.error, lower = `conf.low`, upper = `conf.high`)]
+      
+
+      # calculate counterfactual (ascribe change observed in negative exits to positive exits) ----
+      mod6.negdiff <-  mod6.preds[exit_category == "Negative"]
+      mod6.negdiff[, wage.prev := shift(x = wage, n = 1L, type = 'lag')]
+      mod6.negdiff[, se.prev := shift(x = se, n = 1L, type = 'lag')]
+      mod6.negdiff[, wage.diff := wage - wage.prev]
+      mod6.negdiff[, se.diff := sqrt((se^2) + (se.prev^2))]
+      mod6.negdiff <- mod6.negdiff[, .(time, wage.diff, se.diff)]
+      
+      
+      mod6.counterfactual <- mod6.preds[exit_category == "Positive"]
+      mod6.counterfactual[, c("lower", "upper") := NULL]
+      mod6.counterfactual[time != -4, wage := NA]
+      mod6.counterfactual <- merge(mod6.counterfactual, mod6.negdiff, by = c("time"), all = T)
+      mod6.counterfactual[is.na(wage.diff), wage.diff := wage]
+      mod6.counterfactual[, wage := cumsum(wage.diff)]
+      mod6.counterfactual[!is.na(se.diff), se := sqrt((se^2) + (se.diff^2))]
+      mod6.counterfactual <- mod6.counterfactual[, .(time, exit, exit_category = 'Counterfactual', 
+                                                     wage, se, lower = wage - (se * qnorm(0.975)), 
+                                                     upper = wage + (se * qnorm(0.975)))]
+      
+      # add rows for counterfactual to mod6.preds ----
+      mod6.preds <- rbind(
+        mod6.preds,
+        copy(mod6.preds)[exit == 1 & time == -4][, exit_category := "Counterfactual"], 
+        mod6.counterfactual[time != -4])
+      setorder(mod6.preds, exit, exit_category, time)
+      
+      mod6.preds[, time := as.numeric(as.character(time))] # convert time back to numeric for graphing
+      
+      mod6.preds[exit_category == "Positive", time := time - .05]
+      mod6.preds[exit_category == "Negative", time := time + .05]
+      
+      mod6.preds[]
+      
+    # Plot data prior to exit ----
+      plot6 <- ggplot() +
+        # geom_point(data = dt6.plot, aes(x = time, y = wage, color = exit_category)) + 
+        geom_line(data = mod6.preds[exit_category != "Counterfactual"], aes(x = time, y = wage, color = exit_category), size = 1) +
+        geom_line(data = mod6.preds[exit_category == "Counterfactual"], aes(x = time, y = wage, color = exit_category), linetype="dashed", size = 1) +
+        geom_point(data = mod6.preds[exit_category != "Counterfactual"], 
+                   aes(x = time, y = wage, color = exit_category), 
+                   size = 2.5) +
+        geom_errorbar(data = mod6.preds[exit_category != "Counterfactual"], 
+                      aes(x = time, ymax = upper, ymin = lower, color = exit_category), 
+                      size = 1, 
+                      width = .05) + 
+        labs(title = paste0("Hourly wage history by exit type and time"), 
+             subtitle = "Model 6: Four quarters pre/post exit", 
+             caption = caption.text, 
+             x = "", 
+             y = "Hourly wages") +
+        scale_x_continuous(labels=c("1 year prior", "Exit", "1 year post"), breaks=c(-4, 0, 4))
+      
+      plot6 <- formatplots(plot6) + 
+        scale_color_manual("Exit type", 
+                           values=c('Positive' = '#2c7fb8', 
+                                    'Counterfactual' = '#e41a1c', 
+                                    'Negative' = '#2ca25f')) 
+      
+      dev.new(width = 6,  height = 4, unit = "in", noRStudioGD = TRUE)
+      plot(plot6)
+      
+      # alternative plot with CI for counterfactual
+      plot6.alt <- ggplot() +
+        # geom_point(data = dt6.plot, aes(x = time, y = wage, color = exit_category)) + 
+        geom_line(data = mod6.preds[exit_category != "Counterfactual"], aes(x = time, y = wage, color = exit_category), size = 1) +
+        geom_line(data = mod6.preds[exit_category == "Counterfactual"], aes(x = time, y = wage, color = exit_category), linetype="dashed", size = 1) +
+        geom_point(data = mod6.preds[], 
+                   aes(x = time, y = wage, color = exit_category), 
+                   size = 2.5) +
+        geom_errorbar(data = mod6.preds[], 
+                      aes(x = time, ymax = upper, ymin = lower, color = exit_category), 
+                      size = 1, 
+                      width = .05) + 
+        labs(title = paste0("Hourly wage history by exit type and time"), 
+             subtitle = "Model 6: Four quarters pre/post exit", 
+             caption = caption.text, 
+             x = "", 
+             y = "Hourly wages") +
+        scale_x_continuous(labels=c("1 year prior", "Exit", "1 year post"), breaks=c(-4, 0, 4))
+      
+      plot6.alt <- formatplots(plot6.alt) + 
+        scale_color_manual("Exit type", 
+                           values=c('Positive' = '#2c7fb8', 
+                                    'Counterfactual' = '#e41a1c', 
+                                    'Negative' = '#2ca25f')) 
+      
+      dev.new(width = 6,  height = 4, unit = "in", noRStudioGD = TRUE)
+      plot(plot6.alt)
+      
+    # Save plots ----
+      saveplots(plot.object = plot6, plot.name = 'figure_6_pre_post_by_qtr')      
+      saveplots(plot.object = plot6.alt, plot.name = 'figure_6_pre_post_by_qtr_alt')      
       
       
 # The end ----

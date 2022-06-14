@@ -288,14 +288,14 @@
         final.prior.plot <- copy(plot1)
         }
       
-# Create dt2 for DiD analysis from exit (quarter 0) to 1 year post exit (quarter 4) ----
+# Create dt3 for DiD analysis from exit (quarter 0) to 1 year post exit (quarter 4) ----
       # because assessment of parallel trends failed know this is is not 'correct'
-      dt2 <- copy(raw)
-      dt2[qtr == 4, time := 1]
-      dt2[qtr == 0, time := 0]
-      dt2[exit_category == "Negative", exit := 0]
-      dt2[exit_category == "Positive", exit := 1]
-      dt2 <- dt2[!is.na(time)]      
+      dt3 <- copy(raw)
+      dt3[qtr == 4, time := 1]
+      dt3[qtr == 0, time := 0]
+      dt3[exit_category == "Negative", exit := 0]
+      dt3[exit_category == "Positive", exit := 1]
+      dt3 <- dt3[!is.na(time)]      
 
 # Model 3: DiD base model ----
     # model ----
@@ -304,11 +304,11 @@
                              confounders, " + ",
                              "(1 | id_kc_pha) + ", # random intercept for persons
                              "(1 + exit | hh_id_kc_pha)") # random intercept and slope for households
-      mod3 <- lme4::lmer(mod3.formula, data = dt2)
+      mod3 <- lme4::lmer(mod3.formula, data = dt3)
       mod3.tidy <- as.data.table(broom.mixed::tidy(mod3, conf.int = T))
       
     # test if p-value for interaction term is < 0.05 (could also perform likelihood ratio test using anova function) ----
-      mod3.test <- suppressWarnings(lmerTest::lmer(mod3.formula, data = dt2, REML = FALSE))
+      mod3.test <- suppressWarnings(lmerTest::lmer(mod3.formula, data = dt3, REML = FALSE))
       mod3.test <- as.data.table(coef(summary(mod3.test)), keep.rownames = T)    
       print(mod3.test)
       if( mod3.test[rn == "exit:time"][["Pr(>|t|)"]] < 0.05) {
@@ -323,7 +323,7 @@
         #                            confounders, " + ",
         #                            "(1 | id_kc_pha) + ", # random intercept for persons
         #                            "(1 + exit | hh_id_kc_pha)") # random intercept and slope for households
-        # mod3 <- lme4::lmer(mod3.alt.formula, data = dt2)  
+        # mod3 <- lme4::lmer(mod3.alt.formula, data = dt3)  
         # mod3.tidy <- as.data.table(broom.mixed::tidy(mod3, conf.int = T))
         }
 
@@ -358,12 +358,12 @@
       mod3.preds[]
       
     # Plot data prior to exit ----
-      dt2.plot = copy(dt2)
-      dt2.plot[exit == 0, time := time - .015] # add tiny shift for easier visualization
-      dt2.plot[exit == 1, time := time + .015] # add tiny shift for easier visualization
+      dt3.plot = copy(dt3)
+      dt3.plot[exit == 0, time := time - .015] # add tiny shift for easier visualization
+      dt3.plot[exit == 1, time := time + .015] # add tiny shift for easier visualization
       
       plot3 <- ggplot() +
-        # geom_point(data = dt2.plot, aes(x = time, y = wage, color = exit_category)) + 
+        # geom_point(data = dt3.plot, aes(x = time, y = wage, color = exit_category)) + 
         geom_line(data = mod3.preds[exit_category != "Counterfactual"], aes(x = time, y = wage, color = exit_category), size = 1) +
         geom_line(data = mod3.preds[exit_category == "Counterfactual"], aes(x = time, y = wage, color = exit_category), linetype="dashed", size = 1) +
         labs(title = paste0("Population level trends 1 year post exit"), 
@@ -386,15 +386,15 @@
 
 
 # Model 4: Model for 1 prior to exit to one year post exit ----
-    # Create dt3 for complete analysis: 1 year prior, at exit, and 1 year post ----
-      dt3 <- copy(raw)
-      dt3[exit_category == "Negative", exit := 0]
-      dt3[exit_category == "Positive", exit := 1]
-      dt3[qtr == -4, time := -1]
-      dt3[qtr == 0, time := 0]
-      dt3[qtr == 4, time := 1]
-      dt3 <- dt3[!is.na(time)]      
-      dt3[, time := factor(time)]
+    # Create dt4 for complete analysis: 1 year prior, at exit, and 1 year post ----
+      dt4 <- copy(raw)
+      dt4[exit_category == "Negative", exit := 0]
+      dt4[exit_category == "Positive", exit := 1]
+      dt4[qtr == -4, time := -1]
+      dt4[qtr == 0, time := 0]
+      dt4[qtr == 4, time := 1]
+      dt4 <- dt4[!is.na(time)]      
+      dt4[, time := factor(time)]
 
     # model ----
       mod4.formula <- paste0("wage ~ ",
@@ -402,7 +402,7 @@
                              confounders, " + ",
                              "(1 | id_kc_pha) + ", # random intercept for persons
                              "(1 + exit | hh_id_kc_pha)") # random intercept and slope for households
-      mod4 <- lme4::lmer(mod4.formula, data = dt3)
+      mod4 <- lme4::lmer(mod4.formula, data = dt4)
       mod4.tidy <- as.data.table(broom.mixed::tidy(mod4, conf.int = T))
       
     # test if p-value for interaction term is < 0.05 ----
@@ -411,7 +411,7 @@
                              confounders, " + ",
                              "(1 | id_kc_pha) + ", # random intercept for persons
                              "(1 + exit | hh_id_kc_pha)") # random intercept and slope for households
-      mod4.alt <- lme4::lmer(mod4.formula.alt, data = dt3)
+      mod4.alt <- lme4::lmer(mod4.formula.alt, data = dt4)
       
       mod4.test = anova(mod4, mod4.alt, test = 'LRT')
       
@@ -425,7 +425,7 @@
                                confounders, " + ",
                                "(1 | id_kc_pha) + ", # random intercept for persons
                                "(1 + exit | hh_id_kc_pha)") # random intercept and slope for households
-        mod4 <- lme4::lmer(mod4.formula, data = dt3)
+        mod4 <- lme4::lmer(mod4.formula, data = dt4)
         mod4.tidy <- as.data.table(broom.mixed::tidy(mod4, conf.int = T))
         caption.text <- paste0("", mod4.formula)
       }
@@ -480,12 +480,12 @@
       mod4.preds[]
       
     # Plot data prior to exit ----
-      dt3.plot = copy(dt3)
-      dt3.plot[exit == 0, time := time - .015] # add tiny shift for easier visualization
-      dt3.plot[exit == 1, time := time + .015] # add tiny shift for easier visualization
+      dt4.plot = copy(dt4)
+      dt4.plot[exit == 0, time := time - .015] # add tiny shift for easier visualization
+      dt4.plot[exit == 1, time := time + .015] # add tiny shift for easier visualization
       
       plot4 <- ggplot() +
-        # geom_point(data = dt3.plot, aes(x = time, y = wage, color = exit_category)) + 
+        # geom_point(data = dt4.plot, aes(x = time, y = wage, color = exit_category)) + 
         geom_line(data = mod4.preds[exit_category != "Counterfactual"], aes(x = time, y = wage, color = exit_category), size = 1) +
         geom_line(data = mod4.preds[exit_category == "Counterfactual"], aes(x = time, y = wage, color = exit_category), linetype="dashed", size = 1) +
         geom_point(data = mod4.preds, 
@@ -513,5 +513,149 @@
       
     # Save plot ----
       saveplots(plot.object = plot4, plot.name = 'figure_4_pre_post_trends')      
+      
+# Model 5: Model for all available quarterly wage data ----
+    # Create dt5 for complete quarterly analysis ----
+      dt5 <- copy(raw)
+      dt5[exit_category == "Negative", exit := 0]
+      dt5[exit_category == "Positive", exit := 1]
+      dt5[, time := factor(qtr)]
+      
+    # model ----
+      mod5.formula <- paste0("wage ~ ",
+                             "exit*time + ", 
+                             confounders, " + ",
+                             "(1 | id_kc_pha) + ", # random intercept for persons
+                             "(1 + exit | hh_id_kc_pha)") # random intercept and slope for households
+      mod5 <- lme4::lmer(mod5.formula, data = dt5)
+      mod5.tidy <- as.data.table(broom.mixed::tidy(mod5, conf.int = T))
+      
+    # test if p-value for interaction term is < 0.05 ----
+      mod5.formula.alt <- paste0("wage ~ ",
+                                 "exit + time + ", 
+                                 confounders, " + ",
+                                 "(1 | id_kc_pha) + ", # random intercept for persons
+                                 "(1 + exit | hh_id_kc_pha)") # random intercept and slope for households
+      mod5.alt <- lme4::lmer(mod5.formula.alt, data = dt5)
+      
+      mod5.test = anova(mod5, mod5.alt, test = 'LRT')
+      
+      if( mod5.test[["Pr(>Chisq)"]][2] < 0.05 ) {
+        print("\nThe exit:time interaction term is significant, so keep the full model with the interaction term")
+        caption.text <- paste0("", mod5.formula)
+      } else {
+        print("\nThe exit:time interaction term is NOT significant, so use more parsimonuous model.")
+        mod5.formula <- paste0("wage ~ ",
+                               "exit + time + ", 
+                               confounders, " + ",
+                               "(1 | id_kc_pha) + ", # random intercept for persons
+                               "(1 + exit | hh_id_kc_pha)") # random intercept and slope for households
+        mod5 <- lme4::lmer(mod5.formula, data = dt5)
+        mod5.tidy <- as.data.table(broom.mixed::tidy(mod5, conf.int = T))
+        caption.text <- paste0("", mod5.formula)
+      }
+      
+    # predictions ----
+      # standard predictions ----
+      mod5.preds <- as.data.table(predictions(mod5, 
+                                              newdata = datagrid(time=c(-4:4), # set to -4, 0, 4 because the time scale is in quarters, so -/+ 1 year
+                                                                 exit = c(0, 1)), 
+                                              re.form=~0)) # re.form=~0 means include no random effects, so population level estimates
+      mod5.preds[exit == 0, exit_category := "Negative"][exit == 1, exit_category := "Positive"]
+      mod5.preds <- mod5.preds[, .(time, exit, exit_category, wage = predicted, se = std.error, lower = `conf.low`, upper = `conf.high`)]
+      
+
+      # calculate counterfactual (ascribe change observed in negative exits to positive exits) ----
+      mod5.negdiff <-  mod5.preds[exit_category == "Negative"]
+      mod5.negdiff[, wage.prev := shift(x = wage, n = 1L, type = 'lag')]
+      mod5.negdiff[, se.prev := shift(x = se, n = 1L, type = 'lag')]
+      mod5.negdiff[, wage.diff := wage - wage.prev]
+      mod5.negdiff[, se.diff := sqrt((se^2) + (se.prev^2))]
+      mod5.negdiff <- mod5.negdiff[, .(time, wage.diff, se.diff)]
+      
+      
+      mod5.counterfactual <- mod5.preds[exit_category == "Positive"]
+      mod5.counterfactual[, c("lower", "upper") := NULL]
+      mod5.counterfactual[time != -4, wage := NA]
+      mod5.counterfactual <- merge(mod5.counterfactual, mod5.negdiff, by = c("time"), all = T)
+      mod5.counterfactual[is.na(wage.diff), wage.diff := wage]
+      mod5.counterfactual[, wage := cumsum(wage.diff)]
+      mod5.counterfactual[!is.na(se.diff), se := sqrt((se^2) + (se.diff^2))]
+      mod5.counterfactual <- mod5.counterfactual[, .(time, exit, exit_category = 'Counterfactual', 
+                                                     wage, se, lower = wage - (se * qnorm(0.975)), 
+                                                     upper = wage + (se * qnorm(0.975)))]
+      
+      # add rows for counterfactual to mod5.preds ----
+      mod5.preds <- rbind(
+        mod5.preds,
+        copy(mod5.preds)[exit == 1 & time == -4][, exit_category := "Counterfactual"], 
+        mod5.counterfactual[time != -4])
+      setorder(mod5.preds, exit, exit_category, time)
+      
+      mod5.preds[, time := as.integer(as.character(time))] # convert time back to numeric for graphing
+      
+      mod5.preds[]
+      
+    # Plot data prior to exit ----
+      plot5 <- ggplot() +
+        # geom_point(data = dt5.plot, aes(x = time, y = wage, color = exit_category)) + 
+        geom_line(data = mod5.preds[exit_category != "Counterfactual"], aes(x = time, y = wage, color = exit_category), size = 1) +
+        geom_line(data = mod5.preds[exit_category == "Counterfactual"], aes(x = time, y = wage, color = exit_category), linetype="dashed", size = 1) +
+        geom_point(data = mod5.preds[exit_category != "Counterfactual"], 
+                   aes(x = time, y = wage, color = exit_category), 
+                   size = 2.5) +
+        geom_errorbar(data = mod5.preds[exit_category != "Counterfactual"], 
+                      aes(x = time, ymax = upper, ymin = lower, color = exit_category), 
+                      size = 1, 
+                      width = .05) + 
+        labs(title = paste0("Quarterly wage history by exit type and time"), 
+             subtitle = "Model 5: Four quarters pre/post exit", 
+             caption = caption.text, 
+             x = "", 
+             y = "Quarterly wages") +
+        scale_x_continuous(breaks=c(-4:4))
+      
+      plot5 <- formatplots(plot5) + 
+        scale_color_manual("Exit type", 
+                           values=c('Positive' = '#2c7fb8', 
+                                    'Counterfactual' = '#e41a1c', 
+                                    'Negative' = '#2ca25f')) 
+      
+      dev.new(width = 6,  height = 4, unit = "in", noRStudioGD = TRUE)
+      plot(plot5)
+      
+      # alternative plot with CI for counterfactual
+      plot5.alt <- ggplot() +
+        # geom_point(data = dt5.plot, aes(x = time, y = wage, color = exit_category)) + 
+        geom_line(data = mod5.preds[exit_category != "Counterfactual"], aes(x = time, y = wage, color = exit_category), size = 1) +
+        geom_line(data = mod5.preds[exit_category == "Counterfactual"], aes(x = time, y = wage, color = exit_category), linetype="dashed", size = 1) +
+        geom_point(data = mod5.preds[], 
+                   aes(x = time, y = wage, color = exit_category), 
+                   size = 2.5) +
+        geom_errorbar(data = mod5.preds[], 
+                      aes(x = time, ymax = upper, ymin = lower, color = exit_category), 
+                      size = 1, 
+                      width = .05) + 
+        labs(title = paste0("Quarterly wage history by exit type and time"), 
+             subtitle = "Model 5: Four quarters pre/post exit", 
+             caption = caption.text, 
+             x = "", 
+             y = "Quarterly wages") +
+        scale_x_continuous(breaks=c(-4:4))
+      
+      plot5.alt <- formatplots(plot5.alt) + 
+        scale_color_manual("Exit type", 
+                           values=c('Positive' = '#2c7fb8', 
+                                    'Counterfactual' = '#e41a1c', 
+                                    'Negative' = '#2ca25f')) 
+      
+      dev.new(width = 6,  height = 4, unit = "in", noRStudioGD = TRUE)
+      plot(plot5.alt)
+      
+    # Save plots ----
+      saveplots(plot.object = plot5, plot.name = 'figure_5_pre_post_by_qtr')      
+      saveplots(plot.object = plot5.alt, plot.name = 'figure_5_pre_post_by_qtr_alt')      
+      
+      
       
 # The end ----

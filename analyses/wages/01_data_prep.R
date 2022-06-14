@@ -410,7 +410,7 @@
                                                  wage_hourly > 100 | # would not be in public housing if made $100/hr
                                                  wage_hourly < minimumwage # can't make less than WA minimum wage 
                                                ]$id_kc_pha 
-            combo[id_kc_pha %in% ids.w.problem.hourly.wages, wage_hourly := NA]
+            combo[id_kc_pha %in% ids.w.problem.hourly.wages, c("wage_hourly", "hrs") := NA]
             combo[, year := NULL]
         
       # address data ----

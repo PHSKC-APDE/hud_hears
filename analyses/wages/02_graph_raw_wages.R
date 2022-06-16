@@ -93,26 +93,25 @@
         dt1 <- dt1[, .(time, exit_category, wage, mean, se, upper, lower, wage_hourly, mean.hourly, se.hourly, upper.hourly, lower.hourly)]
         
         dt1.stats <- unique(dt1[!is.na(time), .(time, exit_category, mean, se, upper, lower, wage_hourly, mean.hourly, se.hourly, upper.hourly, lower.hourly)])
-        dt1.stats[exit_category == "Negative", time := time - 0.17]
-        dt1.stats[exit_category == "Positive", time := time + 0.17]
+        dt1.stats[exit_category == "Negative", time := time + 0.17]
+        dt1.stats[exit_category == "Positive", time := time - 0.17]
         
     
     dt2 <- copy(raw) # for viewing secular changes 
-        dt2[, se := std.error(wage), .(qtr_date , exit_category)]
-        dt2[, mean := mean(wage), .(qtr_date , exit_category)]
+        dt2[, se := std.error(wage), .(qtr_date)]
+        dt2[, mean := mean(wage), .(qtr_date)]
         dt2[, upper := mean + (qnorm(.975) * se)]
         dt2[, lower := mean - (qnorm(.975) * se)]
-        
-        dt2[!is.na(wage_hourly) & !is.nan(wage_hourly) & !is.infinite(wage_hourly), se.hourly := std.error(wage_hourly), .(qtr_date , exit_category)]
-        dt2[!is.na(wage_hourly) & !is.nan(wage_hourly) & !is.infinite(wage_hourly), mean.hourly := mean(wage_hourly), .(qtr_date , exit_category)]
+
+        dt2[!is.na(wage_hourly) & !is.nan(wage_hourly) & !is.infinite(wage_hourly), se.hourly := std.error(wage_hourly), .(qtr_date)]
+        dt2[!is.na(wage_hourly) & !is.nan(wage_hourly) & !is.infinite(wage_hourly), mean.hourly := mean(wage_hourly), .(qtr_date)]
         dt2[, upper.hourly := mean.hourly + (qnorm(.975) * se.hourly)]
         dt2[, lower.hourly := mean.hourly - (qnorm(.975) * se.hourly)]
-        
-        dt2 <- dt2[, .(time = qtr_date , exit_category, wage, mean, se, upper, lower, wage_hourly, mean.hourly, se.hourly, upper.hourly, lower.hourly)]
-        
-        dt2.stats <- unique(dt2[!is.na(time), .(time, exit_category, mean, se, upper, lower, wage_hourly, mean.hourly, se.hourly, upper.hourly, lower.hourly)])
-        dt2.stats[exit_category == "Negative", time := time - 7]
-        dt2.stats[exit_category == "Positive", time := time + 7]
+
+        dt2 <- dt2[, .(time = qtr_date , wage, mean, se, upper, lower, wage_hourly, mean.hourly, se.hourly, upper.hourly, lower.hourly)]
+
+        dt2.stats <- unique(dt2[!is.na(time), .(time, mean, se, upper, lower, wage_hourly, mean.hourly, se.hourly, upper.hourly, lower.hourly)])
+
 
 # Create plots ----        
   # Plot quarterly wages----
@@ -218,30 +217,23 @@
       
       set.seed(98104) # because jitter is 'random'
       plot3 <- ggplot() +
-        geom_point(data = dt2[!is.na(time)],  aes(x = time, y = wage, color = exit_category), 
+        geom_point(data = dt2[!is.na(time)],  aes(x = time, y = wage, color = 'orange2'), 
                    position=position_jitterdodge(dodge.width=25, jitter.height=0, jitter.width=10), alpha=0.7) +
-        geom_point(data = dt2.stats[exit_category == 'Positive'],  
+        geom_point(data = dt2.stats[],  
                    aes(x = time, y = mean), 
                    size = 1.5) +
-        geom_errorbar(data = dt2.stats[exit_category == 'Positive'],  
+        geom_errorbar(data = dt2.stats[],  
                       stat = 'identity', 
                       aes(x = time, ymax = upper, ymin = lower), 
                       size = .75, 
-                      width = .25) +      
-        geom_point(data = dt2.stats[exit_category == 'Negative'],  
-                   aes(x = time, y = mean), 
-                   size = 1.5) +
-        geom_errorbar(data = dt2.stats[exit_category == 'Negative'],  
-                      stat = 'identity', aes(x = time, ymax = upper, ymin = lower), 
-                      size = .75, 
                       width = .25) +
         labs(title = paste0("quarterly wages secular trend"), 
-             subtitle = "calendar time", 
+             subtitle = "", 
              x = "", 
              y = "", 
              caption = "The black points and error bars are the mean and 95% confidence interval, respectively.") +
-        scale_color_manual("Exit type", 
-                           values=c('Positive' = '#2c7fb8', 'Negative' = '#2ca25f')) +
+        # scale_color_manual("Exit type", 
+        #                    values=c('Positive' = '#2c7fb8', 'Negative' = '#2ca25f')) +
         scale_y_continuous(labels=scales::dollar_format())+
         theme(panel.grid.major = element_line(color = "white"), 
               panel.background = element_rect(fill = "white"), 
@@ -249,7 +241,7 @@
               plot.title = element_text(hjust = 0.5), 
               plot.subtitle = element_text(hjust = 0.5),
               plot.caption = element_text(size=8),
-              legend.position = "right",
+              legend.position = "none",
               legend.background = element_rect(fill="white", size=0.5, linetype="solid", color ="white"), 
               legend.title = element_text(size = 12), 
               legend.key = element_rect(fill = "white", color = "white"),
@@ -259,37 +251,30 @@
       
       plot(plot3)
       
-      saveplots(plot.object = plot3, plot.name = 'figure_0_wages_quarterly_calendar')
+      saveplots(plot.object = plot3, plot.name = 'figure_0_secular_trend_wages_quarterly')
       
   # Plot hourly wages (calendar time) ----
       plot.new()      
       
       set.seed(98104) # because jitter is 'random'
       plot4 <- ggplot() +
-        geom_point(data = dt2[!is.na(time)],  aes(x = time, y = wage_hourly, color = exit_category), 
+        geom_point(data = dt2[!is.na(time)],  aes(x = time, y = wage_hourly, color = 'orange2'), 
                    position=position_jitterdodge(dodge.width=25, jitter.height=0, jitter.width=10), alpha=0.7) +
-        geom_point(data = dt2.stats[exit_category == 'Positive'],  
+        geom_point(data = dt2.stats[],  
                    aes(x = time, y = mean.hourly), 
                    size = 1.5) +
-        geom_errorbar(data = dt2.stats[exit_category == 'Positive'],  
+        geom_errorbar(data = dt2.stats[],  
                       stat = 'identity', 
                       aes(x = time, ymax = upper.hourly, ymin = lower.hourly), 
                       size = .75, 
                       width = .25) +      
-        geom_point(data = dt2.stats[exit_category == 'Negative'],  
-                   aes(x = time, y = mean.hourly), 
-                   size = 1.5) +
-        geom_errorbar(data = dt2.stats[exit_category == 'Negative'],  
-                      stat = 'identity', aes(x = time, ymax = upper.hourly, ymin = lower.hourly), 
-                      size = .75, 
-                      width = .25) +
         labs(title = paste0("hourly wages secular trend"), 
-             subtitle = "calendar time", 
+             subtitle = "", 
              x = "", 
              y = "", 
              caption = "The black points and error bars are the mean and 95% confidence interval, respectively.") +
-        scale_color_manual("Exit type", 
-                           values=c('Positive' = '#2c7fb8', 'Negative' = '#2ca25f')) +
+        # scale_color_manual("Exit type", 
+        #                    values=c('Positive' = '#2c7fb8', 'Negative' = '#2ca25f')) +
         scale_y_continuous(labels=scales::dollar_format())+
         theme(panel.grid.major = element_line(color = "white"), 
               panel.background = element_rect(fill = "white"), 
@@ -297,7 +282,7 @@
               plot.title = element_text(hjust = 0.5), 
               plot.subtitle = element_text(hjust = 0.5),
               plot.caption = element_text(size=8),
-              legend.position = "right",
+              legend.position = "none",
               legend.background = element_rect(fill="white", size=0.5, linetype="solid", color ="white"), 
               legend.title = element_text(size = 12), 
               legend.key = element_rect(fill = "white", color = "white"),
@@ -307,7 +292,7 @@
       
       plot(plot4)
       
-      saveplots(plot.object = plot4, plot.name = 'figure_0_wages_hourly_calendar')
+      saveplots(plot.object = plot4, plot.name = 'figure_0_secular_trend_wages_hourly')
       
 # Summary tables ----
   # Quarterly wage difference by Pre/Exit/Post ----
@@ -352,48 +337,9 @@
                                      difference = paste0(round2(difference), " (", round2(difference.sd), ")"),
                                      significant)]
     
-  # Quarterly wage difference by calendar dates ----
-    dt.diff.qtr <- merge(dt2[!is.na(time) & exit_category == "Positive", .(pos.mean = mean(wage), pos.sd = sd(wage)), time], 
-                         dt2[!is.na(time) & exit_category == "Negative", .(neg.mean = mean(wage), neg.sd = sd(wage)), time], 
-                         by = 'time', 
-                         all = T)
-    dt.diff.qtr[, difference := pos.mean - neg.mean]
-    dt.diff.qtr[, difference.sd := sqrt((pos.sd^2) + (neg.sd^2))]
-    for(mytime in unique(dt.diff.qtr$time)){
-      dt.diff.qtr[time == mytime, t_test_pvalue := t.test(x = dt2[!is.na(time) & exit_category == "Positive" & time == mytime,]$wage, 
-                                                          y = dt2[!is.na(time) & exit_category == "Negative" & time == mytime,]$wage)$p.value]
-    }
-    dt.diff.qtr[t_test_pvalue < 0.05, significant := "*"]
-    dt.diff.qtr <- dt.diff.qtr[, .(wage = 'quarterly', 
-                                   time = factor(time, labels = sort(unique(dt.diff.qtr$time))), 
-                                   positive = paste0(round2(pos.mean), " (", round2(pos.sd), ")"), 
-                                   negative = paste0(round2(neg.mean), " (", round2(neg.sd), ")"),
-                                   difference = paste0(round2(difference), " (", round2(difference.sd), ")"),
-                                   significant)]
-    
-  # Hourly wage difference by calendar dates ----
-    dt.diff.hrs <- merge(dt2[!is.na(time) & exit_category == "Positive" & !is.na(wage_hourly), .(pos.mean = mean(wage_hourly), pos.sd = sd(wage_hourly)), time], 
-                         dt2[!is.na(time) & exit_category == "Negative" & !is.na(wage_hourly), .(neg.mean = mean(wage_hourly), neg.sd = sd(wage_hourly)), time], 
-                         by = 'time', 
-                         all = T)
-    dt.diff.hrs[, difference := pos.mean - neg.mean]
-    dt.diff.hrs[, difference.sd := sqrt((pos.sd^2) + (neg.sd^2))]
-    for(mytime in unique(dt.diff.hrs$time)){
-      dt.diff.hrs[time == mytime, t_test_pvalue := t.test(x = dt2[!is.na(time) & exit_category == "Positive" & time == mytime,]$wage_hourly, 
-                                                          y = dt2[!is.na(time) & exit_category == "Negative" & time == mytime,]$wage_hourly)$p.value]
-    }
-    dt.diff.hrs[t_test_pvalue < 0.05, significant := "*"]
-    dt.diff.hrs <- dt.diff.hrs[, .(wage = 'hourly', 
-                                   time = factor(time, labels = sort(unique(dt.diff.hrs$time))), 
-                                   positive = paste0(round2(pos.mean), " (", round2(pos.sd), ")"), 
-                                   negative = paste0(round2(neg.mean), " (", round2(neg.sd), ")"),
-                                   difference = paste0(round2(difference), " (", round2(difference.sd), ")"),
-                                   significant)]
   # Combine tables of wage differences by time ----
     wage.differences <- rbind(pep.diff.qtr, 
-                              pep.diff.hrs, 
-                              dt.diff.qtr, 
-                              dt.diff.hrs)
+                              pep.diff.hrs)
     
   # save wage difference table ----
     openxlsx::write.xlsx(wage.differences, paste0(outputdir, "wage_differences_raw.xlsx"), asTable = T, overwrite = T)

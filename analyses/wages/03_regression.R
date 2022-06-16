@@ -430,7 +430,7 @@
       saveplots(plot.object = plot3, plot.name = 'figure_3_post_trends')
 
 
-# Model 4: Quartlery wage model for 1 prior to exit to one year post exit ----
+# Model 4: Quarterly wage model for 1 prior to exit to one year post exit ----
     # Create dt4 for complete analysis: 1 year prior, at exit, and 1 year post ----
       dt4 <- copy(raw)
       dt4[qtr == -4, time := -1]
@@ -546,14 +546,42 @@
       # dev.new(width = 6,  height = 4, unit = "in", noRStudioGD = TRUE)
       plot(plot4)
       
+    # Plot of residuals vs time to assess autocorrelation ----
+      mod4.resid <- copy(dt4)[, fitted := fitted(mod4)]
+      mod4.resid[, residual := wage - fitted]
+      mod4.resid[, time := as.numeric(as.character(time))]
+      mod4.resid[exit_category == "Negative", time := time - .05]
+      mod4.resid[exit_category == "Positive", time := time + .05]
+      set.seed(98104) # because jitter is 'random'
+      
+      plot.resid.4 <- ggplot() +
+        geom_point(data = mod4.resid[exit_category != "Counterfactual"], 
+                   aes(x = time, y = residual, color = exit_category), 
+                   size = 2.5, 
+                   position=position_jitterdodge(dodge.width=0.65, jitter.height=0, jitter.width=0.15), alpha=0.7) +
+        labs(title = paste0("Hourly wage history by exit type and time"), 
+             subtitle = "Model 4: residuals", 
+             caption = caption.text, 
+             x = "", 
+             y = "Quarterly wages") +
+        scale_x_continuous(labels=c("1 year prior", "Exit", "1 year post"), breaks=c(-1, 0, 1))
+      
+      plot.resid.4 <- formatplots(plot.resid.4) + 
+        scale_color_manual("Exit type", 
+                           values=c('Positive' = '#2c7fb8', 
+                                    'Negative' = '#2ca25f')) 
+      message("No pattern with residuals, so evidence of autocorrelation, and no need for including lag dependent variables")
+      # plot.resid.4
+      
     # Save plot ----
       saveplots(plot.object = plot4, plot.name = 'figure_4_pre_post_trends')  
+      saveplots(plot.object = plot.resid.4, plot.name = 'figure_4_pre_post_trends_residuals')  
       openxlsx::write.xlsx(mod4.preds, file = paste0(outputdir, "model_4_predictions.xlsx"), asTable = T, overwrite = T)
       openxlsx::write.xlsx(mod4.tidy, file = paste0(outputdir, "model_4_estimates.xlsx"), asTable = T, overwrite = T)
       
 # Model 4.5: Hourly wage model for 1 prior to exit to one year post exit ----
     # Create dt4.5 for complete analysis: 1 year prior, at exit, and 1 year post ----
-      dt4.5 <- copy(raw)
+      dt4.5 <- copy(raw)[!is.na(wage_hourly)]
       dt4.5[qtr == -4, time := -1]
       dt4.5[qtr == 0, time := 0]
       dt4.5[qtr == 4, time := 1]
@@ -572,7 +600,7 @@
                              "(1 + exit | hh_id_kc_pha)") # random intercept and slope for households
       mod4.5 <- lme4::lmer(mod4.5.formula, data = dt4.5)
       mod4.5.tidy <- as.data.table(broom.mixed::tidy(mod4.5, conf.int = T))
-      
+
     # test if p-value for interaction term is < 0.05 with LRT ----
       mod4.5.formula.alt <- paste0("wage_hourly ~ ",
                              "exit + time + ", 
@@ -666,8 +694,36 @@
       # dev.new(width = 6,  height = 4, unit = "in", noRStudioGD = TRUE)
       plot(plot4.5)
       
+    # Plot of residuals vs time to assess autocorrelation ----
+      mod4.5.resid <- copy(dt4.5)[, fitted := fitted(mod4.5)]
+      mod4.5.resid[, residual := wage - fitted]
+      mod4.5.resid[, time := as.numeric(as.character(time))]
+      mod4.5.resid[exit_category == "Negative", time := time - .05]
+      mod4.5.resid[exit_category == "Positive", time := time + .05]
+      set.seed(98104) # because jitter is 'random'
+      
+      plot.resid.4.5 <- ggplot() +
+        geom_point(data = mod4.5.resid[exit_category != "Counterfactual"], 
+                   aes(x = time, y = residual, color = exit_category), 
+                   size = 2.5, 
+                   position=position_jitterdodge(dodge.width=0.65, jitter.height=0, jitter.width=0.15), alpha=0.7) +
+        labs(title = paste0("Hourly wage history by exit type and time"), 
+             subtitle = "Model 4.5: residuals", 
+             caption = caption.text, 
+             x = "", 
+             y = "Quarterly wages") +
+        scale_x_continuous(labels=c("1 year prior", "Exit", "1 year post"), breaks=c(-1, 0, 1))
+      
+      plot.resid.4.5 <- formatplots(plot.resid.4.5) + 
+        scale_color_manual("Exit type", 
+                           values=c('Positive' = '#2c7fb8', 
+                                    'Negative' = '#2ca25f')) 
+      message("No pattern with residuals, so evidence of autocorrelation, and no need for including lag dependent variables")
+      # plot.resid.4.5
+      
     # Save plot ----
       saveplots(plot.object = plot4.5, plot.name = 'figure_4.5_pre_post_trends')      
+      saveplots(plot.object = plot.resid.4.5, plot.name = 'figure_4.5_pre_post_trends_residuals')  
       openxlsx::write.xlsx(mod4.5.preds, file = paste0(outputdir, "model_4.5_predictions.xlsx"), asTable = T, overwrite = T)
       openxlsx::write.xlsx(mod4.5.tidy, file = paste0(outputdir, "model_4.5_estimates.xlsx"), asTable = T, overwrite = T)
       

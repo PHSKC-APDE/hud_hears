@@ -106,7 +106,8 @@
     
 # Identify confounders (associated with exposure and outcome) ----
     # remove wage / ami since they are the outcomes of interest ----
-      exposure.associated <- setdiff(exposure.associated, c('wage', 'percent_ami'))
+      exposure.associated <- setdiff(exposure.associated, c('wage', 'percent_ami', "wage_hourly", "hrs"))
+      pscovariates <- copy(exposure.associated) # keep a copy if want to create propensity score
       
     # split categorical from continuous ----
       # identify definite categorical vars ----
@@ -160,10 +161,12 @@
     # since we only checked for association with outcome among those associated with the exposure
     # the final list of those associated with the outcome is the list of confounders
       confounders <- copy(outcome.associated)
-        
-# Save confounders as an object for use in modeling ----
-    # neet to have an object (e.g., a table or list) rather than a value for saving
+
+# Save confounders & pscovariates as an object for use in modeling ----
+    # need to have an object (e.g., a table or list) rather than a value for saving
       confounders <- data.table(confounders = confounders)
       save(confounders, file = paste0(outputdir, "confounders.Rdata"))
+      pscovariates <- data.table(pscovariates = pscovariates)
+      save(pscovariates, file = paste0(outputdir, "pscovariates.Rdata"))
         
 # The end ----

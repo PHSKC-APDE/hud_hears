@@ -547,7 +547,9 @@
       plot(plot4)
       
     # Save plot ----
-      saveplots(plot.object = plot4, plot.name = 'figure_4_pre_post_trends')      
+      saveplots(plot.object = plot4, plot.name = 'figure_4_pre_post_trends')  
+      openxlsx::write.xlsx(mod4.preds, file = paste0(outputdir, "model_4_predictions.xlsx"), asTable = T, overwrite = T)
+      openxlsx::write.xlsx(mod4.tidy, file = paste0(outputdir, "model_4_estimates.xlsx"), asTable = T, overwrite = T)
       
 # Model 4.5: Hourly wage model for 1 prior to exit to one year post exit ----
     # Create dt4.5 for complete analysis: 1 year prior, at exit, and 1 year post ----
@@ -666,6 +668,8 @@
       
     # Save plot ----
       saveplots(plot.object = plot4.5, plot.name = 'figure_4.5_pre_post_trends')      
+      openxlsx::write.xlsx(mod4.5.preds, file = paste0(outputdir, "model_4.5_predictions.xlsx"), asTable = T, overwrite = T)
+      openxlsx::write.xlsx(mod4.5.tidy, file = paste0(outputdir, "model_4.5_estimates.xlsx"), asTable = T, overwrite = T)
       
 # Model 5: Model for all available quarterly wage data ----
     # Create dt5 for complete quarterly analysis ----

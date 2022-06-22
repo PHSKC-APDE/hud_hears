@@ -107,87 +107,109 @@ exit_timevar %>%
 
 
 ## CONSORT diagram ----
-## Set up values for each node ----
 # Set up DF to track counts
 consort_df <- exit_timevar %>% filter(!is.na(act_date))
-exits_tot <- nrow(consort_df)
 
-# Date range
-consort_period_excl_sha <- consort_df %>% filter(agency == "SHA" & (act_date < "2012-01-01" | act_date > "2018-12-31")) %>% nrow()
-consort_period_excl_kcha <- consort_df %>% filter(agency == "KCHA" & (act_date < "2016-01-01" | act_date > "2018-12-31")) %>% nrow()
-
-consort_df <- consort_df %>% filter((agency == "SHA" & act_date >= "2012-01-01" & act_date <= "2018-12-31") |
-                                      (agency == "KCHA" & act_date >= "2016-01-01" & act_date <= "2018-12-31"))
-
-exits_period <- nrow(consort_df)
-
-# True/false exits
-consort_df <- consort_df %>% filter(true_exit == 1)
-exits_true <- nrow(consort_df)
-exits_false <- exits_period - exits_true
-
-# One exit per person
-consort_df <- consort_df %>% filter(exit_order_study == exit_order_max_study & exit_type_keep == 1)
-exits_per_person <- nrow(consort_df)
-exits_multi <- exits_true - nrow(consort_df)
-
-# Add in covariates
-consort_df <-  left_join(consort_df, 
-                         distinct(covariate, id_hudhears, exit_date, exit_category, exit_death, age_at_exit,
-                                  gender_me, race_eth_me, single_caregiver, hh_size, hh_disability,
-                                  housing_time_at_exit, kc_opp_index_score, 
-                                  full_cov_11_prior, full_cov_7_prior, full_cov_11_after, full_cov_7_after),
-                         by = c("id_hudhears", "act_date" = "exit_date", "exit_category"))
-
-# Remove deaths or missing reasons
-exits_death_removed <- nrow(consort_df %>% filter(exit_death == 1L))
-exits_missing <- nrow(consort_df %>% filter(is.na(exit_death)))
-consort_df <- consort_df %>% filter(exit_death == 0 & !is.na(exit_death))
-exits_death <- nrow(consort_df)
-
-# Remove missing covariates
-missing_age <- nrow(consort_df %>% filter(is.na(age_at_exit)))
-missing_gender <- nrow(consort_df %>% filter(is.na(gender_me)))
-missing_race <- nrow(consort_df %>% filter(is.na(race_eth_me) | race_eth_me == "Unknown"))
-missing_agency <- nrow(consort_df %>% filter(is.na(agency)))
-missing_caregiver <- nrow(consort_df %>% filter(is.na(single_caregiver)))
-missing_hhsize <- nrow(consort_df %>% filter(is.na(hh_size)))
-missing_disability <- nrow(consort_df %>% filter(is.na(hh_disability)))
-missing_los <- nrow(consort_df %>% filter(is.na(housing_time_at_exit)))
-missing_prog <- nrow(consort_df %>% filter(is.na(major_prog)))
-missing_opp_index <- nrow(consort_df %>% filter(is.na(kc_opp_index_score)))
-
-consort_df <- consort_df %>%
-  filter(!(is.na(age_at_exit) | is.na(gender_me) | is.na(race_eth_me) | race_eth_me == "Unknown" |
-             is.na(agency) | is.na(single_caregiver) | is.na(hh_size) | is.na(hh_disability) | 
-             is.na(housing_time_at_exit) | is.na(major_prog) | is.na(kc_opp_index_score)))
-
-exits_demogs <- nrow(consort_df)
-exits_demogs_removed <- exits_death - exits_demogs
-
-
-# Medicaid coverage
-mcaid_7_prior <- nrow(consort_df %>% filter(full_cov_7_prior == 0))
-mcaid_7_after <- nrow(consort_df %>% filter(full_cov_7_after == 0))
-mcaid_7_prior_after <- nrow(consort_df %>% filter(full_cov_7_prior == 0 | full_cov_7_after == 0))
-
-consort_df <- consort_df %>% filter(full_cov_7_prior == 1 & full_cov_7_after == 1)
-exits_mcaid <- nrow(consort_df)
-
-
-## Make diagram ---- 
+### Make diagram ---- 
 # Using approach here: https://stackoverflow.com/questions/61745574/diagrammer-arrow-problems
-
-# Set up function to toggle Medicaid on/off
-consort_maker <- function(mcaid = F) {
+# Set up function to toggle Medicaid and household on/off
+consort_maker <- function(df = consort_df, mcaid_prior = F, mcaid_after = F, household = F) {
+  exits_tot <- nrow(df)
+  
+  ### Set up values for each node ----
+  # Date range
+  consort_period_excl_sha <- df %>% filter(agency == "SHA" & 
+                                                     (act_date < "2012-01-01" | act_date > "2018-12-31")) %>% nrow()
+  consort_period_excl_kcha <- df %>% filter(agency == "KCHA" & 
+                                                      (act_date < "2016-01-01" | act_date > "2018-12-31")) %>% nrow()
+  
+  df <- df %>% filter((agency == "SHA" & act_date >= "2012-01-01" & act_date <= "2018-12-31") |
+                                        (agency == "KCHA" & act_date >= "2016-01-01" & act_date <= "2018-12-31"))
+  
+  exits_period <- nrow(df)
+  
+  # Household level or not
+  if (household == T) {
+    df <- df %>% filter(id_kc_pha == hh_id_kc_pha)
+  }
+  hholds <- nrow(df)
+  one_per_hh <- exits_period - hholds
+  
+  
+  # True/false exits
+  df <- df %>% filter(true_exit == 1)
+  exits_true <- nrow(df)
+  exits_false <- hholds - exits_true
+  
+  # One exit per person
+  df <- df %>% filter(exit_order_study == exit_order_max_study & exit_type_keep == 1)
+  exits_per_person <- nrow(df)
+  exits_multi <- exits_true - nrow(df)
+  
+  # Add in covariates
+  df <-  left_join(df, 
+                   distinct(covariate, id_hudhears, exit_date, exit_category, exit_death, age_at_exit,
+                            gender_me, race_eth_me, single_caregiver, hh_size, hh_disability,
+                            housing_time_at_exit, kc_opp_index_score, 
+                            full_cov_11_prior, full_cov_7_prior, full_cov_11_after, full_cov_7_after),
+                   by = c("id_hudhears", "act_date" = "exit_date", "exit_category"))
+  
+  # Remove deaths or missing reasons
+  exits_death_removed <- nrow(df %>% filter(exit_death == 1L))
+  exits_missing <- nrow(df %>% filter(is.na(exit_death)))
+  df <- df %>% filter(exit_death == 0 & !is.na(exit_death))
+  exits_death <- nrow(df)
+  
+  # Remove missing covariates
+  missing_age <- nrow(df %>% filter(is.na(age_at_exit)))
+  missing_gender <- nrow(df %>% filter(is.na(gender_me)))
+  missing_race <- nrow(df %>% filter(is.na(race_eth_me) | race_eth_me == "Unknown"))
+  missing_agency <- nrow(df %>% filter(is.na(agency)))
+  missing_caregiver <- nrow(df %>% filter(is.na(single_caregiver)))
+  missing_hhsize <- nrow(df %>% filter(is.na(hh_size)))
+  missing_disability <- nrow(df %>% filter(is.na(hh_disability)))
+  missing_los <- nrow(df %>% filter(is.na(housing_time_at_exit)))
+  missing_prog <- nrow(df %>% filter(is.na(major_prog)))
+  missing_opp_index <- nrow(df %>% filter(is.na(kc_opp_index_score)))
+  
+  df <- df %>%
+    filter(!(is.na(age_at_exit) | is.na(gender_me) | is.na(race_eth_me) | race_eth_me == "Unknown" |
+               is.na(agency) | is.na(single_caregiver) | is.na(hh_size) | is.na(hh_disability) | 
+               is.na(housing_time_at_exit) | is.na(major_prog) | is.na(kc_opp_index_score)))
+  
+  exits_demogs <- nrow(df)
+  exits_demogs_removed <- exits_death - exits_demogs
+  
+  
+  # Medicaid coverage
+  mcaid_7_prior <- nrow(df %>% filter(full_cov_7_prior == 0))
+  mcaid_7_after <- nrow(df %>% filter(full_cov_7_after == 0))
+  mcaid_7_prior_after <- nrow(df %>% filter(full_cov_7_prior == 0 | full_cov_7_after == 0))
+  
+  if (mcaid_prior == T & mcaid_after == F) {
+    df <- df %>% filter(full_cov_7_prior == 1)
+  } else if (mcaid_prior == F & mcaid_after == T) {
+    df <- df %>% filter(full_cov_7_after == 1)
+  } else {
+    df <- df %>% filter(full_cov_7_prior == 1 & full_cov_7_after == 1)  
+  }
+  exits_mcaid <- nrow(df)
+  
+  
+  ### Set up columns ----
   # Column 1: main boxes and side box placeholders (blank text)
   a1 <- glue("a1 [label = 'Exits total: {format(exits_tot, big.mark = ',', trim = T)}'];")
   a2 <- glue("a2 [label = 'Exits in study period: {format(exits_period, big.mark = ',', trim = T)}'];")
+  if (household == T) {
+    a2h <- glue("a2h [label = 'Households: {format(hholds, big.mark = ',', trim = T)}'];")
+  } else {
+    a2h <- "a2h [shape = point, label = '', width = 0, height = 0]"
+  }
   a3 <- glue("a3 [label = 'True exits: {format(exits_true, big.mark = ',', trim = T)}'];")
   a4 <- glue("a4 [label = 'One exit per person: {format(exits_per_person, big.mark = ',', trim = T)}'];")
   a5 <- glue("a5 [label = 'Non-death exits: {format(exits_death, big.mark = ',', trim = T)}'];")
   a6 <- glue("a6 [label = 'Complete demographics: {format(exits_demogs, big.mark = ',', trim = T)}'];")
-  if (mcaid == T) {
+  if (mcaid_prior == T | mcaid_after == T) {
     a7 <- glue("a7 [label = 'Non-dual, full Medicaid coverage: \n{format(exits_mcaid, big.mark = ',', trim = T)}'];") 
   } else {
     # For reasons unknown to me, the code fails if there is not another fake box here
@@ -198,6 +220,11 @@ consort_maker <- function(mcaid = F) {
   b1 <- glue("b1 [label = 'Exits outside study period \n",
              "KCHA (<2016, >2018): {format(consort_period_excl_kcha, big.mark = ',', trim = T)} \n",
              "SHA (<2012, >2018): {format(consort_period_excl_sha, big.mark = ',', trim = T)}'];")
+  if (household == T) {
+    b1h <- glue("b1h [label = 'Non-heads of household (n = {format(one_per_hh, big.mark = ',', trim = T)})'];")
+  } else {
+    b1h <- ""
+  }
   b2 <- glue("b2 [label = 'False exits (n = {format(exits_false, big.mark = ',', trim = T)})'];")
   b3 <- glue("b3 [label = 'Multiple exits per person (n = {format(exits_multi, big.mark = ',', trim = T)})'];")
   b4 <- glue("b4 [label = 'Exits due to death (n = {format(exits_death_removed, big.mark = ',', trim = T)}) or \n",
@@ -206,11 +233,19 @@ consort_maker <- function(mcaid = F) {
              " - Opportunity index: {format(missing_opp_index, big.mark = ',', trim = T)} \n",
              " - Household demographics: {format(missing_hhsize, big.mark = ',', trim = T)} \n",
              " - Age: {format(missing_age, big.mark = ',', trim = T)}'];")
-  if (mcaid == T) {
+  if (mcaid_prior == T & mcaid_after == T) {
     b6 <- glue("b6 [label = '<7 months full Medicaid coverage \n", 
                "prior to or after exit \n", 
                "(n = {format(mcaid_7_prior, big.mark = ',', trim = T)}/", 
                "{format(mcaid_7_after, big.mark = ',', trim = T)}, respectively)'];")
+  } else if (mcaid_prior == T & mcaid_after == F) {
+    b6 <- glue("b6 [label = '<7 months full Medicaid coverage \n", 
+               "prior to exit \n", 
+               "(n = {format(mcaid_7_prior, big.mark = ',', trim = T)})'];")
+  } else if (mcaid_prior == F & mcaid_after == T) {
+    b6 <- glue("b6 [label = '<7 months full Medicaid \n", 
+               "coverage after exit \n", 
+               "(n = {format(mcaid_7_after, big.mark = ',', trim = T)})'];")
   } else {
     b6 <- ""
   }
@@ -219,9 +254,19 @@ consort_maker <- function(mcaid = F) {
   lines1 <- glue("a1 -> x1 [arrowhead='none'] \n",
                  "x1 -> b1 \n",
                  "x1 -> a2")
-  lines2 <- glue("a2 -> x2 [arrowhead='none'] \n",
-                 "x2 -> b2 \n",
-                 "x2 -> a3")
+  if (household == T) {
+    lines1h <- glue("a2 -> x1h [arrowhead='none'] \n",
+                   "x1h -> b1h \n",
+                   "x1h -> a2h")
+    lines2 <- glue("a2h -> x2 [arrowhead='none'] \n",
+                   "x2 -> b2 \n",
+                   "x2 -> a3")
+  } else {
+    lines1h <- ""
+    lines2 <- glue("a2 -> x2 [arrowhead='none'] \n",
+                   "x2 -> b2 \n",
+                   "x2 -> a3")
+  }
   lines3 <- glue("a3 -> x3 [arrowhead='none'] \n",
                  "x3 -> b3 \n",
                  "x3 -> a4")
@@ -231,16 +276,27 @@ consort_maker <- function(mcaid = F) {
   lines5 <- glue("a5 -> x5 [arrowhead='none'] \n",
                  "x5 -> b5 \n",
                  "x5 -> a6")
-  if (mcaid == T) {
+  if (mcaid_prior == T | mcaid_after == T) {
     lines6 <- glue("a6 -> x6 [arrowhead='none'] \n",
                    "x6 -> b6 \n",
                    "x6 -> a7")
   } else {
     lines6 <- ""
   }
+
   
   # Set up extra blanks and ranks if needed
-  if (mcaid == T) {
+  if (household == T) {
+    x1h <- "; x1h"
+    rank1h <- glue("subgraph {{ \n
+                    rank = same; x1h; b1h; \n
+                  }}")
+  } else {
+    x1h <- ""
+    rank1h <- ""
+  }
+  
+  if (mcaid_prior == T | mcaid_after == T) {
     x6 <- "; x6"
     rank6 <- glue("subgraph {{ \n
                     rank = same; x6; b6; \n
@@ -258,18 +314,19 @@ consort_maker <- function(mcaid = F) {
     
     # set up main nodes
     node [shape=box, fontsize = 12, fontname = 'Helvetica', width = 2];
-    {a1} {a2} {a3} {a4} {a5} {a6} {a7}
+    {a1} {a2h} {a2} {a3} {a4} {a5} {a6} {a7}
     
     # set up side nodes
     node [shape=box, fontsize = 10, fontname = 'Helvetica', width = 2];
-    {b1} {b2} {b3} {b4} {b5} {b6}
+    {b1} {b1h} {b2} {b3} {b4} {b5} {b6}
     
     # create filler nodes without box around 
     node [shape = point, width = 0, height = 0]
-    x1; x2; x3; x4; x5 {x6}
+    x1 {x1h}; x2; x3; x4; x5 {x6}
     
     # Edge definitions
     {lines1}
+    {lines1h}
     {lines2}
     {lines3}
     {lines4}
@@ -280,6 +337,7 @@ consort_maker <- function(mcaid = F) {
     subgraph {{
       rank = same; x1; b1;
     }}
+    {rank1h}
     subgraph {{
       rank = same; x2; b2;
     }}
@@ -301,18 +359,31 @@ consort_maker <- function(mcaid = F) {
 }
 
 # Run Medicaid and non-Medicaid versions
-mcaid_graph <- consort_maker(mcaid = T)
-nonmcaid_graph <- consort_maker(mcaid = F)
+mcaid_graph <- consort_maker(df = consort_df, mcaid_prior = T, mcaid_after = T, household = F)
+mcaid_prior_graph <- consort_maker(df = consort_df, mcaid_prior = T, mcaid_after = F, household = F)
+nonmcaid_graph <- consort_maker(df = consort_df, mcaid_prior = F, mcaid_after = F, household = F)
+
+# Repeat but for households
+mcaid_graph_hh <- consort_maker(df = consort_df, mcaid_prior = T, mcaid_after = T, household = T)
+mcaid_prior_graph_hh <- consort_maker(df = consort_df, mcaid_prior = T, mcaid_after = F, household = T)
+nonmcaid_graph_hh <- consort_maker(df = consort_df, mcaid_prior = F, mcaid_after = F, household = T)
 
 # Clunky workarounds to get export to work
 # https://github.com/rich-iannone/DiagrammeR/issues/340
 # https://stackoverflow.com/questions/65669640/save-diagrammer-object-to-png-on-disc
 mcaid_graph %>% DiagrammeRsvg::export_svg() %>% charToRaw() %>% rsvg::rsvg() %>%
   png::writePNG(file.path(here::here(), "analyses/consort_diag_mcaid.png"))
-
+mcaid_prior_graph %>% DiagrammeRsvg::export_svg() %>% charToRaw() %>% rsvg::rsvg() %>%
+  png::writePNG(file.path(here::here(), "analyses/consort_diag_mcaid_prior.png"))
 nonmcaid_graph %>% DiagrammeRsvg::export_svg() %>% charToRaw() %>% rsvg::rsvg() %>%
   png::writePNG(file.path(here::here(), "analyses/consort_diag_nonmcaid.png"))
 
+mcaid_graph_hh %>% DiagrammeRsvg::export_svg() %>% charToRaw() %>% rsvg::rsvg() %>%
+  png::writePNG(file.path(here::here(), "analyses/consort_diag_mcaid_hh.png"))
+mcaid_prior_graph_hh %>% DiagrammeRsvg::export_svg() %>% charToRaw() %>% rsvg::rsvg() %>%
+  png::writePNG(file.path(here::here(), "analyses/consort_diag_mcaid_prior_hh.png"))
+nonmcaid_graph_hh %>% DiagrammeRsvg::export_svg() %>% charToRaw() %>% rsvg::rsvg() %>%
+  png::writePNG(file.path(here::here(), "analyses/consort_diag_nonmcaid_hh.png"))
 
 
 

@@ -37,7 +37,7 @@ The data below show demographics of people who exited from King County Housing A
 
 -   KCHA data is incomplete for exits prior to late 2015.
 -   Only complete exits are included here. People with action type = 6 who had subsequent 50058 records are not considered to have exited.
--   Exit types are categorized according to the document here: <https://github.com/PHSKC-APDE/hud_hears/blob/main/data_processing/PHA_exit_definitions.csv>.
+-   Exit types are categorized according to the document here (ask study team for access): <https://github.com/PHSKC-APDE/hud_hears/blob/main/data_processing/PHA_exit_definitions.csv>.
 
 # Individual-level analyses
 ## Exits over time

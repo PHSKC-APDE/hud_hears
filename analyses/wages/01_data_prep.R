@@ -225,7 +225,7 @@
         exits <- unique(exits)
         
         count05_unique <- rbind(copy(exits)[, .N, agency], data.table(agency = "Either", N = nrow(exits)))
-        if(count05_unique != consort05_exit_reasons){
+        if(count05_unique[agency == 'Either']$N != consort05_exit_reasons){
           stop("The rows counts at this stage should match
                consort05_exit_reasons")
         }
@@ -335,7 +335,7 @@
       # (1) create template of id_hudhears and all relevant quarters (+/- 4 quarters from exit) ----
         # wide
           template <- combo[, .(id_hudhears, exit_qtr)]
-          for(qnum in 1:4){
+          for(qnum in 1:8){
             template[, "t0" := exit_qtr] # quarter of exit
             template[, paste0("t-", qnum) := exit_qtr - months(qnum*3)] # 4 quarters before exit quarter
             template[, paste0("t", qnum) := exit_qtr + months(qnum*3)] # 4 quarters after exit quarter
@@ -347,14 +347,14 @@
                          value.name = "qtr_date")
         # tidy and create quarter indicator
           template <- setorder(template[, .(id_hudhears, qtr_date)], id_hudhears, qtr_date)
-          template[, qtr := -4:4, id_hudhears]
+          template[, qtr := -8:8, id_hudhears]
 
       # (2) merge template of all quarters of interest onto exit_xwalk_demographics ----
           # will have 8 additional rows per id, one for +/- 4 quarters from exit
             combo <- merge(combo, template, by = "id_hudhears", all = T) 
           
           # demographics are more or less constant, but address post exit is not, so set TRACT and COUNTY to NA after time zero
-            combo[qtr %in% 1:4, c("geo_tractce10", "geo_countyfp10") := NA ]
+            combo[qtr >= 1, c("geo_tractce10", "geo_countyfp10") := NA ]
       
       # (3) merge on wages based on id_esd and specific quarters of interest ----
           combo <- merge(combo, copy(wage_combo_address), by = c("id_esd", "qtr_date"), all.x = T, all.y = F)
@@ -366,8 +366,8 @@
 
       # (5) drop person if there is NOT >= one wage data point before AND after exit ----  
         usable_id_esd <- intersect(
-          unique(combo[!is.na(wage) & qtr %in% -4:0]$id_esd), 
-          unique(combo[!is.na(wage) & qtr %in% 1:4]$id_esd))
+          unique(combo[!is.na(wage) & qtr < 0]$id_esd), 
+          unique(combo[!is.na(wage) & qtr > 0]$id_esd))
         combo <- combo[id_esd %in% usable_id_esd]
         
         count08_add_wages <- rbind(unique(combo[, .(id_esd, agency)])[, .N, agency], data.table(agency = "Either", N = length(unique(combo$id_esd)) ))
@@ -386,12 +386,32 @@
         
     # fill in missing wage, hrs, & address data when possible ----
       # wage data ----
-        setorder(combo[is.na(wage), .N, qtr], qtr)[]
-        setorder(combo, id_esd, qtr_date, qtr)
-        combo[, wage  := nafill(wage, type = 'locf'), by = "id_esd" ] # fill geoid forward / downward
-        combo[, wage  := nafill(wage, type = 'nocb'), by = "id_esd" ] # fill geoid backward / upward
-        combo[, hrs  := nafill(hrs, type = 'locf'), by = "id_esd" ] # fill geoid forward / downward
-        combo[, hrs  := nafill(hrs, type = 'nocb'), by = "id_esd" ] # fill geoid backward / upward
+        # quarterly wage data
+            setorder(combo[is.na(wage), .N, qtr], qtr)[]
+            setorder(combo, id_esd, qtr_date, qtr)
+            combo[, wage  := nafill(wage, type = 'locf'), by = "id_esd" ] # fill wage forward / downward
+            combo[, wage  := nafill(wage, type = 'nocb'), by = "id_esd" ] # fill wage backward / upward
+            combo[, hrs  := nafill(hrs, type = 'locf'), by = "id_esd" ] # fill wage forward / downward
+            combo[, hrs  := nafill(hrs, type = 'nocb'), by = "id_esd" ] # fill wage backward / upward
+        
+        # hourly wage data
+          combo[, wage_hourly := rads::round2(wage / hrs, 2)]
+          # drop hourly wages that irrational
+            combo[, year := year(qtr_date)]
+            minwage <- fread(
+              httr::content(
+                httr::GET(url = "https://raw.githubusercontent.com/PHSKC-APDE/hud_hears/main/analyses/wages/ref/minimum_wage_history.csv", 
+                                      httr::authenticate(Sys.getenv("GITHUB_TOKEN"), ""))
+                )
+              )
+            minwage <- minwage[geography == "WA", .(year, minimumwage = as.numeric(gsub('\\$', '', wage)))]
+            combo <- merge(combo, minwage, by = 'year', all.x = T, all.y = F)
+            ids.w.problem.hourly.wages <- combo[is.nan(wage_hourly) | 
+                                                 wage_hourly > 100 | # would not be in public housing if made $100/hr
+                                                 wage_hourly < minimumwage # can't make less than WA minimum wage 
+                                               ]$id_kc_pha 
+            combo[id_kc_pha %in% ids.w.problem.hourly.wages, c("wage_hourly", "hrs") := NA]
+            combo[, year := NULL]
         
       # address data ----
           # check if have address for each quarter of exit (qtr == 0)
@@ -402,10 +422,10 @@
           # nafill only works with numeric and want to avoid DT[, myvar  := myvar[1], by= .(ID , cumsum(!is.na(myvar)) ) ] 
           combo[, c("geo_tractce10", "geo_countyfp10") := lapply(.SD, as.numeric), .SDcols = c("geo_tractce10", "geo_countyfp10")]
           # use nafill
-            combo[qtr %in% 1:4, geo_tractce10  := nafill(geo_tractce10, type = 'locf'), by = "id_esd" ] # fill geoid backward / upward
-            combo[qtr %in% 1:4, geo_tractce10  := nafill(geo_tractce10, type = 'nocb'), by = "id_esd" ] # fill geoid backward / upward
-            combo[qtr %in% 1:4, geo_countyfp10  := nafill(geo_countyfp10, type = 'locf'), by = "id_esd" ] # fill geoid backward / upward
-            combo[qtr %in% 1:4, geo_countyfp10  := nafill(geo_countyfp10, type = 'nocb'), by = "id_esd" ] # fill geoid backward / upward
+            combo[qtr %in% 1:8, geo_tractce10  := nafill(geo_tractce10, type = 'locf'), by = "id_esd" ] # fill geoid backward / upward
+            combo[qtr %in% 1:8, geo_tractce10  := nafill(geo_tractce10, type = 'nocb'), by = "id_esd" ] # fill geoid backward / upward
+            combo[qtr %in% 1:8, geo_countyfp10  := nafill(geo_countyfp10, type = 'locf'), by = "id_esd" ] # fill geoid backward / upward
+            combo[qtr %in% 1:8, geo_countyfp10  := nafill(geo_countyfp10, type = 'nocb'), by = "id_esd" ] # fill geoid backward / upward
           # convert geographies back to properly formatted character values
             # combo[, c("geo_tractce10", "geo_countyfp10") := lapply(.SD, as.character), .SDcols = c("geo_tractce10", "geo_countyfp10")]
             combo[, geo_tractce10 := sprintf("%06i", geo_tractce10)][geo_tractce10 == "    NA", geo_tractce10 := NA]
@@ -431,11 +451,16 @@
           # ignore kc_opp_index_score bc copies opportunity_index, but only for quarters -4:0 and only for KC
           combo[, kc_opp_index_score := NULL]
 
+# Tidy exit definitions for analysis ----
+    combo[, exit_category := factor(exit_category, levels = c("Positive", "Negative"))] # to force specific order in graph  
+    combo[exit_category == "Negative", exit := 0]
+    combo[exit_category == "Positive", exit := 1]
+          
 # Select/order columns in final dataset ----
     setorder(combo, hh_id_kc_pha, id_kc_pha, qtr)
     combo <- combo[, .(hh_id_kc_pha, id_kc_pha, 
-                      exit_category, exit_date, exit_qtr, qtr, qtr_date,
-                      wage, hrs, ami, percent_ami, opportunity_index,
+                      exit, exit_category, exit_date, exit_year = year(exit_date), exit_qtr, qtr, qtr_date,
+                      wage, hrs, wage_hourly, ami, percent_ami, opportunity_index,
                       race_eth_me, gender_me, age_at_exit, hh_size, hh_disability, n_disability, 
                       single_caregiver, housing_time_at_exit, 
                       agency, major_prog, subsidy_type, exit_reason_clean)]
@@ -450,13 +475,16 @@
         interactive = F
       )
     
-    # write table to T ----
-    DBI::dbWriteTable(conn = hhsaw16, 
-                      name = DBI::Id(schema = "hudhears", table = "wage_analytic_table"), 
-                      value = setDF(copy(combo)), 
+    # write table to Azure 16 (production) SQL server ----
+    table_config <- yaml::yaml.load(httr::GET(url = "https://raw.githubusercontent.com/PHSKC-APDE/hud_hears/main/analyses/wages/ref/wage_analytic_table.yaml", 
+                                              httr::authenticate(Sys.getenv("GITHUB_TOKEN"), "")))
+    DBI::dbWriteTable(conn = hhsaw16,
+                      name = DBI::Id(schema = table_config$schema, table = table_config$table),
+                      value = setDF(copy(combo)),
+                      overwrite = T,
                       append = F, 
-                      overwrite = T)
-      
+                      field.types = unlist(table_config$vars)) 
+
 # Create consort diagram ----
     # nicely format all consort counts ----
       counts <- sort(grep("^consort[0-9][0-9]", ls(), value = T))
@@ -489,13 +517,13 @@
       myplot <- plot(consort.complete)
       
     # save consort diagram ----
-      ggsave(paste0(outputdir, "consort_diagram.pdf"),
+      ggplot2::ggsave(paste0(outputdir, "consort_diagram.pdf"),
              plot = consort.complete, 
              dpi=600, 
              width = 6.5, 
              height = 9, 
              units = "in") 
-      ggsave(paste0(outputdir, "consort_diagram.png"),
+      ggplot2::ggsave(paste0(outputdir, "consort_diagram.png"),
              plot = consort.complete, 
              dpi=600, 
              width = 6.5, 

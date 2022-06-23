@@ -33,6 +33,7 @@
     
 # Preparatory data manipulation ----
     raw[, quarter := as.factor(quarter(exit_date))]
+    raw[, exit_year := as.factor(exit_year)]
     
 # Table 1: Descriptive statistics by Exit Type ----
   # configure arsenal::tableby ----
@@ -54,6 +55,8 @@
     table1 <- as.data.table(summary(
       arsenal::tableby(exit_category ~ 
                          wage + 
+                         wage_hourly +
+                         hrs +
                          percent_ami +
                          race_eth_me +
                          gender_me +
@@ -63,7 +66,8 @@
                          housing_time_at_exit +
                          agency +
                          major_prog +
-                         quarter, 
+                         quarter +
+                         exit_year, 
                        data = raw[qtr == 0], 
                        control = my_controls)
       ))
@@ -76,6 +80,8 @@
     
   # Tidy table ----
     table1[, col1 := gsub("wage", "Wages", col1)]
+    table1[, col1 := gsub("Wages_hourly", "Wages hourly", col1)]
+    table1[, col1 := gsub("hrs", "Hours", col1)]
     table1[, col1 := gsub("percent_ami", "Percent AMI", col1)]
     table1[, col1 := gsub("race_eth_me", "Race/ethnicity", col1)]
     table1[, col1 := gsub("gender_me", "Gender", col1)]
@@ -86,6 +92,7 @@
     table1[, col1 := gsub("agency", "Agency", col1)]
     table1[, col1 := gsub("major_prog", "Major program", col1)]
     table1[, col1 := gsub("quarter", "Quarter", col1)]
+    table1[, col1 := gsub("exit_year", "Exit Year", col1)]
     
     table1[, col1 := gsub("&nbsp;|\\*\\*", "", col1)]
     table1[ !is.na(`p value`) & `p value` != "", variable := col1]
@@ -99,11 +106,12 @@
     
 # Identify confounders (associated with exposure and outcome) ----
     # remove wage / ami since they are the outcomes of interest ----
-      exposure.associated <- setdiff(exposure.associated, c('wage', 'percent_ami'))
+      exposure.associated <- setdiff(exposure.associated, c('wage', 'percent_ami', "wage_hourly", "hrs"))
+      pscovariates <- copy(exposure.associated) # keep a copy if want to create propensity score
       
     # split categorical from continuous ----
       # identify definite categorical vars ----
-        categorical <- exposure.associated[sapply(raw[, ..exposure.associated], class) %in% c("character", "factor")]
+        categorical <- exposure.associated[sapply(raw[, ..exposure.associated], class) %in% c("character", "factor", "logical")]
         exposure.associated <- setdiff(exposure.associated, categorical) # remove definite categorical from pool
       
       # partition remaining vars into categorical and continutous ----
@@ -153,10 +161,12 @@
     # since we only checked for association with outcome among those associated with the exposure
     # the final list of those associated with the outcome is the list of confounders
       confounders <- copy(outcome.associated)
-        
-# Save confounders as an object for use in modeling ----
-    # neet to have an object (e.g., a table or list) rather than a value for saving
+
+# Save confounders & pscovariates as an object for use in modeling ----
+    # need to have an object (e.g., a table or list) rather than a value for saving
       confounders <- data.table(confounders = confounders)
       save(confounders, file = paste0(outputdir, "confounders.Rdata"))
+      pscovariates <- data.table(pscovariates = pscovariates)
+      save(pscovariates, file = paste0(outputdir, "pscovariates.Rdata"))
         
 # The end ----

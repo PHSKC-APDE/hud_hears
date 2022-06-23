@@ -1,0 +1,31 @@
+datasource: Compiled ESD data for HUD HEARS wage analysis
+schema: hudhears
+table: wage_analytic_table
+vars: 
+    hh_id_kc_pha: NVARCHAR(22)
+    id_kc_pha: NVARCHAR(22)
+    exit: BIT
+    exit_category: NVARCHAR(18)
+    exit_date: DATE
+    exit_year: INT
+    exit_qtr: DATE
+    qtr: INT
+    qtr_date: DATE
+    wage: INT
+    hrs: INT
+    wage_hourly: NUMERIC(4,2)
+    ami: NUMERIC(38,5)
+    percent_ami: NUMERIC(38,5)
+    opportunity_index: NUMERIC(38,5)
+    race_eth_me: NVARCHAR(18)
+    gender_me: NVARCHAR(18)
+    age_at_exit: INT
+    hh_size: INT
+    hh_disability: BIT
+    n_disability: INT
+    single_caregiver: BIT
+    housing_time_at_exit: NUMERIC(38,5)
+    agency: NVARCHAR(10)
+    major_prog: NVARCHAR(8)
+    subsidy_type: NVARCHAR(46)
+    exit_reason_clean: NVARCHAR(98)

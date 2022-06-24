@@ -43,6 +43,7 @@ pha_demo <- dbGetQuery(db_hhsaw, "SELECT * FROM pha.final_demo")
 
 # Covariate table
 covariate <- dbGetQuery(db_hhsaw, "SELECT * FROM hudhears.control_match_covariate")
+covariate_hh <- dbGetQuery(db_hhsaw, "SELECT * FROM hudhears.control_match_covariate_hh")
 
 
 # Calyear table
@@ -131,6 +132,9 @@ consort_maker <- function(df = consort_df, mcaid_prior = F, mcaid_after = F, hou
   # Household level or not
   if (household == T) {
     df <- df %>% filter(id_kc_pha == hh_id_kc_pha)
+    covariate_use <- covariate_hh
+  } else {
+    covariate_use <- covariate
   }
   hholds <- nrow(df)
   one_per_hh <- exits_period - hholds
@@ -148,7 +152,7 @@ consort_maker <- function(df = consort_df, mcaid_prior = F, mcaid_after = F, hou
   
   # Add in covariates
   df <-  left_join(df, 
-                   distinct(covariate, id_hudhears, exit_date, exit_category, exit_death, age_at_exit,
+                   distinct(covariate_use, id_hudhears, exit_date, exit_category, exit_death, age_at_exit,
                             gender_me, race_eth_me, single_caregiver, hh_size, hh_disability,
                             housing_time_at_exit, kc_opp_index_score, 
                             full_cov_11_prior, full_cov_7_prior, full_cov_11_after, full_cov_7_after),

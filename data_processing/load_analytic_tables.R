@@ -352,6 +352,28 @@ demogs <- dbGetQuery(db_hhsaw,
                      gender_me, race_me, race_eth_me, race_latino
                        FROM pha.final_demo) z
                      ON y.id_kc_pha = z.id_kc_pha
+                     
+                     -- Also add in other household members at HH level
+                     -- Need age at exit for Medicaid well-child check calcs later
+                     UNION
+                     
+                     SELECT n.*, o.dob, o.admit_date_all, o.admit_date_kcha, o.admit_date_sha, 
+                     o.gender_me, o.race_latino, o.race_me, o.race_eth_me
+                     FROM
+                     (SELECT l.level, m.id_hudhears, m.id_kc_pha, l.exit_date 
+                        FROM
+                        (SELECT * FROM hudhears.control_match_hh_long) l
+                        INNER JOIN
+                        (SELECT DISTINCT id_hudhears, id_kc_pha, hh_id_kc_pha, from_date, to_date
+                          FROM pha.stage_pha_exit_timevar) m
+                        ON l.hh_id_kc_pha = m.hh_id_kc_pha AND
+                          l.exit_date >= m.from_date AND l.exit_date <= m.to_date AND
+                          l.id_kc_pha <> m.id_kc_pha) n
+                     LEFT JOIN
+                     (SELECT id_kc_pha, dob, admit_date_all, admit_date_kcha, admit_date_sha, 
+                     gender_me, race_me, race_eth_me, race_latino
+                       FROM pha.final_demo) o
+                     ON n.id_kc_pha = o.id_kc_pha
                      ")
 
 # Set up age and consolidated race/eth 
@@ -499,7 +521,8 @@ mcaid_visits_prior <- dbGetQuery(db_hhsaw,
                            "SELECT ed.level, ed.id_hudhears, ed.exit_date, 
                            COUNT(ed.ed_pophealth_id) AS ed_cnt_prior, COUNT(ed.inpatient_id) AS hosp_cnt_prior
                            FROM
-                           (SELECT DISTINCT a.level, a.id_hudhears, a.exit_date, c.ed_pophealth_id, c.inpatient_id
+                           (SELECT DISTINCT a.level, a.id_hudhears, 
+                           a.exit_date, c.ed_pophealth_id, c.inpatient_id
                              FROM
                              -- Individual-level exits and controls
                                    (SELECT DISTINCT level, id_hudhears, exit_date 
@@ -537,7 +560,7 @@ mcaid_visits_prior <- dbGetQuery(db_hhsaw,
 
 mcaid_visits_after <- dbGetQuery(db_hhsaw,
                                  "SELECT ed.level, ed.id_hudhears, ed.exit_date, 
-                           COUNT(ed.ed_pophealth_id) AS ed_cnt_afterr, COUNT(ed.inpatient_id) AS hosp_cnt_after
+                           COUNT(ed.ed_pophealth_id) AS ed_cnt_after, COUNT(ed.inpatient_id) AS hosp_cnt_after
                            FROM
                            (SELECT DISTINCT a.level, a.id_hudhears, a.exit_date, c.ed_pophealth_id, c.inpatient_id
                              FROM
@@ -799,7 +822,7 @@ bh_events_prior <- bind_rows(bh_crisis_prior, bh_ita_prior) %>%
               group_by(level, id_hudhears, exit_date) %>%
               summarise(crisis_ed_prior = n_distinct(event_date)) %>% ungroup(),
             by = c("level", "id_hudhears", "exit_date"))
-  
+
 
 ## Prior homelessness ----
 homeless <- dbGetQuery(db_hhsaw,
@@ -916,10 +939,16 @@ covariate <- covariate %>%
             by= c("geo_tractce10" = "GEO_TRACT")) %>%
   select(level, id_hudhears:exit_date, exit_reason_clean, exit_category, exit_death, gender_me:age_at_exit,  
          housing_time_at_exit, hh_id_kc_pha, hh_demog_date, agency:geo_tractce10, kc_opp_index_score, 
-         hh_size:single_caregiver) %>%
-  left_join(., 
-            select(mcaid_elig_overlap, level, id_hudhears, exit_date, full_cov_11_prior, full_cov_7_prior, 
-                   full_cov_11_after, full_cov_7_after), 
+         hh_size:single_caregiver)
+
+# Add flag for if anyone in the household had one or more BH or Medicaid event
+# Only count Medicaid events if the person had full coverage
+events <- control_match_id_mcaid %>% 
+  distinct(level, id_hudhears, id_kc_pha, hh_id_kc_pha, exit_date) %>%
+  left_join(., distinct(demogs, level, id_hudhears, id_kc_pha, exit_date, age_at_exit),
+            by = c("level", "id_hudhears", "id_kc_pha", "exit_date")) %>%
+  left_join(., select(mcaid_elig_overlap, level, id_hudhears, exit_date, full_cov_11_prior, full_cov_7_prior, 
+                      full_cov_11_after, full_cov_7_after), 
             by = c("level", "id_hudhears", "exit_date")) %>%
   left_join(., mcaid_visits_prior, by = c("level", "id_hudhears", "exit_date")) %>%
   left_join(., mcaid_visits_after, by = c("level", "id_hudhears", "exit_date")) %>%
@@ -929,22 +958,48 @@ covariate <- covariate %>%
   left_join(., bh_events_prior, by = c("level", "id_hudhears", "exit_date")) %>%
   left_join(., homeless_prior, by = c("level", "id_hudhears", "exit_date")) %>%
   mutate(across(c("crisis_prior", "crisis_ed_prior", "recent_homeless"),
-                ~ replace_na(., 0)))
+                ~ replace_na(., 0)),
+         # Only keep well child checks if the person is <= 6 because beyond that
+         # the guidance is to have a check every 2 years (so a 1-yr look back is not valid).
+         # This introduces NAs
+         wc_cnt_prior = case_when(age_at_exit <= 6 ~ wc_cnt_prior),
+         wc_cnt_after = case_when(age_at_exit <= 5 ~ wc_cnt_after)) %>%
+  group_by(hh_id_kc_pha, exit_date) %>%
+  mutate(hhold_ed_prior = sum(ed_cnt_prior * full_cov_7_prior),
+         hhold_hosp_prior = sum(hosp_cnt_prior * full_cov_7_prior),
+         hhold_wc_prior = sum(wc_cnt_prior * full_cov_7_prior, na.rm =  T),
+         hhold_ed_after = sum(ed_cnt_after * full_cov_7_after),
+         hhold_hosp_after = sum(hosp_cnt_after * full_cov_7_after),
+         hhold_wc_after = sum(wc_cnt_after * full_cov_7_after, na.rm =  T),
+         hhold_ccw_flag = sum(ccw_flag * full_cov_7_prior),
+         hhold_crisis_prior = sum(crisis_prior),
+         hhold_crisis_ed_prior = sum(crisis_ed_prior),
+         hhold_recent_homeless = sum(recent_homeless)
+         ) %>%
+  ungroup() %>%
+  select(-age_at_exit)
 
 
-# Load to SQL
+# Join back to covariate table
+covariate <- inner_join(covariate, events,
+                 by = c("level", "id_hudhears", "id_kc_pha", "hh_id_kc_pha", "exit_date"))
+
+# Split out into ind and hh tables (don't need hhold count data in ind table)
+covariate_ind <- covariate %>%
+  filter(level == "ind") %>%
+  select(-starts_with("hhold_"))
+
+covariate_hh <- covariate %>%
+  filter(level == "hh")
+
+
+# Load to SQL ----
 dbWriteTable(db_hhsaw,
              name = DBI::Id(schema = "hudhears", table = "control_match_covariate"),
-             value = filter(covariate, level == "ind"),
+             value = covariate_ind,
              overwrite = T)
 
 dbWriteTable(db_hhsaw,
              name = DBI::Id(schema = "hudhears", table = "control_match_covariate_hh"),
-             value = filter(covariate, level == "hh"),
+             value = covariate_hh,
              overwrite = T)
-
-
-
-covariate_current <- dbGetQuery(db_hhsaw, "select * from hudhears.control_match_covariate")
-covariate_now <- covariate %>% filter(level == "ind") %>% select(id_hudhears:wc_cnt_after)
-chk2 <- anti_join(covariate_current, covariate_now)

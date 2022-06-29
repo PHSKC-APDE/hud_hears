@@ -42,7 +42,8 @@ DBI::dbExecute(db_hhsaw,
                    WHERE kcid IS NOT NULL) a
                  INNER JOIN
                  (SELECT kcid, auth_no, program, start_date FROM bhrd.au_master
-                   WHERE program IN ('13', '15', '40', '74', '75', '76', '79', '80', '120', '160', '176', 'HL')
+                   WHERE program IN ('13', '15', '40', '74', '75', '76', '79', '80', 
+                   '120', '125', '160', '176', 'CTU', 'HL')
                       AND status_code in ('TM','AA')) b
                  ON a.kcid = b.kcid
                  LEFT JOIN
@@ -72,8 +73,10 @@ DBI::dbExecute(db_hhsaw,
                  cc.[call_stamp],
                  cc.[intake_no],
                  cc.[kcid],
-                 CASE WHEN disp.[investigation] = 'Y' then 1 else 0 END AS [ITA_INVEST], -- Total Number of ITA Investigations 
-                 CASE when disp.[detained] = 'Y' THEN 1 else 0 END AS [ITA_DETAINED], -- Total number of ITA investigations resulting in detention or revocation.
+                 -- Total Number of ITA Investigations
+                 CASE WHEN disp.[investigation] = 'Y' then 1 else 0 END AS [ITA_INVEST],  
+                 -- Total number of ITA investigations resulting in detention or revocation.
+                 CASE when disp.[detained] = 'Y' THEN 1 else 0 END AS [ITA_DETAINED], 
                  CASE WHEN [detained] = 'Y' AND cc.[disposition] <> 'FR' THEN 1 ELSE 0 END AS [ITA_NEW_DETAINED],
                  CASE WHEN [detained] = 'Y' AND cc.[disposition] = 'FR' THEN 1 ELSE 0 END AS [ITA_REVOKED_DETAINED],
                  CASE WHEN [disposition_type] ='M' and [detained] = 'Y' then 1 else 0 END as [ITA_DETAINED_MH],
@@ -90,7 +93,8 @@ DBI::dbExecute(db_hhsaw,
                  AND cc.call_stamp >= '2012-01-01' 
                  AND cc.call_stamp  <= '2019-12-31'
                  AND disp.version = '2021') b
-               ON a.kcid = b.kcid")
+               ON a.kcid = b.kcid
+               WHERE b.ITA_INVEST = 1 OR b.ITA_DETAINED = 1")
 
 
 # OUTPATIENT EVENTS ----
@@ -118,5 +122,6 @@ DBI::dbExecute(db_hhsaw,
                AND sp.action_code in ('A')
                AND au.status_code in ('TM','AA')
                AND sp.loc in ('OP') -- outpatient services
-               AND sp.program not in ('13', '15', '40', '74', '75', '76', '79', '80', '120', '160', '176', 'HL') -- exclude program codes considered as crisis events. 
+               -- Keep only main benefit outpatient programs
+               AND sp.program in ('158', '372', '373', '400', '401', '500', '501')
                AND ea.source_id NOT IN(3, 6, 7, 8, 10) -- exclude system generated services because they do not come from providers")

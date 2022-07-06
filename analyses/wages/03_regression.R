@@ -20,6 +20,11 @@
 #        The models below only have potential confounders that were found to 
 #        be associated with both the exposure (exit type) and outcome (wages). 
 #        
+# Notes on predictions:
+#        * Used marginaleffects::predictions because provides estimates + SE & CI
+#        * margins::prediction & prediction::prediction do not provide SE & CI
+#        * stats::predict (predict.merMod) doesn't provide SE & CI & need to specify 
+#          all fixed effects
 
 # Set up ----
     rm(list=ls())
@@ -71,6 +76,55 @@
              units = "in") 
     }
        
+    # calculate counterfactuals ----
+      calc.counterfactual <- function(mymod.preds = NULL){
+      mymod.negdiff <-  copy(mymod.preds)[exit_category == "Negative"]
+      mymod.negdiff[, wage.prev := shift(x = wage, n = 1L, type = 'lag')]
+      mymod.negdiff[, se.prev := shift(x = se, n = 1L, type = 'lag')]
+      mymod.negdiff[, wage.diff := wage - wage.prev]
+      mymod.negdiff[, se.diff := sqrt((se^2) + (se.prev^2))]
+      mymod.negdiff <- mymod.negdiff[, .(time, wage.diff, se.diff)]
+      
+      mymod.counterfactual <- copy(mymod.preds)[exit_category == "Positive"]
+      mymod.counterfactual[, c("lower", "upper") := NULL]
+      min.time <- min(mymod.preds$time)
+      mymod.counterfactual[time != min(mymod.preds$time), wage := NA]
+      mymod.counterfactual <- merge(mymod.counterfactual, mymod.negdiff, by = c("time"), all = T)
+      mymod.counterfactual[is.na(wage.diff), wage.diff := wage]
+      mymod.counterfactual[, wage := cumsum(wage.diff)]
+      mymod.counterfactual[!is.na(se.diff), se := sqrt((se^2) + (se.diff^2))]
+      mymod.counterfactual <- mymod.counterfactual[, .(time = as.integer(as.character(time)), exit, exit_category = 'Counterfactual', 
+                                                         wage, se, lower = wage - (se * qnorm(0.975)), 
+                                                         upper = wage + (se * qnorm(0.975)))]
+      mymod.preds <- rbind(
+        mymod.preds,
+        mymod.counterfactual)
+      setorder(mymod.preds, exit, exit_category, time)
+      
+      mymod.preds[, time := as.numeric(as.character(time))] # convert time back to numeric for graphing
+    }    
+
+    # clean model estimates ----
+      model.clean <- function(mymod){
+        mymod.tidy <- as.data.table(broom.mixed::tidy(mymod, conf.int = T))
+        roundvars <- c("estimate", "conf.low", "conf.high", "std.error")
+        mymod.tidy[, (roundvars) := rads::round2(.SD, 0), .SDcols = roundvars]
+        mymod.tidy <- mymod.tidy[, .(Effect = effect, 
+                                     Group = group, 
+                                     Term = term, 
+                                     Estimate = paste0(
+                                       prettyNum(estimate, big.mark = ','),
+                                       " (", 
+                                       prettyNum(conf.low, big.mark = ','), 
+                                       ", ", 
+                                       prettyNum(conf.high, big.mark = ','), 
+                                       ")") 
+                                     # , SE = std.error
+                                     )]
+        mymod.tidy[, Estimate := gsub(" \\(NA\\, NA\\)", "", Estimate)]
+        setnames(mymod.tidy, "Estimate", "Estimate (95% CI)")
+      }
+    
 # Load data ----
     # open connection 
     hhsaw16 = create_db_connection( # this is prod
@@ -120,7 +174,7 @@
                              "(1 | id_kc_pha) + ", # random intercept for persons
                              "(1 + exit | hh_id_kc_pha)") # random intercept and slope for households
       mod1 <- lme4::lmer(mod1.formula, data = dt1)
-      mod1.tidy <- as.data.table(broom.mixed::tidy(mod1, conf.int = T))
+      mod1.tidy <- model.clean(mod1)
 
     # test if p-value for interaction term is < 0.05 ----
       mod1.test <- suppressWarnings(lmerTest::lmer(mod1.formula, data = dt1, REML = FALSE))
@@ -134,61 +188,20 @@
       mod1.margin.summary <- as.data.table(summary(margins::margins(mod1))) 
       mod1.margin.summary[factor == 'exit']
     
-    # create table of predictions for slopes in ggplot ... use setDF b/c can't use data.table ----
+    # create table of predictions for slopes in ggplot  ----
       # Try three methods to get predicted values ---
-        # Using prediction::prediction ----
-          # good, but doesn't provide CI
-            mod1.preds <- as.data.table(
-              summary(margins::prediction(mod1, 
-                                          data = setDF(copy(dt1)), 
-                                          at = list(time=c(-1, 0), exit = c(0, 1)))
-                      )
-              )
-            mod1.preds[`at(exit)` == 0, exit_category := "Negative"][`at(exit)` == 1, exit_category := "Positive"]
-            mod1.preds <- mod1.preds[, .(time = `at(time)`, exit_category, wage = Prediction)]
-            mod1.preds[]
-  
-        # Using stats::predict (actually predict.merMod) ----
-          # good, but doesn't provide C
-            print('either need to specify a race_eth & exit_year or add them as random effects to model')
-            # mod1.preds <- predict(mod1,
-            # newdata = data.table(expand.grid(time = c(-1, 0), exit = c(0, 1)),
-            #                      housing_time_at_exit = mean(dt1$housing_time_at_exit)),
-            # re.form=~0)
-            # mod1.preds[]      
-        
         # Using marginaleffects::predictions ----
           # good estimates + se & CI
             mod1.preds <- as.data.table(marginaleffects::predictions(mod1, 
                                                      newdata = datagrid(time=c(-1, 0), exit = c(0, 1)), 
                                                      re.form=~0)) # re.form=~0 means include no random effects, so population level estimates
             mod1.preds[exit == 0, exit_category := "Negative"][exit == 1, exit_category := "Positive"]
-            mod1.preds <- mod1.preds[, .(time, exit, exit_category, wage = predicted, se = std.error, lower = `conf.low`, upper = `conf.high`)]
+            mod1.preds <- mod1.preds[, .(time = as.integer(as.character(time)), exit, exit_category, wage = predicted, se = std.error, lower = `conf.low`, upper = `conf.high`)]
             mod1.preds[]
 
-          # calculate counterfactual for positive exits using 10,000 draws----
-            set.seed(98104)
-            counterfactual <- data.table(neg.minus1 = rnorm(10000, mean = mod1.preds[exit == 0 & time == -1]$wage, sd = mod1.preds[exit == 0 & time == -1]$se), 
-                                         neg.zero = rnorm(10000, mean = mod1.preds[exit == 0 & time == 0]$wage, sd = mod1.preds[exit == 0 & time == 0]$se), 
-                                         pos.minus1 = rnorm(10000, mean = mod1.preds[exit == 1 & time == -1]$wage, sd = mod1.preds[exit == 1 & time == -1]$se))
-            counterfactual[, diff := neg.zero - neg.minus1]
-            counterfactual[, counterfactual := pos.minus1 + diff]
-            counterfactual[, mean := mean(counterfactual)]
-            counterfactual[, sd := sd(counterfactual)]
-            counterfactual <- unique(counterfactual[, .(time = 0, exit = 1, exit_category = "Counterfactual", 
-                                                        wage = mean, se = sd, 
-                                                        lower = mean - (qnorm(0.975) * sd), 
-                                                        upper = mean + (qnorm(0.975) * sd))])
-            
-          # add rows for counterfactual to mod1.preds ----
-            mod1.preds <- rbind(
-              mod1.preds,
-              copy(mod1.preds)[exit == 1 & time == -1][, exit_category := "Counterfactual"], 
-              counterfactual)
-            
-            mod1.preds[]
-            
-            
+        # calculate counterfactual ----
+          mod1.preds = calc.counterfactual(mod1.preds)
+
     # Plot data prior to exit ----
       dt1.plot = copy(dt1)
       dt1.plot[exit == 0, time := time - .015] # add tiny shift for easier visualization
@@ -198,11 +211,12 @@
         # geom_point(data = dt1.plot, aes(x = time, y = wage, color = exit_category)) + 
         geom_line(data = mod1.preds[exit_category != "Counterfactual"], aes(x = time, y = wage, color = exit_category), size = 1) +
         geom_line(data = mod1.preds[exit_category == "Counterfactual"], aes(x = time, y = wage, color = exit_category), linetype="dashed", size = 1) +
-        labs(title = paste0("Population level trends 1 year prior to exit"), 
-             subtitle = "Model 1: Assess parallel trends prior to exit",
-             caption = paste0("", mod1.formula), 
-             x = "", 
-             y = "Quarterly wages") +
+        labs(
+          #title = paste0("Population level trends 1 year prior to exit"), 
+           #subtitle = "Model 1: Assess parallel trends prior to exit",
+           # caption = paste0("", mod1.formula), 
+           x = "", 
+           y = "Quarterly wages") +
         scale_x_continuous(labels=c("1 year prior", "Exit"), breaks=c(-1, 0)) 
         
       plot1 <- formatplots(plot1) + 
@@ -217,7 +231,94 @@
     # Save plot ----
       saveplots(plot.object = plot1, plot.name = 'figure_1_prior_trends')
 
-# Model 2: IPW to see if improves parallel trends ofo pre-exit curves ----
+# Model 1.5: assess parallel trends prior to exit ----
+    # Create dt1.5.5 for assessing parallel trend assumption from quarter -4:0 ----
+      dt1.5 <- copy(raw)
+      dt1.5[qtr %in% -4:0, time := factor(qtr)]
+      dt1.5[exit_category == "Negative", exit := 0]
+      dt1.5[exit_category == "Positive", exit := 1]
+      dt1.5 <- dt1.5[!is.na(time)]
+      
+    # model ----
+      dt1.5[, .N, .(exit, time)]
+      mod1.5.formula <- paste0("wage ~ ", 
+                             "exit*time + ", 
+                             # "exit*splines::bs(as.integer(time), df = 3) + ", 
+                             confounders, " + ",
+                             "(1 | id_kc_pha) + ", # random intercept for persons
+                             "(1 + exit | hh_id_kc_pha)") # random intercept and slope for households
+      mod1.5 <- lme4::lmer(mod1.5.formula, data = dt1.5)
+      mod1.5.tidy <- model.clean(mod1.5)
+      
+    # test if interaction is significant ----
+      mod1.5.formula.alt <- paste0("wage ~ ", 
+                               "exit + time + ", 
+                               # "exit + splines::bs(as.integer(time), df = 3) + ", 
+                               confounders, " + ",
+                               "(1 | id_kc_pha) + ", # random intercept for persons
+                               "(1 + exit | hh_id_kc_pha)") # random intercept and slope for households
+      mod1.5.alt <- lme4::lmer(mod1.5.formula.alt, data = dt1.5)
+      mod1.5.test = anova(mod1.5, mod1.5.alt, test = 'LRT')
+      
+      if( mod1.5.test[["Pr(>Chisq)"]][2] < 0.05 ) {
+        print("The exit:time interaction term is significant, so keep the full model with the interaction term")
+        caption.text <- paste0("", mod1.5.formula)
+      } else {
+        print("The exit:time interaction term is NOT significant, so use more parsimonuous model.")
+        mod1.5.formula <- copy(mod1.5.formula.alt)
+        mod1.5 <- copy(mod1.5.alt)
+        mod1.5.tidy <- model.clean(mod1.5)
+        caption.text <- paste0("", mod1.5.formula)
+      } 
+      
+      
+    # predictions ----  
+      # Using marginaleffects::predictions ----
+        mod1.5.preds <- as.data.table(marginaleffects::predictions(mod1.5, 
+                                                                 newdata = datagrid(time=c(-4:0), exit = c(0, 1)), 
+                                                                 re.form=~0)) # re.form=~0 means include no random effects, so population level estimates
+        mod1.5.preds[exit == 0, exit_category := "Negative"][exit == 1, exit_category := "Positive"]
+        mod1.5.preds <- mod1.5.preds[, .(time = as.integer(as.character(time)), exit, exit_category, wage = predicted, se = std.error, lower = `conf.low`, upper = `conf.high`)]
+        
+      # Calculate counterfactual ----
+        mod1.5.preds <- calc.counterfactual(mod1.5.preds)
+        mod1.5.preds[exit_category == "Positive", time := time - .0]
+        mod1.5.preds[exit_category == "Negative", time := time + .0]
+        mod1.5.preds[]
+
+    # plot ----
+        plot1.5 <- ggplot() +
+          geom_line(data = mod1.5.preds[exit_category != "Counterfactual"], aes(x = time, y = wage, color = exit_category), size = 1) +
+          geom_line(data = mod1.5.preds[exit_category == "Counterfactual"], aes(x = time, y = wage, color = exit_category), linetype="dashed", size = 1) +
+          geom_point(data = mod1.5.preds[exit_category != "Counterfactual"], 
+                     aes(x = time, y = wage, color = exit_category), 
+                     size = 2.5) +
+          geom_errorbar(data = mod1.5.preds[exit_category != "Counterfactual"], 
+                        aes(x = time, ymax = upper, ymin = lower, color = exit_category), 
+                        size = 1, 
+                        width = .05) + 
+          labs(
+            #title = paste0("Population level trends 1 year prior to exit"), 
+            #subtitle = "Model 1: Assess parallel trends prior to exit",
+            # caption = paste0("", mod1.formula), 
+            x = "", 
+            y = "Quarterly wages") +
+          scale_x_continuous(labels=c("1 year prior", "Exit", "1 year post"), breaks=c(-4, 0, 4))
+        
+        plot1.5 <- formatplots(plot1.5) + 
+          scale_color_manual("Exit type", 
+                             values=c('Positive' = '#2c7fb8', 
+                                      'Counterfactual' = '#e41a1c', 
+                                      'Negative' = '#2ca25f')) 
+        
+        # dev.new(width = 7,  height = 4, unit = "in", noRStudioGD = TRUE)
+        plot(plot1.5)
+        
+    # Save plot ----
+      saveplots(plot.object = plot1.5, plot.name = 'appendix_figure_1_assess_parallel_trends')
+      
+      
+# Model 2: IPW to see if improves parallel trends of pre-exit curves ----
     # also hope it will reduce the problem with non-parallel slopes prior to exit
     # create dt2 ----
       dt2 <- copy(dt1)
@@ -243,7 +344,7 @@
                              "(1 | id_kc_pha) + ", # random intercept for persons
                              "(1 + exit | hh_id_kc_pha)")  # random intercept and slope for households
       mod2 <- lme4::lmer(mod2.formula, data = dt2, weights = ipw)
-      mod2.tidy <- as.data.table(broom.mixed::tidy(mod2, conf.int = T))
+      mod2.tidy <- model.clean(mod2)
       
     # test if p-value for interaction term is < 0.05 using likelihood ratio test ----
       mod2.formula.alt <- paste0("wage ~ ", 
@@ -260,7 +361,7 @@
         print("The exit:time interaction term is NOT significant, so use more parsimonuous model.")
         mod2.formula <- copy(mod2.formula.alt)
         mod2 <- copy(mod2.alt)
-        mod2.tidy <- as.data.table(broom.mixed::tidy(mod2, conf.int = T))
+        mod2.tidy <- model.clean(mod2)
         caption.text <- paste0("", mod2.formula)
       }      
       
@@ -269,36 +370,19 @@
       mod2.margin.summary[factor == 'exit']
       
     # create table of predictions for slopes in ggplot ----
-      mod2.preds <- as.data.table(summary(margins::prediction(mod2, data = setDF(copy(dt2)), at = list(time=c(-1, 0), exit = c(0, 1)))))
-      mod2.preds[`at(exit)` == 0, exit_category := "Negative"][`at(exit)` == 1, exit_category := "Positive"]
-      mod2.preds <- mod2.preds[, .(time = `at(time)`, exit_category, wage = Prediction)]
-      mod2.preds[]
-      
       mod2.preds <- as.data.table(marginaleffects::predictions(mod2, 
                                               newdata = datagrid(time=c(-1, 0), exit = c(0, 1)), 
                                               re.form=~0)) # re.form=~0 means include no random effects, so population level estimates
       mod2.preds[exit == 0, exit_category := "Negative"][exit == 1, exit_category := "Positive"]
-      mod2.preds <- mod2.preds[, .(time, exit, exit_category, wage = predicted, se = std.error, lower = `conf.low`, upper = `conf.high`)]
+      mod2.preds <- mod2.preds[, .(time = as.integer(as.character(time)), exit, exit_category, wage = predicted, se = std.error, lower = `conf.low`, upper = `conf.high`)]
       mod2.preds[]
       
-      # calculate counterfactual for positive exits using 10,000 draws----
-      set.seed(98104)
-      counterfactual <- data.table(neg.minus1 = rnorm(10000, mean = mod2.preds[exit == 0 & time == -1]$wage, sd = mod2.preds[exit == 0 & time == -1]$se), 
-                                   neg.zero = rnorm(10000, mean = mod2.preds[exit == 0 & time == 0]$wage, sd = mod2.preds[exit == 0 & time == 0]$se), 
-                                   pos.minus1 = rnorm(10000, mean = mod2.preds[exit == 1 & time == -1]$wage, sd = mod2.preds[exit == 1 & time == -1]$se))
-      counterfactual[, diff := neg.zero - neg.minus1]
-      counterfactual[, counterfactual := pos.minus1 + diff]
-      counterfactual[, mean := mean(counterfactual)]
-      counterfactual[, sd := sd(counterfactual)]
-      counterfactual <- unique(counterfactual[, .(time = 0, exit = 1, exit_category = "Counterfactual", 
-                                                  wage = mean, se = sd, 
-                                                  lower = mean - (qnorm(0.975) * sd), 
-                                                  upper = mean + (qnorm(0.975) * sd))])
-      
+      # calculate counterfactual for positive exits ----
+      counterfactual <- calc.counterfactual(mod2.preds)
+
       # add rows for counterfactual to mod2.preds ----
       mod2.preds <- rbind(
         mod2.preds,
-        copy(mod2.preds)[exit == 1 & time == -1][, exit_category := "Counterfactual"], 
         counterfactual)
       
       mod2.preds[]
@@ -331,6 +415,109 @@
     # Save plot ----
       saveplots(plot.object = plot2, plot.name = 'figure_2_prior_trends')
       
+# Model 2.5: IPW to see if improves parallel trends of pre-exit curves ----
+    # also hope it will reduce the problem with non-parallel slopes prior to exit
+    # create dt2.5 ----
+      dt2.5 <- copy(raw)
+      dt2.5[qtr %in% -4:0, time := factor(qtr)]
+      dt2.5[exit_category == "Negative", exit := 0]
+      dt2.5[exit_category == "Positive", exit := 1]
+      dt2.5 <- dt2.5[!is.na(time)]
+      
+    # model ----
+      # propensity score ----
+      mod2.5.psformula <- paste0("exit ~ ", pscovariates) # no random effects bc only at time zero
+      mod2.5.ps <- glm(mod2.5.psformula, 
+                     family = binomial(link=logit),
+                     data = dt2.5[qtr==0])
+      mod2.5.ps.prob <- data.table(hh_id_kc_pha = dt2.5[qtr==0]$hh_id_kc_pha, 
+                                 id_kc_pha = dt2.5[qtr==0]$id_kc_pha, 
+                                 exit = dt2.5[qtr==0]$exit, 
+                                 prob = predict(mod2.5.ps, type = 'response')) # predicted probability
+      mod2.5.ps.prob[exit == 1, ipw := 1 / prob] # weight for IPW
+      mod2.5.ps.prob[exit == 0, ipw := 1 / (1-prob)] # weight for IPW
+      dt2.5 <- merge(dt2.5, mod2.5.ps.prob)
+      
+      # main model ----
+      dt2.5[, .N, .(exit, time)]
+      mod2.5.formula <- paste0("wage ~ ", 
+                             "exit*time + ", 
+                             "(1 | id_kc_pha) + ", # random intercept for persons
+                             "(1 + exit | hh_id_kc_pha)")  # random intercept and slope for households
+      mod2.5 <- lme4::lmer(mod2.5.formula, data = dt2.5, weights = ipw)
+      mod2.5.tidy <- model.clean(mod2.5)
+      
+    # test if p-value for interaction term is < 0.05 using likelihood ratio test ----
+      mod2.5.formula.alt <- paste0("wage ~ ", 
+                                 "exit + time + ", 
+                                 "(1 | id_kc_pha) + ", # random intercept for persons
+                                 "(1 + exit | hh_id_kc_pha)")  # random intercept and slope for households
+      mod2.5.alt <- lme4::lmer(mod2.5.formula.alt, data = dt2.5, weights = ipw)
+      mod2.5.test = anova(mod2.5, mod2.5.alt, test = 'LRT')
+
+      if( mod2.5.test[["Pr(>Chisq)"]][2] < 0.05 ) {
+        print("The exit:time interaction term is significant, so keep the full model with the interaction term")
+        caption.text <- paste0("", mod2.5.formula)
+      } else {
+        print("The exit:time interaction term is NOT significant, so use more parsimonuous model.")
+        mod2.5.formula <- copy(mod2.5.formula.alt)
+        mod2.5 <- copy(mod2.5.alt)
+        mod2.5.tidy <- model.clean(mod2.5)
+        caption.text <- paste0("", mod2.5.formula)
+      }      
+      
+    # average marginal effects  ----
+      mod2.5.margin.summary <- as.data.table(summary(margins::margins(mod2.5))) 
+      mod2.5.margin.summary[factor == 'exit']
+      
+    # create table of predictions for slopes in ggplot ----
+      mod2.5.preds <- as.data.table(marginaleffects::predictions(mod2.5, 
+                                              newdata = datagrid(time=c(-4:0), exit = c(0, 1)), 
+                                              re.form=~0)) # re.form=~0 means include no random effects, so population level estimates
+      mod2.5.preds[exit == 0, exit_category := "Negative"][exit == 1, exit_category := "Positive"]
+      mod2.5.preds <- mod2.5.preds[, .(time = as.integer(as.character(time)), exit, exit_category, wage = predicted, se = std.error, lower = `conf.low`, upper = `conf.high`)]
+
+    # calculate counterfactual for positive exits ----
+      mod2.5.preds <- calc.counterfactual(mod2.5.preds)
+      mod2.5.preds[]
+
+    # Plot data prior to exit ----
+      dt2.5.plot = copy(dt2.5)
+      dt2.5.plot[exit == 0, time := time - .0] # add tiny shift for easier visualization
+      dt2.5.plot[exit == 1, time := time + .0] # add tiny shift for easier visualization
+      
+      plot2.5 <- ggplot() +
+        # geom_point(data = dt2.5.plot, aes(x = time, y = wage, color = exit_category)) + 
+        geom_line(data = mod2.5.preds[exit_category != "Counterfactual"], aes(x = time, y = wage, color = exit_category), size = 1) +
+        geom_line(data = mod2.5.preds[exit_category == "Counterfactual"], aes(x = time, y = wage, color = exit_category), linetype="dashed", size = 1) +
+        geom_point(data = mod1.5.preds[exit_category != "Counterfactual"], 
+                   aes(x = time, y = wage, color = exit_category), 
+                   size = 2.5) +
+        geom_errorbar(data = mod1.5.preds[exit_category != "Counterfactual"], 
+                      aes(x = time, ymax = upper, ymin = lower, color = exit_category), 
+                      size = 1, 
+                      width = .05) + 
+        labs(
+           # title = paste0("Population level trends 1 year prior to exit"), 
+           # subtitle = paste0("Model 2: IPW for trends prior to exit"), 
+           # caption = paste0("", mod2.5.formula), 
+           x = "", 
+           y = "Quarterly wages") +
+        scale_x_continuous(labels=c("1 year prior", "Exit"), breaks=c(-4, 0)) 
+      
+      plot2.5 <- formatplots(plot2.5) + 
+        scale_color_manual("Exit type", 
+                           values=c('Positive' = '#2c7fb8', 
+                                    'Counterfactual' = '#e41a1c', 
+                                    'Negative' = '#2ca25f')) +
+        scale_y_continuous(limits = c(3000, 9000), breaks=c(seq(4000, 8000, 2000)), labels=scales::dollar_format()) 
+
+      plot(plot2.5)
+      
+    # Save plot ----
+      saveplots(plot.object = plot2.5, plot.name = 'appendix_figure_2_IPTW_assess_parallel_trends')
+
+      
 # Model 3: DiD base model ----
     # create dt3 for DiD analysis from exit (quarter 0) to 1 year post exit (quarter 4) ----
       # because assessment of parallel trends failed know this is is not 'correct'
@@ -349,7 +536,7 @@
                              "(1 | id_kc_pha) + ", # random intercept for persons
                              "(1 + exit | hh_id_kc_pha)") # random intercept and slope for households
       mod3 <- lme4::lmer(mod3.formula, data = dt3)
-      mod3.tidy <- as.data.table(broom.mixed::tidy(mod3, conf.int = T))
+      mod3.tidy <- model.clean(mod3)
       
     # test if p-value for interaction term is < 0.05 (could also perform likelihood ratio test using anova function) ----
       mod3.test <- suppressWarnings(lmerTest::lmer(mod3.formula, data = dt3, REML = FALSE))
@@ -368,7 +555,7 @@
         #                            "(1 | id_kc_pha) + ", # random intercept for persons
         #                            "(1 + exit | hh_id_kc_pha)") # random intercept and slope for households
         # mod3 <- lme4::lmer(mod3.alt.formula, data = dt3)  
-        # mod3.tidy <- as.data.table(broom.mixed::tidy(mod3, conf.int = T))
+        # mod3.tidy <- model.clean(mod3)
         }
 
     # predictions ----
@@ -377,28 +564,10 @@
                                               newdata = datagrid(time=c(0, 1), exit = c(0, 1)), 
                                               re.form=~0)) # re.form=~0 means include no random effects, so population level estimates
       mod3.preds[exit == 0, exit_category := "Negative"][exit == 1, exit_category := "Positive"]
-      mod3.preds <- mod3.preds[, .(time, exit, exit_category, wage = predicted, se = std.error, lower = `conf.low`, upper = `conf.high`)]
+      mod3.preds <- mod3.preds[, .(time = as.integer(as.character(time)), exit, exit_category, wage = predicted, se = std.error, lower = `conf.low`, upper = `conf.high`)]
       
-      # calculate counterfactual for positive exits using 10,000 draws----
-      set.seed(98104)
-      counterfactual <- data.table(neg.zero = rnorm(10000, mean = mod3.preds[exit == 0 & time == 0]$wage, sd = mod3.preds[exit == 0 & time == 0]$se), 
-                                   neg.one = rnorm(10000, mean = mod3.preds[exit == 0 & time == 1]$wage, sd = mod3.preds[exit == 0 & time == 1]$se), 
-                                   pos.zero = rnorm(10000, mean = mod3.preds[exit == 1 & time == 0]$wage, sd = mod3.preds[exit == 1 & time == 0]$se))
-      counterfactual[, diff := neg.one - neg.zero]
-      counterfactual[, counterfactual := pos.zero + diff]
-      counterfactual[, mean := mean(counterfactual)]
-      counterfactual[, sd := sd(counterfactual)]
-      counterfactual <- unique(counterfactual[, .(time = 1, exit = 1, exit_category = "Counterfactual", 
-                                                  wage = mean, se = sd, 
-                                                  lower = mean - (qnorm(0.975) * sd), 
-                                                  upper = mean + (qnorm(0.975) * sd))])
-
-      # add rows for counterfactual to mod3.preds ----
-      mod3.preds <- rbind(
-        mod3.preds,
-        copy(mod3.preds)[exit == 1 & time == 0][, exit_category := "Counterfactual"], 
-        counterfactual)
-
+      # calculate counterfactual for positive exits----
+      mod3.preds <- calc.counterfactual(mod3.preds)
       mod3.preds[]
       
     # Plot data prior to exit ----
@@ -450,7 +619,7 @@
                              "(1 | id_kc_pha) + ", # random intercept for persons
                              "(1 + exit | hh_id_kc_pha)") # random intercept and slope for households
       mod4 <- lme4::lmer(mod4.formula, data = dt4)
-      mod4.tidy <- as.data.table(broom.mixed::tidy(mod4, conf.int = T))
+      mod4.tidy <- model.clean(mod4)
       
     # test if p-value for interaction term is < 0.05 with LRT ----
       mod4.formula.alt <- paste0("wage ~ ",
@@ -475,42 +644,14 @@
                                               newdata = datagrid(time=c(-1, 0, 1), exit = c(0, 1)), 
                                               re.form=~0)) # re.form=~0 means include no random effects, so population level estimates
       mod4.preds[exit == 0, exit_category := "Negative"][exit == 1, exit_category := "Positive"]
-      mod4.preds <- mod4.preds[, .(time, exit, exit_category, wage = predicted, se = std.error, lower = `conf.low`, upper = `conf.high`)]
+      mod4.preds <- mod4.preds[, .(time = as.integer(as.character(time)), exit, exit_category, wage = predicted, se = std.error, lower = `conf.low`, upper = `conf.high`)]
       
       mod4.counterfactual <- mod4.preds[exit_category == "Positive"]
       
       # calculate counterfactual (ascribe change observed in negative exits to positive exits) ----
-      mod4.negdiff <-  mod4.preds[exit_category == "Negative"]
-      mod4.negdiff[, wage.prev := shift(x = wage, n = 1L, type = 'lag')]
-      mod4.negdiff[, se.prev := shift(x = se, n = 1L, type = 'lag')]
-      mod4.negdiff[, wage.diff := wage - wage.prev]
-      mod4.negdiff[, se.diff := sqrt((se^2) + (se.prev^2))]
-      mod4.negdiff <- mod4.negdiff[, .(time, wage.diff, se.diff)]
-      
-      
-      mod4.counterfactual <- mod4.preds[exit_category == "Positive"]
-      mod4.counterfactual[, c("lower", "upper") := NULL]
-      mod4.counterfactual[time != -1, wage := NA]
-      mod4.counterfactual <- merge(mod4.counterfactual, mod4.negdiff, by = c("time"), all = T)
-      mod4.counterfactual[is.na(wage.diff), wage.diff := wage]
-      mod4.counterfactual[, wage := cumsum(wage.diff)]
-      mod4.counterfactual[!is.na(se.diff), se := sqrt((se^2) + (se.diff^2))]
-      mod4.counterfactual <- mod4.counterfactual[, .(time, exit, exit_category = 'Counterfactual', 
-                                                     wage, se, lower = wage - (se * qnorm(0.975)), 
-                                                     upper = wage + (se * qnorm(0.975)))]
-      
-      # add rows for counterfactual to mod4.preds ----
-      mod4.preds <- rbind(
-        mod4.preds,
-        copy(mod4.preds)[exit == 1 & time == -4][, exit_category := "Counterfactual"], 
-        mod4.counterfactual[time != -4])
-      setorder(mod4.preds, exit, exit_category, time)
-      
-      mod4.preds[, time := as.numeric(as.character(time))] # convert time back to numeric for graphing
-      
+      mod4.preds <- calc.counterfactual(mod4.preds)
       mod4.preds[exit_category == "Positive", time := time - 0]
       mod4.preds[exit_category == "Negative", time := time + 0]
-      
       mod4.preds[]
       
     # Plot data before and after exit ----
@@ -529,11 +670,12 @@
                       aes(x = time, ymax = upper, ymin = lower, color = exit_category), 
                       size = 1, 
                       width = .05) + 
-        labs(title = paste0("Quarterly wage history by exit type and time"), 
-             subtitle = "Model 4: three time points", 
-             caption = caption.text, 
-             x = "", 
-             y = "Quarterly wages") +
+        labs(
+          # title = paste0("Quarterly wage history by exit type and time"), 
+          # subtitle = "Model 4: three time points", 
+          # caption = caption.text, 
+          x = "", 
+          y = "Quarterly wages") +
         scale_x_continuous(labels=c("1 year prior", "Exit", "1 year post"), breaks=c(-1, 0, 1))
       
       plot4 <- formatplots(plot4) + 
@@ -575,6 +717,7 @@
       
     # Save plot ----
       saveplots(plot.object = plot4, plot.name = 'figure_4_pre_post_trends')  
+      saveplots(plot.object = plot4, plot.name = 'appendix_figure_4_pre_post_trends_yearly')  
       saveplots(plot.object = plot.resid.4, plot.name = 'figure_4_pre_post_trends_residuals')  
       openxlsx::write.xlsx(mod4.preds, file = paste0(outputdir, "model_4_predictions.xlsx"), asTable = T, overwrite = T)
       openxlsx::write.xlsx(mod4.tidy, file = paste0(outputdir, "model_4_estimates.xlsx"), asTable = T, overwrite = T)
@@ -599,7 +742,7 @@
                              "(1 | id_kc_pha) + ", # random intercept for persons
                              "(1 + exit | hh_id_kc_pha)") # random intercept and slope for households
       mod4.5 <- lme4::lmer(mod4.5.formula, data = dt4.5)
-      mod4.5.tidy <- as.data.table(broom.mixed::tidy(mod4.5, conf.int = T))
+      mod4.5.tidy <- model.clean(mod4.5)
 
     # test if p-value for interaction term is < 0.05 with LRT ----
       mod4.5.formula.alt <- paste0("wage_hourly ~ ",
@@ -624,42 +767,14 @@
                                               newdata = datagrid(time=c(-1, 0, 1), exit = c(0, 1)), 
                                               re.form=~0)) # re.form=~0 means include no random effects, so population level estimates
       mod4.5.preds[exit == 0, exit_category := "Negative"][exit == 1, exit_category := "Positive"]
-      mod4.5.preds <- mod4.5.preds[, .(time, exit, exit_category, wage = predicted, se = std.error, lower = `conf.low`, upper = `conf.high`)]
+      mod4.5.preds <- mod4.5.preds[, .(time = as.integer(as.character(time)), exit, exit_category, wage = predicted, se = std.error, lower = `conf.low`, upper = `conf.high`)]
       
       mod4.5.counterfactual <- mod4.5.preds[exit_category == "Positive"]
       
       # calculate counterfactual (ascribe change observed in negative exits to positive exits) ----
-      mod4.5.negdiff <-  mod4.5.preds[exit_category == "Negative"]
-      mod4.5.negdiff[, wage.prev := shift(x = wage, n = 1L, type = 'lag')]
-      mod4.5.negdiff[, se.prev := shift(x = se, n = 1L, type = 'lag')]
-      mod4.5.negdiff[, wage.diff := wage - wage.prev]
-      mod4.5.negdiff[, se.diff := sqrt((se^2) + (se.prev^2))]
-      mod4.5.negdiff <- mod4.5.negdiff[, .(time, wage.diff, se.diff)]
-      
-      
-      mod4.5.counterfactual <- mod4.5.preds[exit_category == "Positive"]
-      mod4.5.counterfactual[, c("lower", "upper") := NULL]
-      mod4.5.counterfactual[time != -1, wage := NA]
-      mod4.5.counterfactual <- merge(mod4.5.counterfactual, mod4.5.negdiff, by = c("time"), all = T)
-      mod4.5.counterfactual[is.na(wage.diff), wage.diff := wage]
-      mod4.5.counterfactual[, wage := cumsum(wage.diff)]
-      mod4.5.counterfactual[!is.na(se.diff), se := sqrt((se^2) + (se.diff^2))]
-      mod4.5.counterfactual <- mod4.5.counterfactual[, .(time, exit, exit_category = 'Counterfactual', 
-                                                     wage, se, lower = wage - (se * qnorm(0.975)), 
-                                                     upper = wage + (se * qnorm(0.975)))]
-      
-      # add rows for counterfactual to mod4.5.preds ----
-      mod4.5.preds <- rbind(
-        mod4.5.preds,
-        copy(mod4.5.preds)[exit == 1 & time == -4][, exit_category := "Counterfactual"], 
-        mod4.5.counterfactual[time != -4])
-      setorder(mod4.5.preds, exit, exit_category, time)
-      
-      mod4.5.preds[, time := as.numeric(as.character(time))] # convert time back to numeric for graphing
-      
+      mod4.5.preds <- calc.counterfactual(mod4.5.preds)
       mod4.5.preds[exit_category == "Positive", time := time - 0]
       mod4.5.preds[exit_category == "Negative", time := time + 0]
-      
       mod4.5.preds[]
       
     # Plot data before and after exit ----
@@ -732,6 +847,7 @@
       dt5 <- copy(raw)
       dt5[exit_category == "Negative", exit := 0]
       dt5[exit_category == "Positive", exit := 1]
+      dt5 <- dt5[qtr %in% -4:4]
       dt5[, time := factor(qtr)]
       
     # model ----
@@ -741,7 +857,7 @@
                              "(1 | id_kc_pha) + ", # random intercept for persons
                              "(1 + exit | hh_id_kc_pha)") # random intercept and slope for households
       mod5 <- lme4::lmer(mod5.formula, data = dt5)
-      mod5.tidy <- as.data.table(broom.mixed::tidy(mod5, conf.int = T))
+      mod5.tidy <- model.clean(mod5)
       
     # test if p-value for interaction term is < 0.05 ----
       mod5.formula.alt <- paste0("wage ~ ",
@@ -764,7 +880,7 @@
                                "(1 | id_kc_pha) + ", # random intercept for persons
                                "(1 + exit | hh_id_kc_pha)") # random intercept and slope for households
         mod5 <- lme4::lmer(mod5.formula, data = dt5)
-        mod5.tidy <- as.data.table(broom.mixed::tidy(mod5, conf.int = T))
+        mod5.tidy <- model.clean(mod5)
         caption.text <- paste0("", mod5.formula)
       }
       
@@ -775,44 +891,16 @@
                                                                  exit = c(0, 1)), 
                                               re.form=~0)) # re.form=~0 means include no random effects, so population level estimates
       mod5.preds[exit == 0, exit_category := "Negative"][exit == 1, exit_category := "Positive"]
-      mod5.preds <- mod5.preds[, .(time, exit, exit_category, wage = predicted, se = std.error, lower = `conf.low`, upper = `conf.high`)]
+      mod5.preds <- mod5.preds[, .(time = as.integer(as.character(time)), exit, exit_category, wage = predicted, se = std.error, lower = `conf.low`, upper = `conf.high`)]
       
 
       # calculate counterfactual (ascribe change observed in negative exits to positive exits) ----
-      mod5.negdiff <-  mod5.preds[exit_category == "Negative"]
-      mod5.negdiff[, wage.prev := shift(x = wage, n = 1L, type = 'lag')]
-      mod5.negdiff[, se.prev := shift(x = se, n = 1L, type = 'lag')]
-      mod5.negdiff[, wage.diff := wage - wage.prev]
-      mod5.negdiff[, se.diff := sqrt((se^2) + (se.prev^2))]
-      mod5.negdiff <- mod5.negdiff[, .(time, wage.diff, se.diff)]
-      
-      
-      mod5.counterfactual <- mod5.preds[exit_category == "Positive"]
-      mod5.counterfactual[, c("lower", "upper") := NULL]
-      mod5.counterfactual[time != -4, wage := NA]
-      mod5.counterfactual <- merge(mod5.counterfactual, mod5.negdiff, by = c("time"), all = T)
-      mod5.counterfactual[is.na(wage.diff), wage.diff := wage]
-      mod5.counterfactual[, wage := cumsum(wage.diff)]
-      mod5.counterfactual[!is.na(se.diff), se := sqrt((se^2) + (se.diff^2))]
-      mod5.counterfactual <- mod5.counterfactual[, .(time, exit, exit_category = 'Counterfactual', 
-                                                     wage, se, lower = wage - (se * qnorm(0.975)), 
-                                                     upper = wage + (se * qnorm(0.975)))]
-      
-      # add rows for counterfactual to mod5.preds ----
-      mod5.preds <- rbind(
-        mod5.preds,
-        copy(mod5.preds)[exit == 1 & time == -4][, exit_category := "Counterfactual"], 
-        mod5.counterfactual[time != -4])
-      setorder(mod5.preds, exit, exit_category, time)
-      
-      mod5.preds[, time := as.numeric(as.character(time))] # convert time back to numeric for graphing
-      
+      mod5.preds <- calc.counterfactual(mod5.preds)
       mod5.preds[exit_category == "Positive", time := time - .05]
       mod5.preds[exit_category == "Negative", time := time + .05]
-      
       mod5.preds[]
       
-    # Plot data prior to exit ----
+    # Plot data ----
       plot5 <- ggplot() +
         # geom_point(data = dt5.plot, aes(x = time, y = wage, color = exit_category)) + 
         geom_line(data = mod5.preds[exit_category != "Counterfactual"], aes(x = time, y = wage, color = exit_category), size = 1) +
@@ -824,11 +912,12 @@
                       aes(x = time, ymax = upper, ymin = lower, color = exit_category), 
                       size = 1, 
                       width = .05) + 
-        labs(title = paste0("Quarterly wage history by exit type and time"), 
-             subtitle = "Model 5: Four quarters pre/post exit", 
-             caption = caption.text, 
-             x = "", 
-             y = "Quarterly wages") +
+        labs(
+          # title = paste0("Quarterly wage history by exit type and time"), 
+          # subtitle = "Model 5: Four quarters pre/post exit", 
+          # caption = caption.text, 
+          x = "", 
+          y = "Quarterly wages") +
         scale_x_continuous(labels=c("1 year prior", "Exit", "1 year post"), breaks=c(-4, 0, 4))
       
       plot5 <- formatplots(plot5) + 
@@ -837,7 +926,7 @@
                                     'Counterfactual' = '#e41a1c', 
                                     'Negative' = '#2ca25f')) 
       
-      dev.new(width = 6,  height = 4, unit = "in", noRStudioGD = TRUE)
+      # dev.new(width = 6,  height = 4, unit = "in", noRStudioGD = TRUE)
       plot(plot5)
       
       # alternative plot with CI for counterfactual
@@ -865,12 +954,62 @@
                                     'Counterfactual' = '#e41a1c', 
                                     'Negative' = '#2ca25f')) 
       
-      dev.new(width = 6,  height = 4, unit = "in", noRStudioGD = TRUE)
+      # dev.new(width = 6,  height = 4, unit = "in", noRStudioGD = TRUE)
       plot(plot5.alt)
+      
+    # Plot of residuals vs time to assess autocorrelation ----
+      mod5.resid <- copy(dt5)[, fitted := fitted(mod5)][time %in% -4:4]
+      mod5.resid[, residual := wage - fitted]
+      mod5.resid[, time := as.numeric(as.character(time))]
+      mod5.resid[exit_category == "Negative", time := time - .05]
+      mod5.resid[exit_category == "Positive", time := time + .05]
+      set.seed(98104) # because jitter is 'random'
+      
+      plot.resid.5 <- ggplot() +
+        geom_point(data = mod5.resid[exit_category != "Counterfactual"], 
+                   aes(x = time, y = residual, color = exit_category), 
+                   size = 2.5, 
+                   position=position_jitterdodge(dodge.width=0.65, jitter.height=0, jitter.width=0.15), alpha=0.7) +
+        labs(
+          # title = paste0("Quarterly wage history by exit type and time"), 
+          # subtitle = "Model 5: residuals", 
+          # caption = caption.text, 
+          x = "", 
+          y = "Quarterly wages") +
+        scale_x_continuous(labels=c("1 year prior", "Exit", "1 year post"), breaks=c(-4, 0, 4))
+      
+      plot.resid.5 <- formatplots(plot.resid.5) + 
+        scale_color_manual("Exit type", 
+                           values=c('Positive' = '#2c7fb8', 
+                                    'Negative' = '#2ca25f')) 
+      message("No pattern with residuals, so evidence of autocorrelation, and no need for including lag dependent variables")
+      # plot.resid.5
+      
+    # Tidy predictions for saving ----
+      roundvars <- c("wage", "lower", "upper", "se")
+      mod5.preds[, (roundvars) := rads::round2(.SD, 0), .SDcols = roundvars]
+      mod5.preds <- mod5.preds[, .(Quarter = rads::round2(time, 0), 
+                                   `Exit Type` = exit_category, 
+                                   `Predicted wages (95% CI)` = paste0(
+                                     "$",
+                                     prettyNum(wage, big.mark = ','),
+                                     " (", 
+                                     prettyNum(lower, big.mark = ','), 
+                                     ", ", 
+                                     prettyNum(upper, big.mark = ','), 
+                                     ")")
+                                   # ,SE = se
+                                   )]
       
     # Save plots ----
       saveplots(plot.object = plot5, plot.name = 'figure_5_pre_post_by_qtr')      
+      saveplots(plot.object = plot5, plot.name = 'Body_Figure_2_predicted_wages_by_quarter')      
+      saveplots(plot.object = plot.resid.5, plot.name = 'appendix_figure_3_residuals')      
       saveplots(plot.object = plot5.alt, plot.name = 'figure_5_pre_post_by_qtr_alt')      
+      
+      openxlsx::write.xlsx(mod5.tidy, file = paste0(outputdir, "appendix_table_3_coefficients.xlsx"), asTable = T, overwrite = T)
+      openxlsx::write.xlsx(mod5.preds, file = paste0(outputdir, "appendix_table_4_predictions.xlsx"), asTable = T, overwrite = T)
+      
       
 # Model 6: Model for all available hourly wage data ----
     # Create dt6 for complete quarterly analysis ----
@@ -887,7 +1026,7 @@
                              "(1 | id_kc_pha) + ", # random intercept for persons
                              "(1 + exit | hh_id_kc_pha)") # random intercept and slope for households
       mod6 <- lme4::lmer(mod6.formula, data = dt6)
-      mod6.tidy <- as.data.table(broom.mixed::tidy(mod6, conf.int = T))
+      mod6.tidy <- model.clean(mod6)
       
     # test if p-value for interaction term is < 0.05 ----
       mod6.formula.alt <- paste0("wage_hourly ~ ",
@@ -910,7 +1049,7 @@
                                "(1 | id_kc_pha) + ", # random intercept for persons
                                "(1 + exit | hh_id_kc_pha)") # random intercept and slope for households
         mod6 <- lme4::lmer(mod6.formula, data = dt6)
-        mod6.tidy <- as.data.table(broom.mixed::tidy(mod6, conf.int = T))
+        mod6.tidy <- model.clean(mod6)
         caption.text <- paste0("", mod6.formula)
       }
       
@@ -922,41 +1061,13 @@
                                               re.form=~0)) # re.form=~0 means include no random effects, so population level estimates
       mod6.preds[exit == 0, exit_category := "Negative"][exit == 1, exit_category := "Positive"]
       print('wages are actually hourly, but will label `wage` so that can reuse code from above.')
-      mod6.preds <- mod6.preds[, .(time, exit, exit_category, wage = predicted, se = std.error, lower = `conf.low`, upper = `conf.high`)]
+      mod6.preds <- mod6.preds[, .(time = as.integer(as.character(time)), exit, exit_category, wage = predicted, se = std.error, lower = `conf.low`, upper = `conf.high`)]
       
 
       # calculate counterfactual (ascribe change observed in negative exits to positive exits) ----
-      mod6.negdiff <-  mod6.preds[exit_category == "Negative"]
-      mod6.negdiff[, wage.prev := shift(x = wage, n = 1L, type = 'lag')]
-      mod6.negdiff[, se.prev := shift(x = se, n = 1L, type = 'lag')]
-      mod6.negdiff[, wage.diff := wage - wage.prev]
-      mod6.negdiff[, se.diff := sqrt((se^2) + (se.prev^2))]
-      mod6.negdiff <- mod6.negdiff[, .(time, wage.diff, se.diff)]
-      
-      
-      mod6.counterfactual <- mod6.preds[exit_category == "Positive"]
-      mod6.counterfactual[, c("lower", "upper") := NULL]
-      mod6.counterfactual[time != -4, wage := NA]
-      mod6.counterfactual <- merge(mod6.counterfactual, mod6.negdiff, by = c("time"), all = T)
-      mod6.counterfactual[is.na(wage.diff), wage.diff := wage]
-      mod6.counterfactual[, wage := cumsum(wage.diff)]
-      mod6.counterfactual[!is.na(se.diff), se := sqrt((se^2) + (se.diff^2))]
-      mod6.counterfactual <- mod6.counterfactual[, .(time, exit, exit_category = 'Counterfactual', 
-                                                     wage, se, lower = wage - (se * qnorm(0.975)), 
-                                                     upper = wage + (se * qnorm(0.975)))]
-      
-      # add rows for counterfactual to mod6.preds ----
-      mod6.preds <- rbind(
-        mod6.preds,
-        copy(mod6.preds)[exit == 1 & time == -4][, exit_category := "Counterfactual"], 
-        mod6.counterfactual[time != -4])
-      setorder(mod6.preds, exit, exit_category, time)
-      
-      mod6.preds[, time := as.numeric(as.character(time))] # convert time back to numeric for graphing
-      
+      mod6.preds <- calc.counterfactual(mod6.preds)
       mod6.preds[exit_category == "Positive", time := time - .05]
       mod6.preds[exit_category == "Negative", time := time + .05]
-      
       mod6.preds[]
       
     # Plot data prior to exit ----
@@ -984,7 +1095,7 @@
                                     'Counterfactual' = '#e41a1c', 
                                     'Negative' = '#2ca25f')) 
       
-      dev.new(width = 6,  height = 4, unit = "in", noRStudioGD = TRUE)
+      # dev.new(width = 6,  height = 4, unit = "in", noRStudioGD = TRUE)
       plot(plot6)
       
       # alternative plot with CI for counterfactual
@@ -1012,7 +1123,7 @@
                                     'Counterfactual' = '#e41a1c', 
                                     'Negative' = '#2ca25f')) 
       
-      dev.new(width = 6,  height = 4, unit = "in", noRStudioGD = TRUE)
+      # dev.new(width = 6,  height = 4, unit = "in", noRStudioGD = TRUE)
       plot(plot6.alt)
       
     # Save plots ----
@@ -1048,7 +1159,7 @@
                                "(1 | id_kc_pha) + ", # random intercept for persons
                                "(1 + exit | hh_id_kc_pha)") # random intercept and slope for households
         mod7 <- lme4::lmer(mod7.formula, data = dt7, weights = ipw)
-        mod7.tidy <- as.data.table(broom.mixed::tidy(mod7, conf.int = T))
+        mod7.tidy <- model.clean(mod7)
     # Test if p-value for interaction term is < 0.05 ----
         mod7.formula.alt <- paste0("wage ~ ",
                                    "exit + time + ", 
@@ -1065,7 +1176,7 @@
           print("The exit:time interaction term is NOT significant, so use more parsimonuous model.")
           mod7.formula <- copy(mod7.formula.alt)
           mod7 <- copy(mod7.alt)
-          mod7.tidy <- as.data.table(broom.mixed::tidy(mod7.alt, conf.int = T))
+          mod7.tidy <- model.clean(mod7.alt)
           caption.text <- paste0("", mod7.formula)
         }
     # Predictions ----
@@ -1075,41 +1186,13 @@
                                                                      exit = c(0, 1)), 
                                                   re.form=~0)) # re.form=~0 means include no random effects, so population level estimates
           mod7.preds[exit == 0, exit_category := "Negative"][exit == 1, exit_category := "Positive"]
-          mod7.preds <- mod7.preds[, .(time, exit, exit_category, wage = predicted, se = std.error, lower = `conf.low`, upper = `conf.high`)]
+          mod7.preds <- mod7.preds[, .(time = as.integer(as.character(time)), exit, exit_category, wage = predicted, se = std.error, lower = `conf.low`, upper = `conf.high`)]
         
         
         # calculate counterfactual (ascribe change observed in negative exits to positive exits) ----
-          mod7.negdiff <-  mod7.preds[exit_category == "Negative"]
-          mod7.negdiff[, wage.prev := shift(x = wage, n = 1L, type = 'lag')]
-          mod7.negdiff[, se.prev := shift(x = se, n = 1L, type = 'lag')]
-          mod7.negdiff[, wage.diff := wage - wage.prev]
-          mod7.negdiff[, se.diff := sqrt((se^2) + (se.prev^2))]
-          mod7.negdiff <- mod7.negdiff[, .(time, wage.diff, se.diff)]
-          
-          
-          mod7.counterfactual <- mod7.preds[exit_category == "Positive"]
-          mod7.counterfactual[, c("lower", "upper") := NULL]
-          mod7.counterfactual[time != -4, wage := NA]
-          mod7.counterfactual <- merge(mod7.counterfactual, mod7.negdiff, by = c("time"), all = T)
-          mod7.counterfactual[is.na(wage.diff), wage.diff := wage]
-          mod7.counterfactual[, wage := cumsum(wage.diff)]
-          mod7.counterfactual[!is.na(se.diff), se := sqrt((se^2) + (se.diff^2))]
-          mod7.counterfactual <- mod7.counterfactual[, .(time, exit, exit_category = 'Counterfactual', 
-                                                         wage, se, lower = wage - (se * qnorm(0.975)), 
-                                                         upper = wage + (se * qnorm(0.975)))]
-        
-        # add rows for counterfactual to mod7.preds ----
-          mod7.preds <- rbind(
-            mod7.preds,
-            copy(mod7.preds)[exit == 1 & time == -4][, exit_category := "Counterfactual"], 
-            mod7.counterfactual[time != -4])
-          setorder(mod7.preds, exit, exit_category, time)
-          
-          mod7.preds[, time := as.numeric(as.character(time))] # convert time back to numeric for graphing
-          
+          mod7.preds <- calc.counterfactual(mod7.preds)
           mod7.preds[exit_category == "Positive", time := time - .05]
           mod7.preds[exit_category == "Negative", time := time + .05]
-          
           mod7.preds[]
         
     # Plot data prior to exit ----
@@ -1137,7 +1220,7 @@
                                       'Counterfactual' = '#e41a1c', 
                                       'Negative' = '#2ca25f')) 
         
-        dev.new(width = 7,  height = 4, unit = "in", noRStudioGD = TRUE)
+        # dev.new(width = 7,  height = 4, unit = "in", noRStudioGD = TRUE)
         plot(plot7)
         
         # alternative plot with CI for counterfactual
@@ -1165,7 +1248,7 @@
                                       'Counterfactual' = '#e41a1c', 
                                       'Negative' = '#2ca25f')) 
         
-        dev.new(width = 7,  height = 4, unit = "in", noRStudioGD = TRUE)
+        # dev.new(width = 7,  height = 4, unit = "in", noRStudioGD = TRUE)
         plot(plot7.alt)
         
     #  Save plots ----

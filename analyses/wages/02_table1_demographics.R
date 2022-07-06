@@ -35,6 +35,82 @@
     raw[, quarter := as.factor(quarter(exit_date))]
     raw[, exit_year := as.factor(exit_year)]
     
+# Table 0: ID counts ----
+    table0_id_counts = rbind(
+      data.table(category = "Persons", 
+                 Total = uniqueN(raw$id_kc_pha), 
+                 positive = uniqueN(raw[exit_category == "Positive"]$id_kc_pha),
+                 negative = uniqueN(raw[exit_category == "Negative"]$id_kc_pha),
+                 KCHA = uniqueN(raw[agency == "KCHA"]$id_kc_pha), 
+                 SHA = uniqueN(raw[agency == "SHA"]$id_kc_pha)), 
+      data.table(category = "Households", 
+                 Total = uniqueN(raw$hh_id_kc_pha), 
+                 positive = uniqueN(raw[exit_category == "Positive"]$hh_id_kc_pha),
+                 negative = uniqueN(raw[exit_category == "Negative"]$hh_id_kc_pha),
+                 KCHA = uniqueN(raw[agency == "KCHA"]$hh_id_kc_pha), 
+                 SHA = uniqueN(raw[agency == "SHA"]$hh_id_kc_pha)), 
+      fill = T)
+
+# Table 0: Wage differences Pre/Exit/Post ----
+    dt0 <- copy(raw)
+    dt0[qtr == -4, time := -1]
+    dt0[qtr == 0, time := 0]
+    dt0[qtr == 4, time := 1]
+    
+    # Quarterly wages 
+        table0_qtr_diff <- merge(dt0[!is.na(time), .(tot.mean = mean(wage), tot.sd = sd(wage)), time], 
+                                  dt0[!is.na(time) & exit_category == "Positive", .(pos.mean = mean(wage), pos.sd = sd(wage)), time], 
+                                  by = 'time', 
+                                  all = T)
+        table0_qtr_diff <- merge(table0_qtr_diff,
+                                  dt0[!is.na(time) & exit_category == "Negative", .(neg.mean = mean(wage), neg.sd = sd(wage)), time], 
+                                  by = 'time', 
+                                  all = T)
+        table0_qtr_diff[, difference := pos.mean - neg.mean]
+        table0_qtr_diff[, difference.sd := sqrt((pos.sd^2) + (neg.sd^2))]
+        for(ii in c(-1, 0, 1)){
+          table0_qtr_diff[time == ii, 
+                         t_test_pvalue := t.test(x = dt0[!is.na(time) & exit_category == "Positive" & time == ii,]$wage,
+                                                 y = dt0[!is.na(time) & exit_category == "Negative" & time == ii,]$wage)$p.value]}
+        
+        table0_qtr_diff[t_test_pvalue < 0.05, significant := "*"]
+        table0_qtr_diff <- table0_qtr_diff[, .(`Wage type` = 'quarterly', 
+                                         `Time period` = factor(time, levels = c(-1, 0, 1), labels = c("1 year prior", "Exit", "1 year post")), 
+                                         `Any exit` = paste0(prettyNum(round2(tot.mean), big.mark = ','), " (", prettyNum(round2(tot.sd), big.mark = ','), ")"), 
+                                         Positive = paste0(prettyNum(round2(pos.mean), big.mark = ','), " (", prettyNum(round2(pos.sd), big.mark = ','), ")"), 
+                                         Negative = paste0(prettyNum(round2(neg.mean), big.mark = ','), " (", prettyNum(round2(neg.sd), big.mark = ','), ")"),
+                                         Difference = paste0(prettyNum(round2(difference), big.mark = ','), " (", prettyNum(round2(difference.sd), big.mark = ','), ")"),
+                                         Significant = significant, `p-value` = t_test_pvalue)]    
+    
+    # Hourly wages 
+        table0_hr_diff <- merge(dt0[!is.na(time) & !is.na(wage_hourly), .(tot.mean = mean(wage_hourly), tot.sd = sd(wage_hourly)), time], 
+                                  dt0[!is.na(time) & !is.na(wage_hourly) & exit_category == "Positive", .(pos.mean = mean(wage_hourly), pos.sd = sd(wage_hourly)), time], 
+                                  by = 'time', 
+                                  all = T)
+        table0_hr_diff <- merge(table0_hr_diff,
+                                  dt0[!is.na(time) & !is.na(wage_hourly) & exit_category == "Negative", .(neg.mean = mean(wage_hourly), neg.sd = sd(wage_hourly)), time], 
+                                  by = 'time', 
+                                  all = T)
+        table0_hr_diff[, difference := pos.mean - neg.mean]
+        table0_hr_diff[, difference.sd := sqrt((pos.sd^2) + (neg.sd^2))]
+        for(ii in c(-1, 0, 1)){
+          table0_hr_diff[time == ii, 
+                           t_test_pvalue := t.test(x = dt0[!is.na(time) & exit_category == "Positive" & time == ii,]$wage_hourly,
+                                                   y = dt0[!is.na(time) & exit_category == "Negative" & time == ii,]$wage_hourly)$p.value]}
+        
+        table0_hr_diff[t_test_pvalue < 0.05, significant := "*"]
+        table0_hr_diff <- table0_hr_diff[, .(`Wage type` = 'hourly', 
+                                                 `Time period` = factor(time, levels = c(-1, 0, 1), labels = c("1 year prior", "Exit", "1 year post")), 
+                                                 `Any exit` = paste0(prettyNum(round2(tot.mean), big.mark = ','), " (", prettyNum(round2(tot.sd), big.mark = ','), ")"), 
+                                                 Positive = paste0(prettyNum(round2(pos.mean), big.mark = ','), " (", prettyNum(round2(pos.sd), big.mark = ','), ")"), 
+                                                 Negative = paste0(prettyNum(round2(neg.mean), big.mark = ','), " (", prettyNum(round2(neg.sd), big.mark = ','), ")"),
+                                                 Difference = paste0(prettyNum(round2(difference), big.mark = ','), " (", prettyNum(round2(difference.sd), big.mark = ','), ")"),
+                                                 Significant = significant, `p-value` = t_test_pvalue)]    
+    
+    # Combined quarterly and hourly wages
+        table0_wage_diff <- rbind(table0_qtr_diff, table0_hr_diff)
+        
+    
 # Table 1: Descriptive statistics by Exit Type ----
   # configure arsenal::tableby ----
     my_controls <- tableby.control(
@@ -42,6 +118,7 @@
       total = T,
       numeric.test = "kwt", cat.test = "chisq",
       numeric.stats = c("meansd", "medianq1q3", "range", "Nmiss2"),
+      digits = 0,
       cat.stats = c("countpct", "Nmiss2"),
       stats.labels = list(
         meansd = "Mean (SD)",
@@ -101,7 +178,9 @@
     
     # setcolorder(table1, "variable")
 
-# Write Table 1 ----
+# Write Tables 0 & 1 ----
+    openxlsx::write.xlsx(table0_id_counts, file = paste0(outputdir, "Table0_id_counts.xlsx"), asTable = T, overwrite = T)
+    openxlsx::write.xlsx(table0_wage_diff, file = paste0(outputdir, "Table0_wage_diff.xlsx"), asTable = T, overwrite = T)
     openxlsx::write.xlsx(table1, file = paste0(outputdir, "Table1.xlsx"), asTable = T, overwrite = T)
     
 # Identify confounders (associated with exposure and outcome) ----

@@ -4,8 +4,8 @@
 # R version 4.1.3
 # Purpose: Set up data for HUD HEARS wage analysis
 # Notes: This analysis will use data labeled SOW1, which is the HUD HEARS project, 
-#        rather than SOW, which is for the CDC evaluation. 
-#        Wage data is for both 'GUIDE' (2017+) and 'UTAB' (2010-2017) becasue 
+#        rather than SOW2, which is for the CDC evaluation. 
+#        Wage data is for both 'GUIDE' (2017+) and 'UTAB' (2010-2017) because 
 #        they are sourced from separate longitudinal wage databases 
 #        (TAXIS (1984-2014) & NGTS (2014+)).
 #

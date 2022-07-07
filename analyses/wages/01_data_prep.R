@@ -42,8 +42,11 @@
       outputdir <- "C:/Users/dcolombara/King County/DPH Health And Housing - Documents/HUD HEARS Study/wage_analysis/output/"
     
     # dictionary from GitHub
-      dict <- fread("https://raw.githubusercontent.com/PHSKC-APDE/esd_etl/main/ref/esd_blob_dictionary.csv")
-    
+      dict <- data.table::fread(httr::content(
+        httr::GET(url = "https://raw.githubusercontent.com/PHSKC-APDE/esd_etl/main/ref/esd_blob_dictionary.csv", 
+                  httr::authenticate(Sys.getenv("GITHUB_PAT"), "")),
+        type = "text", encoding = "UTF-8"))
+      
     # easy SQL connections
       devtools::source_url("https://raw.githubusercontent.com/PHSKC-APDE/apde/main/R/create_db_connection.R") 
     
@@ -167,10 +170,40 @@
         type = "text", encoding = "UTF-8"))
       
     # Area Median Income (AMI) ----
-      myurl <- "https://raw.githubusercontent.com/PHSKC-APDE/hud_hears/main/analyses/wages/ref/hud_30percent_ami_2022.csv"
-      ami <- data.table::fread(httr::content(
-        httr::GET(url = myurl, httr::authenticate(Sys.getenv("GITHUB_PAT"), "")),
-        type = "text", encoding = "UTF-8"))
+      # downloaded from Neighborhood Stabilization Program Data: https://www.huduser.gov/portal/datasets/NSP.html
+      ami <- rbindlist(
+        lapply(
+          X = as.list(2014:2020), 
+          FUN = function(X){
+            tempami <- data.table::fread(
+              httr::content(
+                httr::GET(url = paste0("https://raw.githubusercontent.com/PHSKC-APDE/hud_hears/main/analyses/wages/ref/FY", X, "NSPLimits_50_120.csv"),
+                          httr::authenticate(Sys.getenv("GITHUB_PAT"), "")), 
+                type = "text", encoding = "UTF-8")
+              )
+            tempami[, amiyear := X]
+            tempami[, grep("im120", names(tempami), value = T) := NULL]
+            setnames(tempami, tolower(gsub(paste0("lim50_", X - 2000, "p"), "ami_", names(tempami))))
+            tempami[, grep("^ami_", names(tempami), value = T) := lapply(.SD, function(X){X * 2}), .SDcols = grep("^ami_", names(tempami), value = T)] # calc 100% AMI
+            tempami[, fips2010 := substr(fips2010, 1, 5)] # first 5 digits are State + County
+            tempami <- tempami[state == 53] # Washington State only
+            keepers <- c("amiyear", "fips2010", "name", grep("^ami", names(tempami), value = T))
+            tempami <- tempami[, ..keepers]
+          }
+        )
+      )
+      
+      # reshape wide to long
+      ami <- melt(ami, 
+                  id.vars = c("amiyear", "fips2010", "name"), 
+                  measure.vars = grep("ami_", names(ami), value = T), 
+                  variable.name = "hh_size", 
+                  value.name = "ami")
+      ami[, hh_size := as.integer(gsub("^ami_", "", hh_size))]
+      
+      ami <- unique(ami)
+      
+      setorder(ami, amiyear, fips2010, hh_size)
       
 # Tidy datasets ----
     # ESD wage data (wage) ----
@@ -242,29 +275,7 @@
       opportunity <- unique(opportunity)
       
     # Area Median Income (ami) ----
-      # back calculate 100% AMI from 30% AMI that is in the table
-      amivars <- grep("^l30", names(ami), value = T)
-      ami[, gsub("l30", "ami", amivars) := lapply(.SD, function(X){X / 0.3}), .SDcols = amivars]
-      
-      # keep select columns
-      amikeep <- c("fips2010", gsub("l30", "ami", amivars))
-      ami <- ami[, ..amikeep]
-      
-      # trim fips code
-      ami[, fips2010 := substr(fips2010, 1, 5)] # first 5 digits are State + County
-      
-      # reshape wide to long
-      ami <- melt(ami, 
-                  id.vars = c("fips2010"), 
-                  measure.vars = grep("ami_", names(ami), value = T), 
-                  variable.name = "hh_size", 
-                  value.name = "ami")
-      ami[, hh_size := as.integer(gsub("^ami_", "", hh_size))]
-      
-      ami <- unique(ami)
-      
-      setorder(ami, fips2010, hh_size)
-      
+      # already tidy
       
 # Merge main datasets ----
     # merge crosswalk onto exits to get id_esd ----
@@ -434,8 +445,9 @@
 # Merge on reference data ----
       # merge on area median income by county ----
           combo[!is.na(geo_countyfp10), fips2010 := paste0("53", geo_countyfp10)]
-          combo <- merge(combo, ami, by = c("fips2010", "hh_size"), all.x = T, all.y = F)
-          combo[, c("fips2010") := NULL]
+          combo[, amiyear := year(qtr_date)]
+          combo <- merge(combo, ami, by = c("amiyear", "fips2010", "hh_size"), all.x = T, all.y = F)
+          combo[, c("fips2010", "amiyear") := NULL]
           combo[, percent_ami := rads::round2(100*4*wage / ami, 1)] # multiply by four because wage is quarterly but AMI is annual
           message("Some KC households will not have an AMI because they have a HH size >8 and the reference sheet only applies to 
                   households with size 1:8")

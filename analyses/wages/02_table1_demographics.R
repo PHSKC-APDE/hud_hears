@@ -131,20 +131,20 @@
   # create table ----
     table1 <- as.data.table(summary(
       arsenal::tableby(exit_category ~ 
-                         wage + 
-                         wage_hourly +
-                         hrs +
-                         percent_ami +
-                         race_eth_me +
-                         gender_me +
                          age_at_exit +
+                         gender_me +
+                         race_eth_me +
+                         housing_time_at_exit +
+                         quarter +
+                         exit_year +
+                         wage + 
+                         hrs +
+                         wage_hourly +
+                         percent_ami +
                          hh_disability +
                          single_caregiver +
-                         housing_time_at_exit +
                          agency +
-                         major_prog +
-                         quarter +
-                         exit_year, 
+                         major_prog, 
                        data = raw[qtr == 0], 
                        control = my_controls)
       ))

@@ -448,7 +448,8 @@
           combo[, amiyear := year(qtr_date)]
           combo <- merge(combo, ami, by = c("amiyear", "fips2010", "hh_size"), all.x = T, all.y = F)
           combo[, c("fips2010", "amiyear") := NULL]
-          combo[, percent_ami := rads::round2(100*4*wage / ami, 1)] # multiply by four because wage is quarterly but AMI is annual
+          combo[, hhwage := sum(wage),  by = c("hh_id_kc_pha", "qtr")]
+          combo[, percent_ami := rads::round2(100*4*hhwage / ami, 1)] # multiply by four because wage is quarterly but AMI is annual
           message("Some KC households will not have an AMI because they have a HH size >8 and the reference sheet only applies to 
                   households with size 1:8")
           

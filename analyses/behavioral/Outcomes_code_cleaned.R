@@ -258,8 +258,6 @@ all_pop <- all_pop %>%
                                       TRUE ~ as.integer(con_count)))
 
 
-
-
 #Join control match covariate with BH OUTPATIENT visits----
 all_pop <-left_join(all_pop, bh_outpt_count, by=c("id_hudhears", "exit_date"))
 #fix number and indicator variables for NAs

@@ -178,34 +178,36 @@ WHERE bh.from_date IS NOT NULL
 #Number of conditions by person (N=6878 with at least 1 condition)--Only includes Medicaid conditions
 condition_count_bh <- bh_conditions %>% group_by(id_hudhears, exit_date) %>% summarize(con_count=n_distinct(bh_conditions)) %>% mutate(any_cond=ifelse(con_count >=1, 1, 0))
 
-
-
 ## Outpatient visits ----
-
-#note- This is not dependent on Medicaid data
 outpt_bh <- dbGetQuery(db_hhsaw,
                        "
 
-SELECT z.id_hudhears, z.gender_me, z.exit_date, z.exit_category, DATEADD(year, -1, z.exit_date) AS yr_before, NULL as yr_after, d.event_date AS event_date, d.source, d.auth_no
+SELECT z.id_hudhears, z.gender_me, z.exit_date, z.exit_category, MONTH(z.exit_date + 1) AS month_after_exit, YEAR(z.exit_date) AS year_exit, d.event_date AS event_date, d.source
 FROM
 (SELECT id_hudhears, exit_date, gender_me, exit_category
   FROM hudhears.control_match_covariate 
   WHERE id_type = 'id_exit' AND exit_death = 0) z
 LEFT JOIN
-(SELECT DISTINCT id_hudhears, event_date, auth_no, 'outpt' AS source FROM hudhears.bh_outpatient_events WHERE event_date IS NOT NULL) d
+(SELECT DISTINCT id_hudhears, auth_no, program, event_date, strat_level, service_minutes, MONTH(d.event_date), YEAR(d.event_date) 'outpt' AS source FROM hudhears.bh_outpatient_events WHERE event_date IS NOT NULL) d
 ON z.id_hudhears = d.id_hudhears
-AND d.event_date <= z.exit_date AND d.event_date >= DATEADD(year, -1, z.exit_date)
+AND z.event_date <= z.exit_date AND d.event_date >= DATEADD(year, -1, z.exit_date)
 WHERE d.source IS NOT NULL
 ")
 
-#Count behavioral health outpatient visits per person and make indicator for people with 2+ visits
-#These variables group visits by auth number
-#reg_care2 is indicator for 2+ visits; out_count2 is count of outpt visits by auth number
-bh_outpt_count <- outpt_bh %>% group_by(id_hudhears, exit_date, auth_no) %>% 
-  summarize(out_count=n_distinct(event_date)) %>% group_by(id_hudhears, exit_date)%>%
- mutate(out_count2=max(out_count, na.rm=T), 
-        reg_care2=ifelse(out_count2 >=2, 1, 0), 
-        reg_care=ifelse(out_count >=2, 1, 0)) %>% ungroup()
+
+
+SELECT DISTINCT id_hudhears, program, description, crisis_date, 'crisis' AS source
+FROM hudhears.bh_crisis_events WHERE crisis_date IS NOT NULL) b
+#note- This is not dependent on Medicaid data
+
+# #Count behavioral health outpatient visits per person and make indicator for people with 2+ visits
+# #These variables group visits by auth number
+# #reg_care2 is indicator for 2+ visits; out_count2 is count of outpt visits by auth number
+# bh_outpt_count <- outpt_bh %>% group_by(id_hudhears, exit_date, auth_no) %>% 
+#   summarize(out_count=n_distinct(event_date)) %>% group_by(id_hudhears, exit_date)%>%
+#  mutate(out_count2=max(out_count, na.rm=T), 
+#         reg_care2=ifelse(out_count2 >=2, 1, 0), 
+#         reg_care=ifelse(out_count >=2, 1, 0)) %>% ungroup()
 
 
 ## Join all of the above with covariate table made by Alastair----

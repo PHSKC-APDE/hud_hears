@@ -182,22 +182,23 @@ condition_count_bh <- bh_conditions %>% group_by(id_hudhears, exit_date) %>% sum
 outpt_bh <- dbGetQuery(db_hhsaw,
                        "
 
-SELECT z.id_hudhears, z.gender_me, z.exit_date, z.exit_category, MONTH(z.exit_date + 1) AS month_after_exit, YEAR(z.exit_date) AS year_exit, d.event_date AS event_date, d.source
+SELECT z.id_hudhears, z.exit_date, z.exit_category, d.event_date_mth, 
+d.event_date_yr, 'outpt' AS source, d.auth_no, d.program, d.event_date, d.strat_level, d.service_minutes, d.description
 FROM
-(SELECT id_hudhears, exit_date, gender_me, exit_category
+(SELECT id_hudhears, exit_date, exit_category, MONTH(DATEADD(day, 1, exit_date)) AS month_after_exit
   FROM hudhears.control_match_covariate 
   WHERE id_type = 'id_exit' AND exit_death = 0) z
 LEFT JOIN
-(SELECT DISTINCT id_hudhears, auth_no, program, event_date, strat_level, service_minutes, MONTH(d.event_date), YEAR(d.event_date) 'outpt' AS source FROM hudhears.bh_outpatient_events WHERE event_date IS NOT NULL) d
+(SELECT id_hudhears, auth_no, program, event_date, strat_level, service_minutes, description, MONTH(event_date) AS event_date_mth, 
+YEAR(event_date) AS event_date_yr FROM hudhears.bh_outpatient_events WHERE event_date IS NOT NULL) d
 ON z.id_hudhears = d.id_hudhears
-AND z.event_date <= z.exit_date AND d.event_date >= DATEADD(year, -1, z.exit_date)
-WHERE d.source IS NOT NULL
+AND d.event_date <= z.exit_date AND d.event_date >= DATEADD(month, -13, z.exit_date)
+WHERE d.event_date IS NOT NULL
 ")
 
 
 
-SELECT DISTINCT id_hudhears, program, description, crisis_date, 'crisis' AS source
-FROM hudhears.bh_crisis_events WHERE crisis_date IS NOT NULL) b
+
 #note- This is not dependent on Medicaid data
 
 # #Count behavioral health outpatient visits per person and make indicator for people with 2+ visits

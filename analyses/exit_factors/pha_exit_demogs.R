@@ -197,6 +197,13 @@ consort_maker <- function(df = consort_df, mcaid_prior = F, mcaid_after = F, hou
   } else {
     df <- df %>% filter(full_cov_7_prior == 1 & full_cov_7_after == 1)  
   }
+  
+  # Also remove those aged 62+ since most are dual
+  if (mcaid_prior == T | mcaid_after == T) {
+    mcaid_age_62 <- nrow(df %>% filter(age_at_exit >= 62))
+    df <- df %>% filter(age_at_exit < 62)
+  }
+  
   exits_mcaid <- nrow(df)
   
   
@@ -241,15 +248,18 @@ consort_maker <- function(df = consort_df, mcaid_prior = F, mcaid_after = F, hou
     b6 <- glue("b6 [label = '<7 months full Medicaid coverage \n", 
                "prior to or after exit \n", 
                "(n = {format(mcaid_7_prior, big.mark = ',', trim = T)}/", 
-               "{format(mcaid_7_after, big.mark = ',', trim = T)}, respectively)'];")
+               "{format(mcaid_7_after, big.mark = ',', trim = T)}, respectively) \n",
+               "Aged 62+ (n = {format(mcaid_age_62, big.mark = ',', trim = T)}) '];")
   } else if (mcaid_prior == T & mcaid_after == F) {
     b6 <- glue("b6 [label = '<7 months full Medicaid coverage \n", 
                "prior to exit \n", 
-               "(n = {format(mcaid_7_prior, big.mark = ',', trim = T)})'];")
+               "(n = {format(mcaid_7_prior, big.mark = ',', trim = T)}) \n",
+               "Aged 62+ (n = {format(mcaid_age_62, big.mark = ',', trim = T)}) '];")
   } else if (mcaid_prior == F & mcaid_after == T) {
     b6 <- glue("b6 [label = '<7 months full Medicaid \n", 
                "coverage after exit \n", 
-               "(n = {format(mcaid_7_after, big.mark = ',', trim = T)})'];")
+               "(n = {format(mcaid_7_after, big.mark = ',', trim = T)}) \n",
+               "Aged 62+ (n = {format(mcaid_age_62, big.mark = ',', trim = T)}) '];")
   } else {
     b6 <- ""
   }

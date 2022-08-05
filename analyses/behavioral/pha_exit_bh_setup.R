@@ -102,11 +102,12 @@ DBI::dbExecute(db_hhsaw,
 try(DBI::dbExecute(db_hhsaw, "DROP TABLE hudhears.bh_outpatient_events"), silent = T)
 
 DBI::dbExecute(db_hhsaw,
-               "SELECT DISTINCT id.id_hudhears, au.auth_no, au.agency_id, au.program, sp.description,
-               ea.event_date, 1 AS outpatient_event
-               INTO hudhears.bh_outpatient_events
+               "SELECT id.id_hudhears, au.auth_no, au.agency_id, au.program, sp.description,
+               ea.event_date, SUM(ea.service_minutes) as service_minutes, 
+			   1 AS outpatient_event  
+			   INTO hudhears.bh_outpatient_events
                FROM
-               (SELECT DISTINCT id_hudhears, kcid FROM amatheson.hudhears_xwalk_ids
+               (SELECT id_hudhears, kcid FROM amatheson.hudhears_xwalk_ids
                  WHERE kcid IS NOT NULL) id
                INNER JOIN
                bhrd.au_master au
@@ -123,5 +124,6 @@ DBI::dbExecute(db_hhsaw,
                AND au.status_code in ('TM','AA')
                AND sp.loc in ('OP') -- outpatient services
                -- Keep only main benefit outpatient programs
-               AND sp.program in ('158', '372', '373', '400', '401', '500', '501')
-               AND ea.source_id NOT IN(3, 6, 7, 8, 10) -- exclude system generated services because they do not come from providers")
+               --AND sp.program in ('158', '372', '373', '400', '401', '500', '501')
+               AND ea.source_id NOT IN(3, 6, 7, 8, 10)
+			   GROUP BY id.id_hudhears, au.auth_no, au.agency_id, au.program, sp.description, ea.event_date;")

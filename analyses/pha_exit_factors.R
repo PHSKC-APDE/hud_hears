@@ -729,8 +729,7 @@ exit_type_results <- broom::tidy(exit_type, exponentiate = T, conf.int = T) %>%
               names_glue = "{y.level}_{.value}",
               values_from = c("estimate", "conf.low", "conf.high", "p.value"),
               names_vary = "slowest") %>%
-  mutate(across(ends_with("estimate"), ~ number(., accuracy = 0.01)),
-         Negative_ci = paste0(number(Negative_conf.low, accuracy = 0.01), 
+  mutate(Negative_ci = paste0(number(Negative_conf.low, accuracy = 0.01), 
                               "–", number(Negative_conf.high, accuracy = 0.01)),
          Positive_ci = paste0(number(Positive_conf.low, accuracy = 0.01), 
                               "–", number(Positive_conf.high, accuracy = 0.01))) %>%
@@ -791,8 +790,7 @@ exit_type_mcaid_results <- broom::tidy(exit_type_mcaid, exponentiate = T, conf.i
               names_glue = "{y.level}_{.value}",
               values_from = c("estimate", "conf.low", "conf.high", "p.value"),
               names_vary = "slowest") %>%
-  mutate(across(ends_with("estimate"), ~ number(., accuracy = 0.01)),
-         Negative_ci = paste0(number(Negative_conf.low, accuracy = 0.01), 
+  mutate(Negative_ci = paste0(number(Negative_conf.low, accuracy = 0.01), 
                               "–", number(Negative_conf.high, accuracy = 0.01)),
          Positive_ci = paste0(number(Positive_conf.low, accuracy = 0.01), 
                               "–", number(Positive_conf.high, accuracy = 0.01))) %>%
@@ -998,40 +996,33 @@ table_formatter <- function(tbl) {
 # Function for tidying regression output
 table_regression <- function(tbl, type = c("any_exit", "exit_type")) {
   output <- tbl %>%
-    mutate(across(starts_with("OR"), ~ as.character(number(., accuracy = 0.01))),
-           across(contains("p."), ~ case_when(. < 0.001 ~ "<0.001",
-                                                 . < 0.01 ~ "0.01",
-                                                 . < 0.05 ~ "<0.05",
-                                                 TRUE ~ as.character(round(., 3)))),
-           order = 2L) 
+    mutate(across(c(starts_with("OR"), ends_with("estimate")), 
+                  ~ as.character(number(., accuracy = 0.01))),
+           across(any_of(c(matches("^p$"), contains("value"))), ~ 
+                    case_when(. < 0.001 ~ "<0.001",
+                              . < 0.01 ~ "0.01",
+                              . < 0.05 ~ "<0.05",
+                              TRUE ~ as.character(round(., 3)))),
+           order = 2L)
   
   if (type == "any_exit") {
     output <- output %>%
       bind_rows(., data.frame(group = c("gender_meFemale", "race_eth_meAsian",
                                         "age_grp<25", "los<3", "major_progHCV"),
-                              OR.x = rep("ref", 5), 
-                              ci.x = rep(NA_character_, 5), 
-                              p.x = rep(NA_character_, 5),
-                              OR.y = rep("ref", 5), 
-                              ci.y = rep(NA_character_, 5), 
-                              p.y = rep(NA_character_, 5),
+                              OR = rep("ref", 5), 
+                              ci = rep(NA_character_, 5), 
+                              p = rep(NA_character_, 5),
                               order = rep(1L, 5)))
   } else if (type == "exit_type") {
     output <- output %>%
       bind_rows(., data.frame(group = c("gender_meFemale", "race_eth_meAsian",
                                         "age_grp<25", "los<3", "major_progHCV"),
-                              Negative_estimate.x = rep("ref", 5), 
-                              Negative_ci.x = rep(NA_character_, 5), 
-                              Negative_p.value.x = rep(NA_character_, 5),
-                              Positive_estimate.x = rep("ref", 5), 
-                              Positive_ci.x = rep(NA_character_, 5), 
-                              Positive_p.value.x = rep(NA_character_, 5),
-                              Negative_estimate.y = rep("ref", 5), 
-                              Negative_ci.y = rep(NA_character_, 5), 
-                              Negative_p.value.y = rep(NA_character_, 5),
-                              Positive_estimate.y = rep("ref", 5), 
-                              Positive_ci.y = rep(NA_character_, 5), 
-                              Positive_p.value.y = rep(NA_character_, 5),
+                              Negative_estimate = rep("ref", 5), 
+                              Negative_ci = rep(NA_character_, 5), 
+                              Negative_p.value = rep(NA_character_, 5),
+                              Positive_estimate = rep("ref", 5), 
+                              Positive_ci = rep(NA_character_, 5), 
+                              Positive_p.value = rep(NA_character_, 5),
                               order = rep(1L, 5)))
   }
   output <- output %>%
@@ -1071,10 +1062,10 @@ table_regression <- function(tbl, type = c("any_exit", "exit_type")) {
   
   if (type == "any_exit") {
     output <- output %>%
-      select(category, group, OR.x:p.y, order, group_order)
+      select(category, group, OR:p, order, group_order)
   } else if (type == "exit_type") {
     output <- output %>%
-      select(category, group, Negative_estimate.x:Positive_p.value.y, order, group_order)
+      select(category, group, Negative_estimate:Positive_p.value, order, group_order)
   }
   
   output <- output %>%
@@ -1177,9 +1168,10 @@ gtsave(table_2_mcaid_demogs, filename = "demog_manuscript_table2.png",
 
 
 ## Table 3: regression for exit vs. not -----
-table_3_exit_regression <- full_join(select(anyexit_output, group, OR, ci, p), 
-                                     select(anyexit_mcaid_output, group, OR, ci, p),
-                                     by = "group")
+table_3_exit_regression <- bind_rows(select(anyexit_output, group, OR, ci, p), 
+                                     select(anyexit_mcaid_output, group, OR, ci, p) %>%
+                                       filter(group %in% c("ed_any_prior", "hosp_any_prior",
+                                                           "ccw_flag", "crisis_ed_grp")))
 
 # Run through clean up
 table_3_exit_regression <- table_regression(table_3_exit_regression, type = "any_exit")
@@ -1191,23 +1183,19 @@ table_3_exit_regression <- table_3_exit_regression %>%
                locations = cells_row_groups(groups = "Race/ethnicity")) %>%
   tab_footnote(footnote = "HCV = Housing Choice Voucher, PH = Public housing", 
                locations = cells_row_groups(groups = "Program type")) %>%
-  tab_footnote(footnote = "Health event data only available for those enrolled in Medicaid", 
-               locations = cells_row_groups(groups = "Health and homelessness events")) %>%
+  tab_footnote(footnote = paste0("Health event data only available for those enrolled in Medicaid ",
+                                 "(N = ", number(nobs(anyexit_mcaid), big.mark = ","), ")"),
+               locations = cells_stub(rows = group %in%
+                                        c("Experienced 1+ crisis event in year prior to exit (incl. ED visits)",
+                                          "Experienced 1+ ED visit in year prior to exit",
+                                          "Experienced 1+ hospitalization in year prior to exit",
+                                          "2+ chronic conditions"))) %>%
   sub_missing() %>%
-  tab_spanner(label = md(paste0("Exit vs no exit, all data (N=", 
-                                number(nobs(anyexit), big.mark = ","), ")")),
-              columns = ends_with(".x")) %>%
-  tab_spanner(label = md(paste0("Exit vs no exit, Medicaid only (N=", 
-                                number(nobs(anyexit_mcaid), big.mark = ","), ")")),
-              columns = ends_with(".y")) %>%
   cols_label(category = md("Category"),
              group = md("Group"),
-             OR.x = md("Odds"),
-             ci.x = md("95% CI"),
-             p.x = md("p-value"),
-             OR.y = md("Odds"),
-             ci.y = md("95% CI"),
-             p.y = md("p-value"))
+             OR = md("Odds"),
+             ci = md("95% CI"),
+             p = md("p-value"))
 
 # Add standard formatting
 table_3_exit_regression <- table_formatter(table_3_exit_regression)
@@ -1223,8 +1211,10 @@ n_type_all_exits <- model_data_exits %>% count(exit_category2)
 n_type_all_exits_mcaid <- model_data_exits_mcaid %>% count(exit_category2)
 
 # Make table
-table_4_exit_regression <- full_join(exit_type_results, exit_type_mcaid_results,
-                                     by = "group")
+table_4_exit_regression <- bind_rows(exit_type_results,
+                                     filter(exit_type_mcaid_results, 
+                                            group %in% c("ed_any_prior", "hosp_any_prior",
+                                                           "ccw_flag", "crisis_ed_grp")))
 
 # Run through clean up
 table_4_exit_regression <- table_regression(table_4_exit_regression, type = "exit_type")
@@ -1236,47 +1226,37 @@ table_4_exit_regression <- table_4_exit_regression %>%
                locations = cells_row_groups(groups = "Race/ethnicity")) %>%
   tab_footnote(footnote = "HCV = Housing Choice Voucher, PH = Public housing", 
                locations = cells_row_groups(groups = "Program type")) %>%
-  tab_footnote(footnote = "Health event data only available for those enrolled in Medicaid", 
-               locations = cells_row_groups(groups = "Health and homelessness events")) %>%
+  tab_footnote(footnote = paste0("Health event data only available for those enrolled in Medicaid ",
+                                 "(N = ", number(sum(n_type_all_exits_mcaid$n[1]), big.mark = ","), "/",
+                                 number(sum(n_type_all_exits_mcaid$n[2]), big.mark = ","), "/",
+                                 number(sum(n_type_all_exits_mcaid$n[3]), big.mark = ","), 
+                                 " for neutral/negative/positive exits"),
+               locations = cells_stub(rows = group %in%
+                                        c("Experienced 1+ crisis event in year prior to exit (incl. ED visits)",
+                                          "Experienced 1+ ED visit in year prior to exit",
+                                          "Experienced 1+ hospitalization in year prior to exit",
+                                          "2+ chronic conditions"))) %>%
   sub_missing() %>%
-  tab_spanner(label = md(paste0("Negative/positive exits vs. neutral exits, all data <br>", 
+  tab_spanner(label = md(paste0("Negative/positive exits vs. neutral exits <br>", 
                                 "(neutral N=", number(n_type_all_exits$n[1], big.mark = ","), ")")),
-              columns = ends_with(".x"),
-              level = 2) %>%
-  tab_spanner(label = md(paste0("Negative/positive exits vs. neutral exits, Medicaid only <br>", 
-                                "(neutral N=", number(n_type_all_exits_mcaid$n[1], big.mark = ","), ")")),
-              columns = ends_with(".y"),
+              columns = everything(),
               level = 2) %>%
   tab_spanner(label = md(paste0("Negative exits (N=", 
                                 number(n_type_all_exits$n[2], big.mark = ","), ")")),
-              columns = matches("^Negative.*\\.x$"),
+              columns = starts_with("Negative"),
               level = 1) %>%
   tab_spanner(label = md(paste0("Positive exits (N=", 
                                 number(n_type_all_exits$n[3], big.mark = ","), ")")),
-              columns = matches("^Positive.*\\.x$"),
-              level = 1) %>%
-  tab_spanner(label = md(paste0("Negative exits (N=", 
-                                number(n_type_all_exits_mcaid$n[2], big.mark = ","), ")")),
-              columns = matches("^Negative.*\\.y$"),
-              level = 1) %>%
-  tab_spanner(label = md(paste0("Positive exits (N=", 
-                                number(n_type_all_exits_mcaid$n[3], big.mark = ","), ")")),
-              columns = matches("^Positive.*\\.y$"),
+              columns = starts_with("Positive"),
               level = 1) %>%
   cols_label(category = md("Category"),
              group = md("Group"),
-             Negative_estimate.x = md("Odds"),
-             Negative_ci.x = md("95% CI"),
-             Negative_p.value.x = md("p-value"),
-             Positive_estimate.x = md("Odds"),
-             Positive_ci.x = md("95% CI"),
-             Positive_p.value.x = md("p-value"),
-             Negative_estimate.y = md("Odds"),
-             Negative_ci.y = md("95% CI"),
-             Negative_p.value.y = md("p-value"),
-             Positive_estimate.y = md("Odds"),
-             Positive_ci.y = md("95% CI"),
-             Positive_p.value.y = md("p-value"))
+             Negative_estimate = md("Odds"),
+             Negative_ci = md("95% CI"),
+             Negative_p.value = md("p-value"),
+             Positive_estimate = md("Odds"),
+             Positive_ci = md("95% CI"),
+             Positive_p.value = md("p-value"))
 
 # Add standard formatting
 table_4_exit_regression <- table_formatter(table_4_exit_regression)

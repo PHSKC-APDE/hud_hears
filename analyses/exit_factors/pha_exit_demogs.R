@@ -218,10 +218,10 @@ consort_maker <- function(df = consort_df, mcaid_prior = F, mcaid_after = F, hou
   }
   a3 <- glue("a3 [label = 'True exits: {format(exits_true, big.mark = ',', trim = T)}'];")
   a4 <- glue("a4 [label = 'One exit per person: {format(exits_per_person, big.mark = ',', trim = T)}'];")
-  a5 <- glue("a5 [label = 'Non-death exits: {format(exits_death, big.mark = ',', trim = T)}'];")
+  a5 <- glue("a5 [label = 'Non-death exits (primary analysis): \n{format(exits_death, big.mark = ',', trim = T)}'];")
   a6 <- glue("a6 [label = 'Complete demographics: {format(exits_demogs, big.mark = ',', trim = T)}'];")
   if (mcaid_prior == T | mcaid_after == T) {
-    a7 <- glue("a7 [label = 'Non-dual, full Medicaid coverage: \n{format(exits_mcaid, big.mark = ',', trim = T)}'];") 
+    a7 <- glue("a7 [label = 'Non-dual, full Medicaid coverage (secondary analysis): \n{format(exits_mcaid, big.mark = ',', trim = T)}'];") 
   } else {
     # For reasons unknown to me, the code fails if there is not another fake box here
     a7 <- "a7 [shape = point, label = '', width = 0, height = 0]"

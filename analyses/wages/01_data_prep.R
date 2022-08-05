@@ -139,6 +139,9 @@
         consort03_side_multiple_exits <- nrow(consort.dt[is.na(outside_period) & is.na(false_exit) & !is.na(multiple_exits)])
         consort04_multiple_exits <- nrow(consort.dt[is.na(outside_period) & is.na(false_exit) & is.na(multiple_exits)])
 
+        # combine consort #2 & #3
+        consort02_side_false_exit <- consort02_side_false_exit + consort03_side_multiple_exits
+        consort03_false_exit <- copy(consort04_multiple_exits)
         
         consort.dt[, exit_reasons := "Missing or neutral deaths"]
         consort.dt[is.na(outside_period) & is.na(false_exit) & is.na(multiple_exits) &
@@ -155,19 +158,14 @@
                                         hh_disability, n_disability, single_caregiver, 
                                         geo_tractce10, kc_opp_index_score
                                         FROM [hudhears].[control_match_covariate]
-                                WHERE id_type = 'id_exit'")) 
+                                WHERE id_type = 'id_exit'")) # Where condition limits to exits only, if not specified, can also get controls
 
     # Opportunity index ----
-      message("!!!NOTE!!!
-          Opportunity Index is only available for 4 counties identified by the Puget Sound Regional Council.
-          King (33), Kitsap (35), Pierce (53), Snohomish (61)")
-      message("Raj Chetty's Opportunity Atlast / Opportunity Insights is available by census tract for the whole country
-              but does not provide a singluar index / composite indicator.")
-      
-      myurl <- "https://raw.githubusercontent.com/PHSKC-APDE/hud_hears/main/analyses/capstone/00_opportunity_index/kc_opp_indices_scaled.csv"
-      opportunity <- data.table::fread(httr::content(
-        httr::GET(url = myurl, httr::authenticate(Sys.getenv("GITHUB_PAT"), "")), 
-        type = "text", encoding = "UTF-8"))
+      # no longer needed because kc_opp_index_score is already baked into the HUD HEARS demographics table in SQL
+      # myurl <- "https://raw.githubusercontent.com/PHSKC-APDE/hud_hears/main/analyses/capstone/00_opportunity_index/kc_opp_indices_scaled.csv"
+      # opportunity <- data.table::fread(httr::content(
+      #   httr::GET(url = myurl, httr::authenticate(Sys.getenv("GITHUB_PAT"), "")), 
+      #   type = "text", encoding = "UTF-8"))
       
     # Area Median Income (AMI) ----
       # downloaded from Neighborhood Stabilization Program Data: https://www.huduser.gov/portal/datasets/NSP.html
@@ -193,7 +191,7 @@
         )
       )
       
-      # reshape wide to long
+      # reshape ami wide to long
       ami <- melt(ami, 
                   id.vars = c("amiyear", "fips2010", "name"), 
                   measure.vars = grep("ami_", names(ami), value = T), 
@@ -220,6 +218,9 @@
       wage <- wage[, .(wage = sum(wages), hrs = sum(hrs)), .(id_esd, qtr_date, qtr_date2)]
       
       wage <- unique(wage)
+      
+      # remove wage outliers (those >= 3 standard deviations above the mean)
+      # wage <- wage[wage <= mean(wage, na.rm = T) + (3*sd(wage, na.rm = T))] # will do so below just for those linked to housing
     
     # ESD address data (esd_address) ----  
       # already cleaned when making the 'final' table
@@ -269,16 +270,16 @@
       demographics[, geo_countyfp10 := "033"] # all PHA clients must live in KC
 
     # Opportunity index (opportunity) ----
-      opportunity[, geo_tractce10 := substrRight(as.character(GEOID10), 1, 6)]  
-      opportunity <- opportunity[, .(geo_tractce10, opportunity_index = OPP_Z)]
-      
-      opportunity <- unique(opportunity)
+      # Not needed because it is already included in the demographic data
+        # opportunity[, geo_tractce10 := substrRight(as.character(GEOID10), 1, 6)]  
+        # opportunity <- opportunity[, .(geo_tractce10, opportunity_index = OPP_Z)]
+        # opportunity <- unique(opportunity)
       
     # Area Median Income (ami) ----
       # already tidy
       
 # Merge main datasets ----
-    # merge crosswalk onto exits to get id_esd ----
+    # merge crosswalk onto exits to get id_esd (create 'combo')----
         combo <- merge(exits, xwalk, by = "id_hudhears", all.x = T, all.y = F)
         
         missing_id_esd = rads::round2(100*nrow(combo[is.na(id_esd)])/nrow(combo), 0)
@@ -287,7 +288,7 @@
           These rows will be dropped from the analysis."
         ))}
         
-        combo <- combo[!is.na(id_esd)]
+        combo <- combo[!is.na(id_esd)] # only keep if was able to merge on id_esd
         
         count06_xwalk_esd <- rbind(copy(combo)[, .N, agency], data.table(agency = "Either", N = nrow(combo)))
         
@@ -314,21 +315,21 @@
         address <- merge(esd_address, geocodes, by = "geo_hash_geocode", all.x = F, all.y = F)
         address <- unique(address[, geo_hash_geocode := NULL]) # was only needed to link to county and tract geoids
         
-    # merge ESD address info onto wage data accounting for specific time windows ----
+    # merge ESD address info onto ESD wage data accounting for specific time windows ----
         # use data.table::foverlaps to limit when wage date is in the address time window
         # addresses from ESD data
         setkey(wage, id_esd, qtr_date, qtr_date2) # keys define the foverlaps 'by' variable, with final two designating the interval 
         setkey(address, id_esd, start_date, end_date)
-        wage_address = foverlaps(wage, address, mult = "last", nomatch = NA) # keeps all the wage data and just the address data that can be merged by id_esd and date
+        wage_address = foverlaps(wage, address, mult = "all", nomatch = NA) # keeps all the wage data and just the address data that can be merged by id_esd and date
         
-        wage_address <- wage_address[, .(id_esd, qtr_date, qtr_date2, wage, hrs, geo_countyfp10, geo_tractce10)]
+        wage_address <- wage_address[, .(id_esd, qtr_date, qtr_date2, wage, hrs, geo_countyfp10, geo_tractce10)] # order and keep columns of interest
         
-    # merge PHA addresses onto wage data by date to get most complete list of addresses ----
-        # rename geographies to distinguish from those in wage data
-        combo_address <- combo[, .(id_esd, from_date, exit_date, combo_geo_tractce10 = geo_tractce10, combo_geo_countyfp10 = geo_countyfp10)] 
-        
-        # speed up merge below by limiting wage data to id_esds that are in the remaining pool of PHA ids
+        # speed up merge below by limiting wage data to id_esds that are in the remaining pool of PHA clients
         wage_address <- wage_address[id_esd %in% unique(combo$id_esd)]
+        
+    # merge PHA addresses onto ESD wage data by date to get most complete list of addresses ----
+        # rename geographies in the housing data to distinguish from those in wage data
+        combo_address <- combo[, .(id_esd, from_date, exit_date, combo_geo_tractce10 = geo_tractce10, combo_geo_countyfp10 = geo_countyfp10)] 
         
         # use data.table::foverlaps to limit when wage date is in the address time window
         setkey(wage_address, id_esd, qtr_date, qtr_date2)
@@ -344,6 +345,9 @@
         
     # merge wage onto exit_xwalk_demographics ----
       # (1) create template of id_hudhears and all relevant quarters (+/- 4 quarters from exit) ----
+        # while want +/- 4 quarters from exit, will process +/- 8 quarters for QA of wage trends
+        # in raw data and to fill in missing information when possible
+        
         # wide
           template <- combo[, .(id_hudhears, exit_qtr)]
           for(qnum in 1:8){
@@ -351,6 +355,7 @@
             template[, paste0("t-", qnum) := exit_qtr - months(qnum*3)] # 4 quarters before exit quarter
             template[, paste0("t", qnum) := exit_qtr + months(qnum*3)] # 4 quarters after exit quarter
           }
+        
         # reshape wide to long
           template <- melt(template, 
                          id.vars = c("id_hudhears", "exit_qtr"), 
@@ -361,7 +366,7 @@
           template[, qtr := -8:8, id_hudhears]
 
       # (2) merge template of all quarters of interest onto exit_xwalk_demographics ----
-          # will have 8 additional rows per id, one for +/- 4 quarters from exit
+          # will have additional rows per id, one for +/- 8 quarters from exit
             combo <- merge(combo, template, by = "id_hudhears", all = T) 
           
           # demographics are more or less constant, but address post exit is not, so set TRACT and COUNTY to NA after time zero
@@ -395,9 +400,20 @@
         consort09_min_1yr <- length(unique(combo$id_esd))
         consort09_side_min_1yr <- consort08_wages - consort09_min_1yr
         
+    # Drop if age_at_exit is.na OR > 62 for any wage earner ----
+        senior.households <- unique(combo[age_at_exit > 62]$hh_id_kc_pha)
+        
+        consort09.5_side_agelimit <- length(unique(combo[hh_id_kc_pha %in% senior.households | is.na(age_at_exit)]$id_esd))
+        
+        combo <- combo[!hh_id_kc_pha %in% senior.households]
+        combo <- combo[!is.na(age_at_exit)]
+        consort09.5_agelimit = length(unique(combo$id_esd))
+        
     # fill in missing wage, hrs, & address data when possible ----
       # wage data ----
         # quarterly wage data
+            combo[wage >= mean(wage, na.rm = T) + (3*sd(wage, na.rm = T)), wage := NA] # outlier if wage is > 3 z-scores from mean
+        
             setorder(combo[is.na(wage), .N, qtr], qtr)[]
             setorder(combo, id_esd, qtr_date, qtr)
             combo[, wage  := nafill(wage, type = 'locf'), by = "id_esd" ] # fill wage forward / downward
@@ -408,6 +424,7 @@
         # hourly wage data
           combo[, wage_hourly := rads::round2(wage / hrs, 2)]
           # drop hourly wages that irrational
+            combo[is.infinite(wage_hourly), wage_hourly := NA]
             combo[, year := year(qtr_date)]
             minwage <- fread(
               httr::content(
@@ -417,9 +434,10 @@
               )
             minwage <- minwage[geography == "WA", .(year, minimumwage = as.numeric(gsub('\\$', '', wage)))]
             combo <- merge(combo, minwage, by = 'year', all.x = T, all.y = F)
-            ids.w.problem.hourly.wages <- combo[is.nan(wage_hourly) | 
-                                                 wage_hourly > 100 | # would not be in public housing if made $100/hr
-                                                 wage_hourly < minimumwage # can't make less than WA minimum wage 
+            ids.w.problem.hourly.wages <- combo[is.na(wage_hourly) |
+                                                is.nan(wage_hourly) | 
+                                                wage_hourly > 100 | # would not receive federal housing assistance if made $100/hr
+                                                wage_hourly < minimumwage # can't make less than WA minimum wage 
                                                ]$id_kc_pha 
             combo[id_kc_pha %in% ids.w.problem.hourly.wages, c("wage_hourly", "hrs") := NA]
             combo[, year := NULL]
@@ -429,8 +447,9 @@
           setorder(combo[is.na(geo_tractce10), .N, qtr])[] # rarely missing baseline address and when missing, always missing, so leave as is.
           setorder(combo[is.na(geo_countyfp10), .N, qtr])[] # never missing bc know all PHA are in KC
         
-        # fill forward and backward for address in qtr 1:4 only
+        # fill forward and backward for address in qtr 1:8 only
           # nafill only works with numeric and want to avoid DT[, myvar  := myvar[1], by= .(ID , cumsum(!is.na(myvar)) ) ] 
+          # so convert to numeric before using nafill
           combo[, c("geo_tractce10", "geo_countyfp10") := lapply(.SD, as.numeric), .SDcols = c("geo_tractce10", "geo_countyfp10")]
           # use nafill
             combo[qtr %in% 1:8, geo_tractce10  := nafill(geo_tractce10, type = 'locf'), by = "id_esd" ] # fill geoid backward / upward
@@ -443,27 +462,24 @@
             combo[, geo_countyfp10 := sprintf("%03i", geo_countyfp10)][geo_countyfp10 == " NA", geo_countyfp10 := NA]
 
 # Merge on reference data ----
-      # merge on area median income by county ----
+      # merge area median income by county onto combo table ----
           combo[!is.na(geo_countyfp10), fips2010 := paste0("53", geo_countyfp10)]
           combo[, amiyear := year(qtr_date)]
           combo <- merge(combo, ami, by = c("amiyear", "fips2010", "hh_size"), all.x = T, all.y = F)
           combo[, c("fips2010", "amiyear") := NULL]
-          combo[, hhwage := sum(wage),  by = c("hh_id_kc_pha", "qtr")]
+          combo[, hhwage := sum(wage),  by = c("hh_id_kc_pha", "qtr")] # calculate quarterly wage for whole household
           combo[, percent_ami := rads::round2(100*4*hhwage / ami, 1)] # multiply by four because wage is quarterly but AMI is annual
           message("Some KC households will not have an AMI because they have a HH size >8 and the reference sheet only applies to 
                   households with size 1:8")
           
       # merge opportunity index onto combo table ----      
-          combo <- merge(combo, opportunity, by = c("geo_tractce10"), all.x =  T, all.y = F)  
-          message("!!!NOTE!!!
-          Opportunity Index is only available for 4 counties identified by the Puget Sound Regional Council.
-          King (33), Kitsap (35), Pierce (53), Snohomish (61). /n
-          Raj Chetty's Opportunity Atlast / Opportunity Insights is available by census tract for the whole country
-          but does not provide a singluar index / composite indicator.")
+          # Not needed because already in demographic table
+            # message("!!!NOTE!!!
+            # Opportunity Index is only available for 4 counties identified by the Puget Sound Regional Council.
+            # King (33), Kitsap (35), Pierce (53), Snohomish (61). /n
+            # Raj Chetty's Opportunity Atlas / Opportunity Insights is available by census tract for the whole country
+            # but does not provide a singluar index / composite indicator.")
           
-          # ignore kc_opp_index_score bc copies opportunity_index, but only for quarters -4:0 and only for KC
-          combo[, kc_opp_index_score := NULL]
-
 # Tidy exit definitions for analysis ----
     combo[, exit_category := factor(exit_category, levels = c("Positive", "Negative"))] # to force specific order in graph  
     combo[exit_category == "Negative", exit := 0]
@@ -473,7 +489,7 @@
     setorder(combo, hh_id_kc_pha, id_kc_pha, qtr)
     combo <- combo[, .(hh_id_kc_pha, id_kc_pha, 
                       exit, exit_category, exit_date, exit_year = year(exit_date), exit_qtr, qtr, qtr_date,
-                      wage, hrs, wage_hourly, ami, percent_ami, opportunity_index,
+                      wage, hrs, wage_hourly, ami, percent_ami, opportunity_index = kc_opp_index_score,
                       race_eth_me, gender_me, age_at_exit, hh_size, hh_disability, n_disability, 
                       single_caregiver, housing_time_at_exit, 
                       agency, major_prog, subsidy_type, exit_reason_clean)]
@@ -514,8 +530,10 @@
         add_box(txt = paste0("Exits in study period: ", consort02_outside_period))   |>
         add_side_box(txt = paste0("False exits: ", consort02_side_false_exit))   |>
         add_box(txt = paste0("True exits: ", consort03_false_exit))   |>
-        add_side_box(txt = paste0("Multiple exits per person: ", consort03_side_multiple_exits))   |>
-        add_box(txt = paste0("Single exit per person: ", consort04_multiple_exits))   |>
+      
+        # add_side_box(txt = paste0("Multiple exits per person: ", consort03_side_multiple_exits))   |>
+        # add_box(txt = paste0("Single exit per person: ", consort04_multiple_exits))   |>
+      
         add_side_box(txt = paste0("Neutral or missing exits: ", consort04_side_exit_reasons))   |>
         add_box(txt = paste0("Positive and negative exits reasons: ", consort05_exit_reasons))   |>
         add_side_box(txt = paste0("Could not link with ESD data: ", consort05_side_match_id_esd))   |>
@@ -525,18 +543,20 @@
         add_side_box(txt = paste0("Could not link with wages: ", consort07_side_wages))   |>
         add_box(txt = paste0("Linked to wages: ", consort08_wages))   |>
         add_side_box(txt = paste0("Less than 1 year in public housing: ", consort09_side_min_1yr))   |>
-        add_box(txt = paste0("At least one year in public housing: ", consort09_min_1yr))
-        
+        add_box(txt = paste0("At least one year in public housing: ", consort09_min_1yr)) |>
+        add_side_box(txt = paste0("HH with wage earner over 62 years of age or missing age: ", consort09.5_side_agelimit)) |>
+        add_box(txt = paste0("HH with all wage earners under 63 years of age: ", consort09.5_side_agelimit)) 
+
       myplot <- plot(consort.complete)
       
     # save consort diagram ----
-      ggplot2::ggsave(paste0(outputdir, "consort_diagram.pdf"),
+      ggplot2::ggsave(paste0(outputdir, "figure_0_consort_diagram.pdf"),
              plot = consort.complete, 
              dpi=600, 
              width = 6.5, 
              height = 9, 
              units = "in") 
-      ggplot2::ggsave(paste0(outputdir, "consort_diagram.png"),
+      ggplot2::ggsave(paste0(outputdir, "figure_0_consort_diagram.png"),
              plot = consort.complete, 
              dpi=600, 
              width = 6.5, 

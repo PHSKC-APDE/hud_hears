@@ -18,8 +18,9 @@
     # easy SQL connections
     devtools::source_url("https://raw.githubusercontent.com/PHSKC-APDE/apde/main/R/create_db_connection.R") 
     
-    # standard error function from https://github.com/plotrix/plotrix/blob/master/R/std.error.R
-    std.error<-function(x,na.rm) {
+# Create functions ----
+    # std.error() ... standard error function from https://github.com/plotrix/plotrix/blob/master/R/std.error.R ----
+      std.error<-function(x,na.rm) {
       vn<-function(x) return(sum(!is.na(x)))
       dimx<-dim(x)
       if(is.null(dimx)) {
@@ -39,21 +40,21 @@
       return(stderr/sqrt(vnx))  
     }
     
-# Create function to save plots with proper dimensions ----
-    saveplots <- function(plot.object = NULL, plot.name = NULL){
-      ggsave(paste0(outputdir, plot.name, ".pdf"),
-             plot = plot.object, 
-             dpi=600, 
-             width = 6.5, 
-             height = 6.5, 
-             units = "in") 
-      ggsave(paste0(outputdir, plot.name, ".png"),
-             plot = plot.object, 
-             dpi=600, 
-             width = 6.5, 
-             height = 6.5, 
-             units = "in") 
-    }
+    # saveplots() ... create function to save plots with proper dimensions ----
+      saveplots <- function(plot.object = NULL, plot.name = NULL){
+        ggsave(paste0(outputdir, plot.name, ".pdf"),
+               plot = plot.object, 
+               dpi=600, 
+               width = 6.5, 
+               height = 6.5, 
+               units = "in") 
+        ggsave(paste0(outputdir, plot.name, ".png"),
+               plot = plot.object, 
+               dpi=600, 
+               width = 6.5, 
+               height = 6.5, 
+               units = "in") 
+      }
 
 # Load data ----
     # open connection 
@@ -68,13 +69,13 @@
                                  "SELECT * FROM [hudhears].[wage_analytic_table]"))
     
 # Preparatory data manipulation ----
+    # set up exit flag(s) ----
     raw[, exit_category := factor(exit_category, levels = c("Positive", "Negative"))] # to force specific order in graph  
-    raw[exit_category == "Negative", exit := 0]
-    raw[exit_category == "Positive", exit := 1]
-
-    dt1 <- copy(raw) # for plots of positive and negative at 1 year prior, at exit, and 1 year post
-        dt1[, quarter := as.factor(quarter(exit_date))]
-        
+    raw[, exit := as.integer(exit)] # convert logical 0|1 to binary integer
+    
+    # for plots of positive and negative at 1 year prior, at exit, and 1 year post ----
+    dt1 <- copy(raw) 
+        dt1 <- dt1[qtr %in% c(-4, 0, 4)]
         dt1[qtr == -4, time := -1]
         dt1[qtr == 0, time := 0]
         dt1[qtr == 4, time := 1]
@@ -93,11 +94,11 @@
         dt1 <- dt1[, .(time, exit_category, wage, mean, se, upper, lower, wage_hourly, mean.hourly, se.hourly, upper.hourly, lower.hourly)]
         
         dt1.stats <- unique(dt1[!is.na(time), .(time, exit_category, mean, se, upper, lower, wage_hourly, mean.hourly, se.hourly, upper.hourly, lower.hourly)])
-        dt1.stats[exit_category == "Negative", time := time + 0.17]
-        dt1.stats[exit_category == "Positive", time := time - 0.17]
+        dt1.stats[exit_category == "Negative", time := time + 0.17] # adding an offset for visualization purposes
+        dt1.stats[exit_category == "Positive", time := time - 0.17] # adding an offset for visualization purposes
         
-    
-    dt2 <- copy(raw) # for viewing secular changes 
+    # for viewing secular changes ----
+    dt2 <- copy(raw) 
         dt2[, se := std.error(wage), .(qtr_date)]
         dt2[, mean := mean(wage), .(qtr_date)]
         dt2[, upper := mean + (qnorm(.975) * se)]
@@ -114,7 +115,7 @@
 
 
 # Create plots ----        
-  # Plot quarterly wages----
+  # Plot quarterly wages pre-post ----
       plot.new()      
       
       set.seed(98104) # because jitter is 'random'
@@ -136,7 +137,7 @@
                       stat = 'identity', aes(x = time, ymax = upper, ymin = lower), 
                       size = 0.5, 
                       width = .03) +
-        labs(title = paste0("quarterly wages"), 
+        labs(title = paste0(""), 
              subtitle = "", 
              x = "", 
              y = "", 
@@ -161,62 +162,14 @@
       
       plot(plot1)
       
-      saveplots(plot.object = plot1, plot.name = 'figure_0_wages_quarterly')
       
-  # Plot hourly wages----
+
+  # Plot quarterly wages secular trend ----
+      # to ensure that there are no bizarre jumps or dips in the data
       plot.new()      
       
       set.seed(98104) # because jitter is 'random'
       plot2 <- ggplot() +
-        geom_point(data = dt1[!is.na(time)],  aes(x = time, y = wage_hourly, color = exit_category), 
-                   position=position_jitterdodge(dodge.width=0.65, jitter.height=0, jitter.width=0.15), alpha=0.7) +
-        geom_point(data = dt1.stats[exit_category == 'Positive'],  
-                   aes(x = time, y = mean.hourly), 
-                   size = 1) +
-        geom_errorbar(data = dt1.stats[exit_category == 'Positive'],  
-                      stat = 'identity', 
-                      aes(x = time, ymax = upper.hourly, ymin = lower.hourly), 
-                      size = .5, 
-                      width = .03) +      
-        geom_point(data = dt1.stats[exit_category == 'Negative'],  
-                   aes(x = time, y = mean.hourly), 
-                   size = 1) +
-        geom_errorbar(data = dt1.stats[exit_category == 'Negative'],  
-                      stat = 'identity', aes(x = time, ymax = upper.hourly, ymin = lower.hourly), 
-                      size = .5, 
-                      width = .03) +
-        labs(title = paste0("hourly wages"), 
-             subtitle = "", 
-             x = "", 
-             y = "", 
-             caption = "The black points and error bars are the mean and 95% confidence interval, respectively.") +
-        scale_color_manual("Exit type", 
-                           values=c('Positive' = '#2c7fb8', 'Negative' = '#2ca25f')) +
-        scale_y_continuous(labels=scales::dollar_format())+
-        scale_x_continuous(labels=c("1 year prior", "Exit", "1 year post"), breaks=c(-1, 0, 1)) +
-        theme(panel.grid.major = element_line(color = "white"), 
-              panel.background = element_rect(fill = "white"), 
-              panel.border = element_rect(colour = "black", fill=NA, size=.5),  
-              plot.title = element_text(hjust = 0.5), 
-              plot.subtitle = element_text(hjust = 0.5),
-              plot.caption = element_text(size=8),
-              legend.position = "right",
-              legend.background = element_rect(fill="white", size=0.5, linetype="solid", color ="white"), 
-              legend.title = element_text(size = 12), 
-              legend.key = element_rect(fill = "white", color = "white"),
-              legend.text = element_text(size = 10))
-      
-      dev.new(width = 6,  height = 4, unit = "in", noRStudioGD = TRUE)
-      
-      plot(plot2)
-      
-      saveplots(plot.object = plot2, plot.name = 'figure_0_wages_hourly')
-
-  # Plot quarterly wages (calendar time) ----
-      plot.new()      
-      
-      set.seed(98104) # because jitter is 'random'
-      plot3 <- ggplot() +
         geom_point(data = dt2[!is.na(time)],  aes(x = time, y = wage, color = 'orange2'), 
                    position=position_jitterdodge(dodge.width=25, jitter.height=0, jitter.width=10), alpha=0.7) +
         geom_point(data = dt2.stats[],  
@@ -249,99 +202,13 @@
       
       dev.new(width = 6,  height = 4, unit = "in", noRStudioGD = TRUE)
       
-      plot(plot3)
+      plot(plot2)
       
-      saveplots(plot.object = plot3, plot.name = 'figure_0_secular_trend_wages_quarterly')
+# Save plots ----      
+  # Save quarterly wages pre-post ----    
+      saveplots(plot.object = plot1, plot.name = 'figure_1_quarterly_wages_by_exit_type')
       
-  # Plot hourly wages (calendar time) ----
-      plot.new()      
+  # Save quarterly wages secular trend ----
+      saveplots(plot.object = plot2, plot.name = 'figure_0_secular_trend_wages_quarterly')
       
-      set.seed(98104) # because jitter is 'random'
-      plot4 <- ggplot() +
-        geom_point(data = dt2[!is.na(time)],  aes(x = time, y = wage_hourly, color = 'orange2'), 
-                   position=position_jitterdodge(dodge.width=25, jitter.height=0, jitter.width=10), alpha=0.7) +
-        geom_point(data = dt2.stats[],  
-                   aes(x = time, y = mean.hourly), 
-                   size = 1.5) +
-        geom_errorbar(data = dt2.stats[],  
-                      stat = 'identity', 
-                      aes(x = time, ymax = upper.hourly, ymin = lower.hourly), 
-                      size = .75, 
-                      width = .25) +      
-        labs(title = paste0("hourly wages secular trend"), 
-             subtitle = "", 
-             x = "", 
-             y = "", 
-             caption = "The black points and error bars are the mean and 95% confidence interval, respectively.") +
-        # scale_color_manual("Exit type", 
-        #                    values=c('Positive' = '#2c7fb8', 'Negative' = '#2ca25f')) +
-        scale_y_continuous(labels=scales::dollar_format())+
-        theme(panel.grid.major = element_line(color = "white"), 
-              panel.background = element_rect(fill = "white"), 
-              panel.border = element_rect(colour = "black", fill=NA, size=.5),  
-              plot.title = element_text(hjust = 0.5), 
-              plot.subtitle = element_text(hjust = 0.5),
-              plot.caption = element_text(size=8),
-              legend.position = "none",
-              legend.background = element_rect(fill="white", size=0.5, linetype="solid", color ="white"), 
-              legend.title = element_text(size = 12), 
-              legend.key = element_rect(fill = "white", color = "white"),
-              legend.text = element_text(size = 10))
-      
-      dev.new(width = 6,  height = 4, unit = "in", noRStudioGD = TRUE)
-      
-      plot(plot4)
-      
-      saveplots(plot.object = plot4, plot.name = 'figure_0_secular_trend_wages_hourly')
-      
-# Summary tables ----
-  # Quarterly wage difference by Pre/Exit/Post ----
-    pep.diff.qtr <- merge(dt1[!is.na(time) & exit_category == "Positive", .(pos.mean = mean(wage), pos.sd = sd(wage)), time], 
-                          dt1[!is.na(time) & exit_category == "Negative", .(neg.mean = mean(wage), neg.sd = sd(wage)), time], 
-                          by = 'time', 
-                          all = T)
-    pep.diff.qtr[, difference := pos.mean - neg.mean]
-    pep.diff.qtr[, difference.sd := sqrt((pos.sd^2) + (neg.sd^2))]
-    pep.diff.qtr[time == -1, t_test_pvalue := t.test(x = dt1[!is.na(time) & exit_category == "Positive" & time == -1,]$wage, 
-                                                     y = dt1[!is.na(time) & exit_category == "Negative" & time == -1,]$wage)$p.value]
-    pep.diff.qtr[time == 0, t_test_pvalue := t.test(x = dt1[!is.na(time) & exit_category == "Positive" & time == 0,]$wage, 
-                                                    y = dt1[!is.na(time) & exit_category == "Negative" & time == 0,]$wage)$p.value]
-    pep.diff.qtr[time == 1, t_test_pvalue := t.test(x = dt1[!is.na(time) & exit_category == "Positive" & time == 1,]$wage, 
-                                                    y = dt1[!is.na(time) & exit_category == "Negative" & time == 1,]$wage)$p.value]
-    pep.diff.qtr[t_test_pvalue < 0.05, significant := "*"]
-    pep.diff.qtr <- pep.diff.qtr[, .(wage = 'quarterly', 
-                                     time = factor(time, levels = c(-1, 0, 1), labels = c("1 year prior", "Exit", "1 year post")), 
-                                     positive = paste0(round2(pos.mean), " (", round2(pos.sd), ")"), 
-                                     negative = paste0(round2(neg.mean), " (", round2(neg.sd), ")"),
-                                     difference = paste0(round2(difference), " (", round2(difference.sd), ")"),
-                                     significant)]
-    
-  # Hourly wage difference by Pre/Exit/Post ----
-    pep.diff.hrs <- merge(dt1[!is.na(time) & exit_category == "Positive" & !is.na(wage_hourly), .(pos.mean = mean(wage_hourly), pos.sd = sd(wage_hourly)), time], 
-                          dt1[!is.na(time) & exit_category == "Negative"& !is.na(wage_hourly), .(neg.mean = mean(wage_hourly), neg.sd = sd(wage_hourly)), time], 
-                          by = 'time', 
-                          all = T)
-    pep.diff.hrs[, difference := pos.mean - neg.mean]
-    pep.diff.hrs[, difference.sd := sqrt((pos.sd^2) + (neg.sd^2))]
-    pep.diff.hrs[time == -1, t_test_pvalue := t.test(x = dt1[!is.na(time) & exit_category == "Positive" & time == -1,]$wage_hourly, 
-                                                     y = dt1[!is.na(time) & exit_category == "Negative" & time == -1,]$wage_hourly)$p.value]
-    pep.diff.hrs[time == 0, t_test_pvalue := t.test(x = dt1[!is.na(time) & exit_category == "Positive" & time == 0,]$wage_hourly, 
-                                                    y = dt1[!is.na(time) & exit_category == "Negative" & time == 0,]$wage_hourly)$p.value]
-    pep.diff.hrs[time == 1, t_test_pvalue := t.test(x = dt1[!is.na(time) & exit_category == "Positive" & time == 1,]$wage_hourly, 
-                                                    y = dt1[!is.na(time) & exit_category == "Negative" & time == 1,]$wage_hourly)$p.value]
-    pep.diff.hrs[t_test_pvalue < 0.05, significant := "*"]
-    pep.diff.hrs <- pep.diff.hrs[, .(wage = 'hourly', 
-                                     time = factor(time, levels = c(-1, 0, 1), labels = c("1 year prior", "Exit", "1 year post")), 
-                                     positive = paste0(round2(pos.mean), " (", round2(pos.sd), ")"), 
-                                     negative = paste0(round2(neg.mean), " (", round2(neg.sd), ")"),
-                                     difference = paste0(round2(difference), " (", round2(difference.sd), ")"),
-                                     significant)]
-    
-  # Combine tables of wage differences by time ----
-    wage.differences <- rbind(pep.diff.qtr, 
-                              pep.diff.hrs)
-    
-  # save wage difference table ----
-    openxlsx::write.xlsx(wage.differences, paste0(outputdir, "wage_differences_raw.xlsx"), asTable = T, overwrite = T)
-    
 # the end ----

@@ -523,7 +523,7 @@
                                  confounders, " + ",
                                  "(1 | id_kc_pha) + ", # random intercept for persons
                                  "(1 + exit | hh_id_kc_pha)") # random intercept and slope for households
-      mod1.alt <- lme4::lmer(mod1.formula.alt, data = dt1)
+      mod1.alt <- lme4::lmer(mod1.formula.alt, data = setDF(copy(dt1)))
       
       mod1.test = anova(mod1, mod1.alt, test = 'LRT')
       

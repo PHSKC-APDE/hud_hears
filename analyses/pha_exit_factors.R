@@ -131,7 +131,7 @@ age_sum <- function(df, full_demog = F, ...) {
            name = case_when(name == "age_mean" ~ "Mean (years)",
                             name == "age_med" ~ "Median (years)",
                             name == "age_range" ~ "Range (years)",
-                            name == "senior" ~ "Senior (aged 65+)",
+                            name == "senior" ~ "Senior (aged 62+)",
                             name == "child" ~ "Child (aged <18)",
                             TRUE ~ name)) %>%
     rename("group" = "name")
@@ -220,25 +220,47 @@ demog_pct_sum <- function(df,
 }
 
 
-hh_los_sum <- function(df, full_demog = F, ...) {
+demog_num_sum <- function(df, 
+                          full_demog = F, 
+                          demog = c("los", "opp_index"),
+                          ...) {
+  demog <- match.arg(demog)
+  
+  
   col_names <- df %>% distinct(...) %>% colnames()
   
   if (full_demog == T) {
     df <- df %>% filter(full_demog == T)
   }
   
+  if (demog == "los") {
+    cat_text <- "HoH time in housing"
+    scale <- 1
+    df <- df %>% 
+      filter(!is.na(housing_time_at_exit)) %>%
+      distinct(hh_id_kc_pha, housing_time_at_exit, ...) %>%
+      mutate(group = housing_time_at_exit)
+  } else if (demog == "opp_index") {
+    cat_text <- "Opportunity index"
+    scale <- 2
+    df <- df %>% 
+      filter(!is.na(kc_opp_index_score)) %>%
+      distinct(hh_id_kc_pha, kc_opp_index_score, ...) %>%
+      mutate(group = kc_opp_index_score)
+  }
+  
   output <- df %>% 
-    filter(!is.na(housing_time_at_exit)) %>%
-    distinct(hh_id_kc_pha, housing_time_at_exit, ...) %>%
     group_by(...) %>%
     summarise(n = number(n(), big.mark = ","), 
-              los_mean = round(mean(housing_time_at_exit), 1),
-              los_med = median(housing_time_at_exit)) %>%
+              grp_mean = round(mean(group), scale),
+              grp_med = round(median(group), scale)) %>%
     pivot_longer(cols = !col_names, values_transform = list(value = as.character)) %>%
     pivot_wider(id_cols = "name", names_from = col_names) %>%
-    mutate(category = "HoH time in housing", .before = "name",
-           name = case_when(name == "los_mean" ~ "Mean time (years)",
-                            name == "los_med" ~ "Median time (years)",
+    mutate(category = cat_text, .before = "name",
+           name = case_when(demog == "los" & name == "grp_mean" ~ "Mean time (years)",
+                            demog == "los" & name == "grp_med" ~ "Median time (years)",
+                            demog == "opp_index" & name == "grp_mean" ~ "Mean score",
+                            demog == "opp_index" & name == "grp_med" ~ "Median score",
                             TRUE ~ name)) %>%
     rename("group" = "name")
 
@@ -274,7 +296,7 @@ hh_demogs_sum <- function(df, full_demog = F, level = c("hh", "ind"), ...) {
            name = case_when(name == "hh_size_mean" ~ "Mean household size",
                             name == "hh_size_med" ~ "Median household size",
                             name == "single_caregiver" ~ "Single caregiver",
-                            name == "hh_disability" ~ "HoH disability",
+                            name == "hh_disability" ~ "Head of household disability",
                             TRUE ~ name)) %>%
     rename("group" = "name")
   
@@ -393,8 +415,8 @@ exit_any_ind_hh <- bind_rows(exit_any_age_hh, exit_any_gender_hh, exit_any_race_
 
 ## HH demogs ----
 # Time in housing (this is based on HH data)
-exit_any_hh_los <- hh_los_sum(covariate_nodeath, full_demog = T, id_type)
-exit_any_hh_los_hh <- hh_los_sum(covariate_nodeath_hh, full_demog = T, id_type)
+exit_any_hh_los <- demog_num_sum(covariate_nodeath, demog = "los", full_demog = T, id_type)
+exit_any_hh_los_hh <- demog_num_sum(covariate_nodeath_hh, demog = "los", full_demog = T, id_type)
 
 # Size and composition
 exit_any_hh_demogs <- hh_demogs_sum(covariate_nodeath, full_demog = T, level = "hh", id_type)
@@ -408,10 +430,16 @@ exit_any_hh_prog_hh <- demog_pct_sum(covariate_nodeath_hh, full_demog = T, level
 exit_any_hh_vouch <- demog_pct_sum(covariate_nodeath, full_demog = T, level = "hh", demog = "voucher", id_type)
 exit_any_hh_vouch_hh <- demog_pct_sum(covariate_nodeath_hh, full_demog = T, level = "hh", demog = "voucher", id_type)
 
+# Opportunity index
+exit_any_hh_opp <- demog_num_sum(covariate_nodeath, demog = "opp_index", full_demog = T, id_type)
+exit_any_hh_opp_hh <- demog_num_sum(covariate_nodeath_hh, demog = "opp_index", full_demog = T, id_type)
+
 # Combine for R markdown
-exit_any_hh <- bind_rows(exit_any_hh_los, exit_any_hh_demogs, exit_any_hh_prog, exit_any_hh_vouch)
+exit_any_hh <- bind_rows(exit_any_hh_los, exit_any_hh_demogs, exit_any_hh_prog, 
+                         exit_any_hh_vouch, exit_any_hh_opp)
 exit_any_hh_hh <- bind_rows(exit_any_hh_los_hh, exit_any_hh_demogs_hh, 
-                            exit_any_hh_prog_hh, exit_any_hh_vouch_hh)
+                            exit_any_hh_prog_hh, exit_any_hh_vouch_hh,
+                            exit_any_hh_opp_hh)
 
 
 ## Medicaid outcomes ----
@@ -446,7 +474,8 @@ exit_any_mcaid_race_hh <- demog_pct_sum(covariate_nodeath_hh, full_demog = T,
                                      level = "hh", demog = "race", id_type, full_cov_7_prior)
 
 # Time in housing
-exit_any_mcaid_los_hh <- hh_los_sum(covariate_nodeath_hh, full_demog = T, id_type, full_cov_7_prior)
+exit_any_mcaid_los_hh <- demog_num_sum(covariate_nodeath_hh, full_demog = T, demog = "los",
+                                       id_type, full_cov_7_prior)
 
 # Size and composition
 exit_any_mcaid_demogs_hh <- hh_demogs_sum(covariate_nodeath_hh, full_demog = T, 
@@ -460,6 +489,10 @@ exit_any_mcaid_prog_hh <- demog_pct_sum(covariate_nodeath_hh, full_demog = T,
 exit_any_mcaid_vouch_hh <- demog_pct_sum(covariate_nodeath_hh, full_demog = T, 
                                          level = "hh", demog = "voucher", id_type, full_cov_7_prior)
 
+# Opportunity index
+exit_any_mcaid_opp_hh <- demog_num_sum(covariate_nodeath_hh, full_demog = T, demog = "opp_index",
+                                       id_type, full_cov_7_prior)
+
 # Prior homelessness
 exit_any_mcaid_homeless_hh <- demog_pct_sum(covariate_nodeath_hh, full_demog = T, level = "hh", 
                                          demog = "homeless_grp", id_type, full_cov_7_prior)
@@ -470,7 +503,8 @@ exit_any_mcaid_homeless_hh <- demog_pct_sum(covariate_nodeath_hh, full_demog = T
 exit_any_mcaid_prior <- bind_rows(exit_any_mcaid_age_hh, exit_any_mcaid_gender_hh, 
                                   exit_any_mcaid_race_hh, exit_any_mcaid_los_hh,
                                   exit_any_mcaid_demogs_hh, exit_any_mcaid_prog_hh,
-                                  exit_any_mcaid_vouch_hh, exit_any_mcaid_homeless_hh,
+                                  exit_any_mcaid_vouch_hh, exit_any_mcaid_opp_hh,
+                                  exit_any_mcaid_homeless_hh,
                                   mutate(exit_any_mcaid_7_prior_hh, 
                                          id_control_FALSE = NA_character_,
                                          id_exit_FALSE = NA_character_) %>%
@@ -490,7 +524,7 @@ model_data <- covariate_nodeath_hh %>%
   filter(full_demog == T) %>%
   mutate(across(c("gender_me", "major_prog", "vouch_type_use"), ~ as_factor(.))) %>%
   # Relevel factors as they are made
-  mutate(race_eth_me = fct_relevel(race_eth_me, c("Asian")),
+  mutate(race_eth_me = fct_relevel(race_eth_me, c("White")),
     age_grp = fct_relevel(as_factor(case_when(
       age_at_exit < 25 ~ "<25",
       data.table::between(age_at_exit, 25, 44.99, NAbounds = NA) ~ "25-44",
@@ -612,8 +646,8 @@ exit_type_ind_hh <- bind_rows(exit_type_age_hh, exit_type_gender_hh, exit_type_r
 # These are dropped for the HH-level analyses
 
 # Time in housing (this is based on HH data)
-exit_type_hh_los <- hh_los_sum(covariate_exits, full_demog = T, exit_category)
-exit_type_hh_los_hh <- hh_los_sum(covariate_exits_hh, full_demog = T, exit_category)
+exit_type_hh_los <- demog_num_sum(covariate_exits, demog = "los", full_demog = T, exit_category)
+exit_type_hh_los_hh <- demog_num_sum(covariate_exits_hh, demog = "los", full_demog = T, exit_category)
 
 # Size and composition
 exit_type_hh_demogs <- hh_demogs_sum(covariate_exits, full_demog = T, level = "hh", exit_category)
@@ -629,12 +663,19 @@ exit_type_hh_vouch <- demog_pct_sum(covariate_exits, full_demog = T, level = "hh
 exit_type_hh_vouch_hh <- demog_pct_sum(covariate_exits_hh, full_demog = T, 
                                        level = "hh", demog = "voucher", exit_category)
 
+# Opportunity index
+exit_type_hh_opp <- demog_num_sum(covariate_exits, demog = "opp_index", full_demog = T, exit_category)
+exit_type_hh_opp_hh <- demog_num_sum(covariate_exits_hh, demog = "opp_index", full_demog = T, exit_category)
+
 
 # Combine for R markdown
-exit_type_hh <- bind_rows(exit_type_hh_los, exit_type_hh_demogs, exit_type_hh_prog, exit_type_hh_vouch) %>%
+exit_type_hh <- bind_rows(exit_type_hh_los, exit_type_hh_demogs, exit_type_hh_prog, 
+                          exit_type_hh_vouch, exit_type_hh_opp) %>%
   filter(!group == "n")
+
 exit_type_hh_hh <- bind_rows(exit_type_hh_los_hh, exit_type_hh_demogs_hh, 
-                             exit_type_hh_prog_hh, exit_type_hh_vouch_hh) %>%
+                             exit_type_hh_prog_hh, exit_type_hh_vouch_hh,
+                             exit_type_hh_opp_hh) %>%
   filter(!group == "n")
 
 
@@ -688,7 +729,7 @@ model_data_exits <- covariate_exits_hh %>%
   filter(full_demog == T) %>%
   mutate(across(c("gender_me", "major_prog", "vouch_type_use"), ~ as_factor(.))) %>%
   # Relevel factors as they are made
-  mutate(race_eth_me = fct_relevel(race_eth_me, c("Asian")),
+  mutate(race_eth_me = fct_relevel(race_eth_me, c("White")),
          age_grp = fct_relevel(
            as_factor(case_when(age_at_exit < 25 ~ "<25",
                                data.table::between(age_at_exit, 25, 44.99, NAbounds = NA) ~ "25-44",
@@ -882,7 +923,7 @@ exit_mcaid_7after_demogs_hh <- bind_rows(exit_mcaid_7after_age_hh, exit_mcaid_7a
 
 ### HH demogs (prior) ----
 # Time in housing (this is based on HH data)
-exit_mcaid_7prior_hh_los <- hh_los_sum(covariate_exits_hh, full_demog = T, full_cov_7_prior)
+exit_mcaid_7prior_hh_los <- demog_num_sum(covariate_exits_hh, full_demog = T, full_cov_7_prior)
 # Size and composition
 exit_mcaid_7prior_hh_demogs <- hh_demogs_sum(covariate_exits_hh, full_demog = T, 
                                              level = "hh", full_cov_7_prior)
@@ -902,7 +943,7 @@ exit_mcaid_7prior_hh <- bind_rows(exit_mcaid_7prior_hh_los, exit_mcaid_7prior_hh
 
 ### HH demogs (after) ----
 # Time in housing (this is based on HH data)
-exit_mcaid_7after_hh_los <- hh_los_sum(covariate_exits_hh, full_demog = T, full_cov_7_after)
+exit_mcaid_7after_hh_los <- demog_num_sum(covariate_exits_hh, full_demog = T, full_cov_7_after)
 # Size and composition
 exit_mcaid_7after_hh_demogs <- hh_demogs_sum(covariate_exits_hh, full_demog = T, 
                                              level = "hh", full_cov_7_after)
@@ -1007,7 +1048,7 @@ table_regression <- function(tbl, type = c("any_exit", "exit_type")) {
   
   if (type == "any_exit") {
     output <- output %>%
-      bind_rows(., data.frame(group = c("gender_meFemale", "race_eth_meAsian",
+      bind_rows(., data.frame(group = c("gender_meFemale", "race_eth_meWhite",
                                         "age_grp<25", "los<3", "major_progHCV"),
                               OR = rep("ref", 5), 
                               ci = rep(NA_character_, 5), 
@@ -1015,7 +1056,7 @@ table_regression <- function(tbl, type = c("any_exit", "exit_type")) {
                               order = rep(1L, 5)))
   } else if (type == "exit_type") {
     output <- output %>%
-      bind_rows(., data.frame(group = c("gender_meFemale", "race_eth_meAsian",
+      bind_rows(., data.frame(group = c("gender_meFemale", "race_eth_meWhite",
                                         "age_grp<25", "los<3", "major_progHCV"),
                               Negative_estimate = rep("ref", 5), 
                               Negative_ci = rep(NA_character_, 5), 
@@ -1093,8 +1134,10 @@ n_exit_type <- covariate_exits_hh %>% filter(full_demog == T) %>% count(exit_cat
 table_1_demogs <- bind_rows(exit_any_ind_hh, exit_any_hh_hh, 
                             exit_any_homeless, exit_any_crisis) %>%
   left_join(., bind_rows(exit_type_ind_hh, exit_type_hh_hh,
-                         exit_type_homeless, exit_type_crisis),
+                         exit_type_homeless, exit_type_crisis) %>%
+              select(category, group, Neutral, Positive, Negative),
             by = c("category", "group")) %>%
+  filter(category != "Voucher type") %>%
   filter(!group %in% c("n", "Range (years)", "Child (aged <18)")) %>% 
   filter(str_detect(group, "Did not experience", negate = T)) %>%
   rename("Remained" = "id_control", "Exited" = "id_exit") %>%
@@ -1105,12 +1148,6 @@ table_1_demogs <- bind_rows(exit_any_ind_hh, exit_any_hh_hh,
                locations = cells_row_groups(groups = "Race/ethnicity")) %>%
   tab_footnote(footnote = "HCV = Housing Choice Voucher, PH = Public housing", 
                locations = cells_row_groups(groups = "Program type")) %>%
-  tab_footnote(footnote = paste0("DV = Domestic Violence, ", 
-                                 "FUP = Family unification program, ", 
-                                 "HASP = Housing Access and Services Program, ",
-                                 "TI = Transformation Initiative, ",
-                                 "VASH = Veterans Affairs supportive housing"), 
-               locations = cells_row_groups(groups = "Voucher type")) %>%
   cols_label(category = md("Category"),
              group = md("Group"),
              Remained = md(paste0("Remained (N=", number(n_remain_exit[1], big.mark = ","), ")")),
@@ -1119,7 +1156,7 @@ table_1_demogs <- bind_rows(exit_any_ind_hh, exit_any_hh_hh,
              Neutral = md(paste0("Neutral exit (N=", number(n_exit_type[2], big.mark = ","), ")")),
              Positive = md(paste0("Positive exit (N=", number(n_exit_type[3], big.mark = ","), ")")))
 
-table_1_demogs <- table_formatter(table_1_demogs)  
+table_1_demogs <- table_formatter(table_1_demogs)
 
 # Save output
 gtsave(table_1_demogs, filename = "demog_manuscript_table1.png",
@@ -1132,6 +1169,7 @@ n_remain_exit_mcaid <- covariate_nodeath_hh %>% filter(full_demog == T) %>% coun
 
 # Make table
 table_2_mcaid_demogs <- exit_any_mcaid_prior %>%
+  filter(category != "Voucher type") %>%
   filter(!group %in% c("n", "Range (years)", "Child (aged <18)")) %>% 
   mutate(category = str_replace_all(category, "HoH time", "Time"),
          group = str_replace_all(group, " time in housing \\(years\\)", " time (years)")) %>%
@@ -1140,12 +1178,6 @@ table_2_mcaid_demogs <- exit_any_mcaid_prior %>%
                locations = cells_row_groups(groups = "Race/ethnicity")) %>%
   tab_footnote(footnote = "HCV = Housing Choice Voucher, PH = Public housing", 
                locations = cells_row_groups(groups = "Program type")) %>%
-  tab_footnote(footnote = paste0("DV = Domestic Violence, ", 
-                                 "FUP = Family unification program, ", 
-                                 "HASP = Housing Access and Services Program, ",
-                                 "TI = Transformation Initiative, ",
-                                 "VASH = Veterans Affairs supportive housing"), 
-               locations = cells_row_groups(groups = "Voucher type")) %>%
   tab_footnote(footnote = "Health event data only available for those enrolled in Medicaid", 
                locations = cells_row_groups(groups = "Health and homelessness events")) %>%
   sub_missing() %>%

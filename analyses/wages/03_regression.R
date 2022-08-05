@@ -69,13 +69,13 @@
     
     # save plots with proper dimensions ----
       saveplots <- function(plot.object = NULL, plot.name = NULL){
-        ggsave(paste0(outputdir, plot.name, ".pdf"),
+        ggsave(paste0(outputdir, '/pdf/', plot.name, ".pdf"),
                plot = plot.object, 
                dpi=600, 
                width = 6, 
                height = 4, 
                units = "in") 
-        ggsave(paste0(outputdir, plot.name, ".png"),
+        ggsave(paste0(outputdir, '/png/', plot.name, ".png"),
                plot = plot.object, 
                dpi=600, 
                width = 6, 
@@ -83,6 +83,37 @@
                units = "in") 
       }
        
+    # calculate mean values of predictions for my dataset using random draws ----
+      prediction_summary <- function(predDT, ndraw = 1000){
+        myest <- predDT[, .(time, exit_category, predicted, std.error)]
+        
+        # create summary table of each combination of time and exit_category
+        mysets <- unique(myest[, .(time, exit_category, wage = NA_real_, se = NA_real_)])
+        
+        # loop over each unique combination of time and exit_category to calculate the mean and se of predictions
+        for(i in 1:nrow(mysets)){
+          # create subset of the data for the unique time * exit_category
+          mysubset <- myest[time == mysets[i, ][['time']] & exit_category == mysets[i, ][['exit_category']] ]
+          
+          # take draws from prediction and standard error for each row of the subset
+          set.seed(98104)
+          mydraws <- c() # empty vector to store draws
+          for(ii in 1:nrow(mysubset)){
+            mydraws <- c(mydraws, rnorm(ndraw, mysubset[ii]$predicted, mysubset[ii]$std.error))
+          }
+          
+          # calculate summary (mean and se) from the draws
+          mysets[i, wage := mean(mydraws)]
+          mysets[i, se := sd(mydraws)/sqrt(length(mydraws)) ] # This standard error seems way too small!
+          mysets[i, se := sd(mydraws)] # This standard error seems a bit large, but reasonable considering that it is summarizing all of the predictions, for different populations
+          mysets[i, lower := wage - qnorm(0.975) * se]
+          mysets[i, upper := wage + qnorm(0.975) * se]
+        }
+        
+        # return object
+        return(mysets)
+      }
+    
     # calculate counterfactuals ----
       calc.counterfactual <- function(mymod.preds = NULL){
         mymod.negdiff <-  copy(mymod.preds)[exit_category == "Negative"]
@@ -131,7 +162,7 @@
         mymod.tidy[, Estimate := gsub(" \\(NA\\, NA\\)", "", Estimate)]
         setnames(mymod.tidy, "Estimate", "Estimate (95% CI)")
       }
-    
+
 # Load data ----
     # open connection 
     hhsaw16 = create_db_connection( # this is prod
@@ -218,34 +249,27 @@
         modappdx1.preds <- as.data.table(marginaleffects::predictions(modappdx1, 
                                                                  newdata = dtappdx1, 
                                                                  re.form=~0)) # re.form=~0 means include no random effects, so population level estimates
-        modappdx1.preds <- modappdx1.preds[, 
-                                           .(predicted = mean(predicted), se = mean(std.error)), 
-                                           .(time, exit_category)] # collapse down to 1 row per time/exit_category
-      
-        modappdx1.preds <- modappdx1.preds[, .(time = as.integer(as.character(time)), exit_category, wage = predicted, 
-                                               se, lower = predicted - 1.96 * se, upper = predicted + 1.96 * se)]
+        modappdx1.preds <- prediction_summary(modappdx1.preds, ndraw = 10000)
         
       # Calculate counterfactual ----
         modappdx1.preds <- calc.counterfactual(modappdx1.preds)
         modappdx1.preds[exit_category == "Positive", time := time - .0]
         modappdx1.preds[exit_category == "Negative", time := time + .0]
-        modappdx1.preds[]
+        # modappdx1.preds[]
 
     # plot ----
+        # commented out errorbars because don't trust standard error calculation from prediction_summary()
         plotappdx1 <- ggplot() +
           geom_line(data = modappdx1.preds[exit_category != "Counterfactual"], aes(x = time, y = wage, color = exit_category), size = 1) +
           geom_line(data = modappdx1.preds[exit_category == "Counterfactual"], aes(x = time, y = wage, color = exit_category), linetype="dashed", size = 1) +
           geom_point(data = modappdx1.preds[exit_category != "Counterfactual"], 
                      aes(x = time, y = wage, color = exit_category), 
                      size = 2.5) +
-          geom_errorbar(data = modappdx1.preds[exit_category != "Counterfactual"], 
-                        aes(x = time, ymax = upper, ymin = lower, color = exit_category), 
-                        size = 1, 
-                        width = .05) + 
+          # geom_errorbar(data = modappdx1.preds[exit_category != "Counterfactual"], 
+          #               aes(x = time, ymax = upper, ymin = lower, color = exit_category), 
+          #               size = 1, 
+          #               width = .05) + 
           labs(
-            #title = paste0("Population level trends 1 year prior to exit"), 
-            #subtitle = "Model 1: Assess parallel trends prior to exit",
-            # caption = paste0("", mod1.formula), 
             x = "", 
             y = "Quarterly wages") +
           scale_x_continuous(labels=c("1 year prior", "Exit", "1 year post"), breaks=c(-4, 0, 4))
@@ -254,7 +278,8 @@
           scale_color_manual("Exit type", 
                              values=c('Positive' = '#2c7fb8', 
                                       'Counterfactual' = '#e41a1c', 
-                                      'Negative' = '#2ca25f')) 
+                                      'Negative' = '#2ca25f')) + 
+          scale_y_continuous(limits = c(3000, 9000), breaks=c(seq(4000, 8000, 2000)), labels=scales::dollar_format()) 
         
         # dev.new(width = 7,  height = 4, unit = "in", noRStudioGD = TRUE)
         plot(plotappdx1)
@@ -312,32 +337,20 @@
         caption.text <- paste0("", modappdx2.formula)
       }      
       
-    # average marginal effects  ----
-      modappdx2.margin.summary <- as.data.table(summary(margins::margins(modappdx2))) 
-      modappdx2.margin.summary[factor == 'exit']
-      
+
     # create table of predictions for slopes in ggplot ----
       modappdx2.preds <- as.data.table(marginaleffects::predictions(modappdx2, 
                                               newdata = copy(dtappdx2), # copy so not changed to data.frame
                                               re.form=~0)) # re.form=~0 means include no random effects, so population level estimates
-      modappdx2.preds <- modappdx2.preds[, 
-                                         .(predicted = mean(predicted), se = mean(std.error)), 
-                                         .(time, exit_category)] # collapse down to 1 row per time/exit_category
-      
-      modappdx2.preds <- modappdx2.preds[, .(time = as.integer(as.character(time)), exit_category, wage = predicted, 
-                                             se, lower = predicted - 1.96 * se, upper = predicted + 1.96 * se)]
+      modappdx2.preds <- prediction_summary(modappdx2.preds, ndraw = 10000)
       
     # calculate counterfactual for positive exits ----
       modappdx2.preds <- calc.counterfactual(modappdx2.preds)
-      modappdx2.preds[]
+      # modappdx2.preds[]
 
     # Plot data prior to exit ----
-      dtappdx2.plot = copy(dtappdx2)
-      dtappdx2.plot[exit == 0, time := time - .0] # add tiny shift for easier visualization
-      dtappdx2.plot[exit == 1, time := time + .0] # add tiny shift for easier visualization
-      
+      # commented out errorbars because don't trust standard error calculation from prediction_summary()
       plotappdx2 <- ggplot() +
-        # geom_point(data = dtappdx2.plot, aes(x = time, y = wage, color = exit_category)) + 
         geom_line(data = modappdx2.preds[exit_category != "Counterfactual"], 
                   aes(x = time, y = wage, color = exit_category), 
                   size = 1) +
@@ -347,14 +360,11 @@
         geom_point(data = modappdx2.preds[exit_category != "Counterfactual"], 
                    aes(x = time, y = wage, color = exit_category), 
                    size = 2.5) +
-        geom_errorbar(data = modappdx2.preds[exit_category != "Counterfactual"], 
-                      aes(x = time, ymax = upper, ymin = lower, color = exit_category), 
-                      size = 1, 
-                      width = .05) + 
+        # geom_errorbar(data = modappdx2.preds[exit_category != "Counterfactual"], 
+        #               aes(x = time, ymax = upper, ymin = lower, color = exit_category), 
+        #               size = 1, 
+        #               width = .05) + 
         labs(
-           # title = paste0("Population level trends 1 year prior to exit"), 
-           # subtitle = paste0("Model 2: IPW for trends prior to exit"), 
-           # caption = paste0("", modappdx2.formula), 
            x = "", 
            y = "Quarterly wages") +
         scale_x_continuous(labels=c("1 year prior", "Exit"), breaks=c(-4, 0)) 
@@ -364,7 +374,7 @@
                            values=c('Positive' = '#2c7fb8', 
                                     'Counterfactual' = '#e41a1c', 
                                     'Negative' = '#2ca25f')) +
-        scale_y_continuous(limits = c(3000, 9000), breaks=c(seq(4000, 8000, 2000)), labels=scales::dollar_format()) 
+       scale_y_continuous(limits = c(3000, 9000), breaks=c(seq(4000, 8000, 2000)), labels=scales::dollar_format()) 
 
       plot(plotappdx2)
       
@@ -416,27 +426,24 @@
       modappdx4.preds <- as.data.table(predictions(modappdx4, 
                                               newdata = copy(dtappdx4), 
                                               re.form=~0)) # re.form=~0 means include no random effects, so population level estimates
-      modappdx4.preds <- modappdx4.preds[, 
-                                         .(predicted = mean(predicted), se = mean(std.error)), 
-                                         .(time, exit_category)] # collapse down to 1 row per time/exit_category
-      
-      modappdx4.preds <- modappdx4.preds[, .(time = as.integer(as.character(time)), exit_category, wage = predicted, 
-                                             se, lower = predicted - 1.96 * se, upper = predicted + 1.96 * se)]
+      modappdx4.preds <- prediction_summary(modappdx4.preds, ndraw = 10000)
         
       # calculate counterfactual (ascribe change observed in negative exits to positive exits) ----
       modappdx4.preds <- calc.counterfactual(modappdx4.preds)
-
+      modappdx4.preds[]
+      
     # Plot data before and after exit ----
+      # commented out errorbars because don't trust standard error calculation from prediction_summary()
       plotappdx4 <- ggplot() +
         geom_line(data = modappdx4.preds[exit_category != "Counterfactual"], aes(x = time, y = wage, color = exit_category), size = 1) +
         geom_line(data = modappdx4.preds[exit_category == "Counterfactual"], aes(x = time, y = wage, color = exit_category), linetype="dashed", size = 1) +
         geom_point(data = modappdx4.preds[exit_category != "Counterfactual"], 
                    aes(x = time, y = wage, color = exit_category), 
                    size = 2.5) +
-        geom_errorbar(data = modappdx4.preds[exit_category != "Counterfactual"], 
-                      aes(x = time, ymax = upper, ymin = lower, color = exit_category), 
-                      size = 1, 
-                      width = .05) + 
+        # geom_errorbar(data = modappdx4.preds[exit_category != "Counterfactual"], 
+        #               aes(x = time, ymax = upper, ymin = lower, color = exit_category), 
+        #               size = 1, 
+        #               width = .05) + 
         labs(
           # title = paste0("Quarterly wage history by exit type and time"), 
           # subtitle = "Model 4: three time points", 
@@ -507,7 +514,7 @@
                              confounders, " + ",
                              "(1 | id_kc_pha) + ", # random intercept for persons
                              "(1 + exit | hh_id_kc_pha)") # random intercept and slope for households
-      mod1 <- lme4::lmer(mod1.formula, data = dt1)
+      mod1 <- lme4::lmer(mod1.formula, data = setDF(copy(dt1)))
       mod1.tidy <- model.clean(mod1)
       
     # test if p-value for interaction term is < 0.05 ----
@@ -540,34 +547,25 @@
       mod1.preds <- as.data.table(predictions(mod1, 
                                               newdata = copy(dt1),
                                               re.form=~0)) # re.form=~0 means include no random effects, so population level estimates
-      mod1.preds <- mod1.preds[,
-                               .(predicted = mean(predicted), se = mean(std.error)), 
-                               .(time, exit_category)] # collapse down to 1 row per time/exit_category
-      
-      mod1.preds <- mod1.preds[, 
-                               .(time = as.integer(as.character(time)), exit_category, wage = predicted,
-                                 se, lower = predicted - 1.96 * se, upper = predicted + 1.96 * se)]
+      mod1.preds <- prediction_summary(mod1.preds, ndraw = 10000)
       
       # calculate counterfactual (ascribe change observed in negative exits to positive exits) ----
       mod1.preds <- calc.counterfactual(mod1.preds)
-      mod1.preds[]
+      # mod1.preds[]
       
     # Plot data four quarters before and after exit ----
       plot1 <- ggplot() +
-        # geom_point(data = dt1.plot, aes(x = time, y = wage, color = exit_category)) + 
+        # commented out errorbars because don't trust standard error calculation from prediction_summary()
         geom_line(data = mod1.preds[exit_category != "Counterfactual"], aes(x = time, y = wage, color = exit_category), size = 1) +
         geom_line(data = mod1.preds[exit_category == "Counterfactual"], aes(x = time, y = wage, color = exit_category), linetype="dashed", size = 1) +
         geom_point(data = mod1.preds[exit_category != "Counterfactual"], 
                    aes(x = time, y = wage, color = exit_category), 
                    size = 2.5) +
-        geom_errorbar(data = mod1.preds[exit_category != "Counterfactual"], 
-                      aes(x = time, ymax = upper, ymin = lower, color = exit_category), 
-                      size = 1, 
-                      width = .05) + 
+        # geom_errorbar(data = mod1.preds[exit_category != "Counterfactual"], 
+        #               aes(x = time, ymax = upper, ymin = lower, color = exit_category), 
+        #               size = 1, 
+        #               width = .05) + 
         labs(
-          # title = paste0("Quarterly wage history by exit type and time"), 
-          # subtitle = "Model 5: Four quarters pre/post exit", 
-          # caption = caption.text, 
           x = "", 
           y = "Quarterly wages") +
         scale_x_continuous(labels=c("1 year prior", "Exit", "1 year post"), breaks=c(-4, 0, 4))
@@ -580,34 +578,6 @@
       
       # dev.new(width = 6,  height = 4, unit = "in", noRStudioGD = TRUE)
       plot(plot1)
-      
-      # alternative plot with CI for counterfactual
-      plot1.alt <- ggplot() +
-        # geom_point(data = dt1.plot, aes(x = time, y = wage, color = exit_category)) + 
-        geom_line(data = mod1.preds[exit_category != "Counterfactual"], aes(x = time, y = wage, color = exit_category), size = 1) +
-        geom_line(data = mod1.preds[exit_category == "Counterfactual"], aes(x = time, y = wage, color = exit_category), linetype="dashed", size = 1) +
-        geom_point(data = mod1.preds[], 
-                   aes(x = time, y = wage, color = exit_category), 
-                   size = 2.5) +
-        geom_errorbar(data = mod1.preds[], 
-                      aes(x = time, ymax = upper, ymin = lower, color = exit_category), 
-                      size = 1, 
-                      width = .05) + 
-        labs(title = paste0("Quarterly wage history by exit type and time"), 
-             subtitle = "Model 5: Four quarters pre/post exit", 
-             caption = caption.text, 
-             x = "", 
-             y = "Quarterly wages") +
-        scale_x_continuous(labels=c("1 year prior", "Exit", "1 year post"), breaks=c(-4, 0, 4))
-      
-      plot1.alt <- formatplots(plot1.alt) + 
-        scale_color_manual("Exit type", 
-                           values=c('Positive' = '#2c7fb8', 
-                                    'Counterfactual' = '#e41a1c', 
-                                    'Negative' = '#2ca25f')) 
-      
-      # dev.new(width = 6,  height = 4, unit = "in", noRStudioGD = TRUE)
-      plot(plot1.alt)
       
     # Plot observed vs expected to assess model quality and problems ----
       OvE.mod1 <- copy(dt1)[, fitted := fitted(mod1)]
@@ -665,8 +635,7 @@
       saveplots(plot.object = plot1, plot.name = 'figure_2_pre_post_by_qtr')      
       saveplots(plot.object = plot.resid.5, plot.name = 'appendix_figure_3_residuals')      
       saveplots(plot.object = OvE.mod1, plot.name = 'appendix_figure_3_trends_Obs_v_Exp')      
-      # saveplots(plot.object = plot1.alt, plot.name = 'figure_x_pre_post_by_qtr_alt')      
-      
+
 # Save regression results ----
       # Write Tables 1 & 2 using openxlsx----
       wb <- createWorkbook() # initiate a new / empty workbook

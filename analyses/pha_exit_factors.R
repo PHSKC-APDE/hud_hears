@@ -923,7 +923,8 @@ exit_mcaid_7after_demogs_hh <- bind_rows(exit_mcaid_7after_age_hh, exit_mcaid_7a
 
 ### HH demogs (prior) ----
 # Time in housing (this is based on HH data)
-exit_mcaid_7prior_hh_los <- demog_num_sum(covariate_exits_hh, full_demog = T, full_cov_7_prior)
+exit_mcaid_7prior_hh_los <- demog_num_sum(covariate_exits_hh, full_demog = T, 
+                                          demog = "los", full_cov_7_prior)
 # Size and composition
 exit_mcaid_7prior_hh_demogs <- hh_demogs_sum(covariate_exits_hh, full_demog = T, 
                                              level = "hh", full_cov_7_prior)
@@ -943,7 +944,8 @@ exit_mcaid_7prior_hh <- bind_rows(exit_mcaid_7prior_hh_los, exit_mcaid_7prior_hh
 
 ### HH demogs (after) ----
 # Time in housing (this is based on HH data)
-exit_mcaid_7after_hh_los <- demog_num_sum(covariate_exits_hh, full_demog = T, full_cov_7_after)
+exit_mcaid_7after_hh_los <- demog_num_sum(covariate_exits_hh, full_demog = T, 
+                                          demog = "los", full_cov_7_after)
 # Size and composition
 exit_mcaid_7after_hh_demogs <- hh_demogs_sum(covariate_exits_hh, full_demog = T, 
                                              level = "hh", full_cov_7_after)

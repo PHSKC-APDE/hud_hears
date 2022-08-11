@@ -109,7 +109,7 @@
 
     # Get PHA data for counts for CONSORT diagram ----
         consort.dt <- setDT(DBI::dbGetQuery(conn = hhsaw16, 
-                                       "SELECT id_hudhears, id_kc_pha, from_date, exit_date = act_date,
+                                       "SELECT id_hudhears, hh_id_kc_pha, id_kc_pha, from_date, exit_date = act_date,
                                       exit_reason_clean, exit_category, agency, subsidy_type, major_prog, 
                                       true_exit, exit_type_keep, exit_order_study,
                                       exit_order_max_study
@@ -117,6 +117,7 @@
                                     WHERE chooser = chooser_max AND act_date IS NOT NULL"))    
         
         consort01_total_exits <- nrow(consort.dt)
+        consort01_total_exits_hh <- length(unique((consort.dt$hh_id_kc_pha)))
         
         consort.dt[, outside_period := agency]
         consort.dt[(agency == "KCHA" & exit_date >= as.Date("2016-01-01") & exit_date <= as.Date("2018-12-31")) |
@@ -403,11 +404,13 @@
     # Drop if age_at_exit is.na OR > 62 for any wage earner ----
         senior.households <- unique(combo[age_at_exit > 62]$hh_id_kc_pha)
         
-        consort09.5_side_agelimit <- length(unique(combo[hh_id_kc_pha %in% senior.households | is.na(age_at_exit)]$id_esd))
+        consort10_side_agelimit <- length(unique(combo[hh_id_kc_pha %in% senior.households | is.na(age_at_exit)]$id_esd))
         
         combo <- combo[!hh_id_kc_pha %in% senior.households]
         combo <- combo[!is.na(age_at_exit)]
-        consort09.5_agelimit = length(unique(combo$id_esd))
+        consort10_agelimit = length(unique(combo$id_esd))
+        consort10_agelimit_hh <- length(unique((combo$hh_id_kc_pha)))
+        
         
     # fill in missing wage, hrs, & address data when possible ----
       # wage data ----
@@ -544,24 +547,32 @@
         add_box(txt = paste0("Linked to wages: ", consort08_wages))   |>
         add_side_box(txt = paste0("Less than 1 year in public housing: ", consort09_side_min_1yr))   |>
         add_box(txt = paste0("At least one year in public housing: ", consort09_min_1yr)) |>
-        add_side_box(txt = paste0("HH with wage earner over 62 years of age or missing age: ", consort09.5_side_agelimit)) |>
-        add_box(txt = paste0("HH with all wage earners under 63 years of age: ", consort09.5_side_agelimit)) 
+        add_side_box(txt = paste0("HH with wage earner over 62 years of age or missing age: ", consort10_side_agelimit)) |>
+        add_box(txt = paste0("HH with all wage earners under 63 years of age: ", consort10_agelimit)) 
 
       myplot <- plot(consort.complete)
       
     # save consort diagram ----
-      ggplot2::ggsave(paste0(outputdir, "figure_0_consort_diagram.pdf"),
+      ggplot2::ggsave(paste0(outputdir, "/pdf/figure_0_consort_diagram.pdf"),
              plot = consort.complete, 
              dpi=600, 
              width = 6.5, 
              height = 9, 
              units = "in") 
-      ggplot2::ggsave(paste0(outputdir, "figure_0_consort_diagram.png"),
+      ggplot2::ggsave(paste0(outputdir, "/png/figure_0_consort_diagram.png"),
              plot = consort.complete, 
              dpi=600, 
              width = 6.5, 
              height = 9, 
              units = "in") 
       
+    # save consort data in CSV ----
+      flowdata <- sort(ls(pattern = 'consort[0-9]'))
+      flowdata.dt <- data.table()
+      for(i in 1:length(flowdata)){
+        temp <- data.table(name = flowdata[i], value = get(flowdata[i]))
+        flowdata.dt <- rbind(flowdata.dt, temp)
+      }
+      openxlsx::write.xlsx(flowdata.dt, file = paste0(outputdir, "/Table_consort.xlsx"), asTable = T, overwrite = T)
     
 # The end! ----

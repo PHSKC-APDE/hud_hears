@@ -143,23 +143,54 @@
       }    
 
     # clean model estimates ----
-      model.clean <- function(mymod){
+      model.clean <- function(mymod, myformat = NA){
         mymod.tidy <- as.data.table(broom.mixed::tidy(mymod, conf.int = T))
         roundvars <- c("estimate", "conf.low", "conf.high", "std.error")
         mymod.tidy[, (roundvars) := rads::round2(.SD, 0), .SDcols = roundvars]
-        mymod.tidy <- mymod.tidy[, .(Effect = effect, 
-                                     Group = group, 
-                                     Term = term, 
-                                     Estimate = paste0(
-                                       prettyNum(estimate, big.mark = ','),
-                                       " (", 
-                                       prettyNum(conf.low, big.mark = ','), 
-                                       ", ", 
-                                       prettyNum(conf.high, big.mark = ','), 
-                                       ")") 
-                                     # , SE = std.error
-                                     )]
-        mymod.tidy[, Estimate := gsub(" \\(NA\\, NA\\)", "", Estimate)]
+        mymod.tidy[, p.value := as.character(rads::round2(p.value, 3))]
+        mymod.tidy[as.numeric(p.value) < 0.001, p.value := "<0.001"]
+        if(myformat == 'dollar'){
+          mymod.tidy <- mymod.tidy[, .(Effect = effect, 
+                                       Group = group, 
+                                       Term = term, 
+                                       Estimate = paste0("$",
+                                         prettyNum(estimate, big.mark = ','),
+                                         " ($", 
+                                         prettyNum(conf.low, big.mark = ','), 
+                                         ", $", 
+                                         prettyNum(conf.high, big.mark = ','), 
+                                         ")") , 
+                                       'P-value' = p.value
+                                       # , SE = std.error
+                                       )]
+        }
+        if(myformat == 'percent'){
+          mymod.tidy <- mymod.tidy[, .(Effect = effect, 
+                                       Group = group, 
+                                       Term = term, 
+                                       Estimate = paste0(prettyNum(estimate, big.mark = ','),
+                                                         "% (", 
+                                                         prettyNum(conf.low, big.mark = ','), 
+                                                         "%, ", 
+                                                         prettyNum(conf.high, big.mark = ','), 
+                                                         "%)") , 
+                                       'P-value' = p.value)]
+        }        
+        mymod.tidy[Term == 'exit', Term := "Positive exit"]
+        mymod.tidy[Term %like% 'AI/AN', Term := "American Indian / Alaska Native"]
+        mymod.tidy[Term %like% 'Asian', Term := "Asian"]
+        mymod.tidy[Term %like% 'Latino', Term := "Hispanic"]
+        mymod.tidy[Term %like% 'Multiple', Term := "Multiple"]
+        mymod.tidy[Term %like% 'NH/PI', Term := "Native Hawaiian / Pacific Islander"]
+        mymod.tidy[Term %like% 'White', Term := "White"]
+        mymod.tidy[, Term := gsub("as.integer\\(time\\)", "time", Term)]
+        mymod.tidy[, Term := gsub("exit_year", "Exit year: ", Term)]
+        mymod.tidy[Term == 'single_caregiverTRUE', Term := "Single caregiver household"]
+        mymod.tidy[Term == 'housing_time_at_exit', Term := "Years in public housing"]
+        mymod.tidy[, Term := gsub("splines::bs", "spline", Term)]
+        mymod.tidy[, Estimate := gsub("\\$-", "-\\$", Estimate)]
+        mymod.tidy[, Estimate := gsub(" \\(\\$NA\\, \\$NA\\)", "", Estimate)]
+        mymod.tidy[, Estimate := gsub("\\$NaN", NA, Estimate)]
         setnames(mymod.tidy, "Estimate", "Estimate (95% CI)")
       }
 
@@ -194,7 +225,8 @@
     raw[, exit := as.integer(exit)]
     raw[, exit_category := factor(exit_category, levels = c("Positive", "Negative"))]
     raw[, quarter := as.factor(quarter(exit_date))]
-    
+    raw[, season := factor(quarter(exit_date), levels = 1:4, labels = c("Winter", "Spring", "Summer", "Fall"))]
+    raw[, opportunity_index1k := 1000*opportunity_index]
     
     raw <- raw[qtr %in% -4:4] # limit to quarters of interest
     
@@ -215,7 +247,7 @@
                              confounders, " + ",
                              "(1 | id_kc_pha) + ", # random intercept for persons
                              "(1 + exit | hh_id_kc_pha)") # random intercept and slope for households
-      modappdx1 <- lme4::lmer(modappdx1.formula, data = dtappdx1)
+      modappdx1 <-lmerTest::lmer(modappdx1.formula, data = dtappdx1)
       modappdx1.tidy <- model.clean(modappdx1)
       
     # test if interaction is significant ----
@@ -225,7 +257,7 @@
                                confounders, " + ",
                                "(1 | id_kc_pha) + ", # random intercept for persons
                                "(1 + exit | hh_id_kc_pha)") # random intercept and slope for households
-      modappdx1.alt <- lme4::lmer(modappdx1.formula.alt, data = dtappdx1)
+      modappdx1.alt <- lmerTest::lmer(modappdx1.formula.alt, data = dtappdx1)
       modappdx1.test = anova(modappdx1, modappdx1.alt, test = 'LRT')
       
       if( modappdx1.test[["Pr(>Chisq)"]][2] < 0.05 ) {
@@ -271,7 +303,7 @@
           #               width = .05) + 
           labs(
             x = "", 
-            y = "Quarterly wages") +
+            y = "Predicted quarterly wages") +
           scale_x_continuous(labels=c("1 year prior", "Exit", "1 year post"), breaks=c(-4, 0, 4))
         
         plotappdx1 <- formatplots(plotappdx1) + 
@@ -301,13 +333,19 @@
       modappdx2.ps <- glm(modappdx2.psformula, 
                      family = binomial(link=logit),
                      data = dtappdx2[qtr==0])
-      modappdx2.ps.prob <- data.table(hh_id_kc_pha = dtappdx2[qtr==0]$hh_id_kc_pha, 
-                                 id_kc_pha = dtappdx2[qtr==0]$id_kc_pha, 
-                                 exit = dtappdx2[qtr==0]$exit, 
-                                 prob = predict(modappdx2.ps, type = 'response')) # predicted probability
+      
+      modappdx2.ps.preds = as.data.table(predictions(modappdx2.ps, newdata = copy(dtappdx2)))
+      modappdx2.ps.preds <- modappdx2.ps.preds[qtr == 0 & !is.na(predicted)]
+      
+      modappdx2.ps.prob <- data.table(hh_id_kc_pha = modappdx2.ps.preds$hh_id_kc_pha, 
+                                 id_kc_pha = modappdx2.ps.preds$id_kc_pha, 
+                                 exit = modappdx2.ps.preds$exit, 
+                                 prob = modappdx2.ps.preds$predicted) # predicted probability
+      
       modappdx2.ps.prob[exit == 1, ipw := 1 / prob] # weight for IPW
       modappdx2.ps.prob[exit == 0, ipw := 1 / (1-prob)] # weight for IPW
-      dtappdx2 <- merge(dtappdx2, modappdx2.ps.prob)
+      
+      dtappdx2 <- merge(dtappdx2, modappdx2.ps.prob, by = c("hh_id_kc_pha", "id_kc_pha", "exit"), all.x = F, all.y = T)
       
       # main model ----
       dtappdx2[, .N, .(exit, time)]
@@ -315,7 +353,7 @@
                              "exit*splines::bs(as.integer(time), df = 3) + ", 
                              "(1 | id_kc_pha) + ", # random intercept for persons
                              "(1 + exit | hh_id_kc_pha)")  # random intercept and slope for households
-      modappdx2 <- lme4::lmer(modappdx2.formula, data = dtappdx2, weights = ipw)
+      modappdx2 <- lmerTest::lmer(modappdx2.formula, data = dtappdx2, weights = ipw)
       modappdx2.tidy <- model.clean(modappdx2)
       
     # test if p-value for interaction term is < 0.05 using likelihood ratio test ----
@@ -323,7 +361,7 @@
                                  "exit + time + ", 
                                  "(1 | id_kc_pha) + ", # random intercept for persons
                                  "(1 + exit | hh_id_kc_pha)")  # random intercept and slope for households
-      modappdx2.alt <- lme4::lmer(modappdx2.formula.alt, data = dtappdx2, weights = ipw)
+      modappdx2.alt <- lmerTest::lmer(modappdx2.formula.alt, data = dtappdx2, weights = ipw)
       modappdx2.test = anova(modappdx2, modappdx2.alt, test = 'LRT')
 
       if( modappdx2.test[["Pr(>Chisq)"]][2] < 0.05 ) {
@@ -337,7 +375,6 @@
         caption.text <- paste0("", modappdx2.formula)
       }      
       
-
     # create table of predictions for slopes in ggplot ----
       modappdx2.preds <- as.data.table(marginaleffects::predictions(modappdx2, 
                                               newdata = copy(dtappdx2), # copy so not changed to data.frame
@@ -366,7 +403,7 @@
         #               width = .05) + 
         labs(
            x = "", 
-           y = "Quarterly wages") +
+           y = "Predicted quarterly wages") +
         scale_x_continuous(labels=c("1 year prior", "Exit"), breaks=c(-4, 0)) 
       
       plotappdx2 <- formatplots(plotappdx2) + 
@@ -400,7 +437,7 @@
                              confounders, " + ",
                              "(1 | id_kc_pha) + ", # random intercept for persons
                              "(1 + exit | hh_id_kc_pha)") # random intercept and slope for households
-      modappdx4 <- lme4::lmer(modappdx4.formula, data = dtappdx4)
+      modappdx4 <- lmerTest::lmer(modappdx4.formula, data = dtappdx4)
       modappdx4.tidy <- model.clean(modappdx4)
       
     # test if p-value for interaction term is < 0.05 with LRT ----
@@ -409,7 +446,7 @@
                              confounders, " + ",
                              "(1 | id_kc_pha) + ", # random intercept for persons
                              "(1 + exit | hh_id_kc_pha)") # random intercept and slope for households
-      modappdx4.alt <- lme4::lmer(modappdx4.formula.alt, data = dtappdx4)
+      modappdx4.alt <- lmerTest::lmer(modappdx4.formula.alt, data = dtappdx4)
       
       modappdx4.test = anova(modappdx4, modappdx4.alt, test = 'LRT')
       
@@ -449,7 +486,7 @@
           # subtitle = "Model 4: three time points", 
           # caption = caption.text, 
           x = "", 
-          y = "Quarterly wages") +
+          y = "Predicted quarterly wages") +
         scale_x_continuous(labels=c("1 year prior", "Exit", "1 year post"), breaks=c(-1, 0, 1))
       
       plotappdx4 <- formatplots(plotappdx4) + 
@@ -485,7 +522,7 @@
              subtitle = "Model 4: residuals", 
              caption = caption.text, 
              x = "", 
-             y = "Quarterly wages") +
+             y = "Predicted quarterly wages") +
         scale_x_continuous(labels=c("1 year prior", "Exit", "1 year post"), breaks=c(-1, 0, 1))
       
       plot.resid.4 <- formatplots(plot.resid.4) + 
@@ -514,8 +551,10 @@
                              confounders, " + ",
                              "(1 | id_kc_pha) + ", # random intercept for persons
                              "(1 + exit | hh_id_kc_pha)") # random intercept and slope for households
-      mod1 <- lme4::lmer(mod1.formula, data = setDF(copy(dt1)))
-      mod1.tidy <- model.clean(mod1)
+      # mod1 <- lmerTest::lmer(mod1.formula, data = setDF(copy(dt1)))
+      mod1 <- lmerTest::lmer(mod1.formula, data = setDF(copy(dt1))) # use lmerTest rather than lme4 because gives p.values but estimates and SE are identical
+      mod1.tidy <- model.clean(mod1, myformat = 'dollar')
+      mod1.rsquared <- MuMIn::r.squaredGLMM(mod1) # psuedo-R squared
       
     # test if p-value for interaction term is < 0.05 ----
       mod1.formula.alt <- paste0("wage ~ ",
@@ -523,7 +562,7 @@
                                  confounders, " + ",
                                  "(1 | id_kc_pha) + ", # random intercept for persons
                                  "(1 + exit | hh_id_kc_pha)") # random intercept and slope for households
-      mod1.alt <- lme4::lmer(mod1.formula.alt, data = setDF(copy(dt1)))
+      mod1.alt <- lmerTest::lmer(mod1.formula.alt, data = setDF(copy(dt1)))
       
       mod1.test = anova(mod1, mod1.alt, test = 'LRT')
       
@@ -537,7 +576,7 @@
                                confounders, " + ",
                                "(1 | id_kc_pha) + ", # random intercept for persons
                                "(1 + exit | hh_id_kc_pha)") # random intercept and slope for households
-        mod1 <- lme4::lmer(mod1.formula, data = dt1)
+        mod1 <- lmerTest::lmer(mod1.formula, data = dt1)
         mod1.tidy <- model.clean(mod1)
         caption.text <- paste0("", mod1.formula)
       }
@@ -567,7 +606,7 @@
         #               width = .05) + 
         labs(
           x = "", 
-          y = "Quarterly wages") +
+          y = "Predicted quarterly wages") +
         scale_x_continuous(labels=c("1 year prior", "Exit", "1 year post"), breaks=c(-4, 0, 4))
       
       plot1 <- formatplots(plot1) + 
@@ -581,8 +620,15 @@
       
     # Plot observed vs expected to assess model quality and problems ----
       OvE.mod1 <- copy(dt1)[, fitted := fitted(mod1)]
-      OvE.mod1 <- ggplot(data = OvE.mod1, aes(x = wage, y = fitted, color = exit_category)) + geom_point()
-      OvE.mod1 <- formatplots(OvE.mod1)
+      OvE.mod1 <- ggplot(data = OvE.mod1, aes(x = wage, y = fitted, color = exit_category)) + 
+        geom_point() +
+        labs(
+          x = "Observed wages", 
+          y = "Predicted wages") 
+      OvE.mod1 <- formatplots(OvE.mod1) +
+        scale_x_continuous(labels=scales::dollar_format()) +
+        geom_abline(intercept = 0 , slope = 1) 
+
       plot(OvE.mod1)
       
       
@@ -595,7 +641,7 @@
       mod1.resid[exit_category == "Positive", time := time + .05]
       set.seed(98104) # because jitter is 'random'
       
-      plot.resid.5 <- ggplot() +
+      plot.resid.mod1 <- ggplot() +
         geom_point(data = mod1.resid[exit_category != "Counterfactual"], 
                    aes(x = time, y = residual, color = exit_category), 
                    size = 2.5, 
@@ -605,47 +651,220 @@
           # subtitle = "Model 5: residuals", 
           # caption = caption.text, 
           x = "", 
-          y = "Quarterly wages") +
+          y = "Wage residuals") +
         scale_x_continuous(labels=c("1 year prior", "Exit", "1 year post"), breaks=c(-4, 0, 4))
       
-      plot.resid.5 <- formatplots(plot.resid.5) + 
+      plot.resid.mod1 <- formatplots(plot.resid.mod1) + 
         scale_color_manual("Exit type", 
                            values=c('Positive' = '#2c7fb8', 
                                     'Negative' = '#2ca25f')) 
       message("No pattern with residuals, so evidence of autocorrelation, and no need for including lag dependent variables")
-      plot.resid.5
+      plot.resid.mod1
       
     # Tidy predictions for saving ----
       roundvars <- c("wage", "lower", "upper", "se")
       mod1.preds[, (roundvars) := rads::round2(.SD, 0), .SDcols = roundvars]
+      mod1.obs = dt1[, .(Observed = rads::round2(mean(wage))), .(time, exit_category)]
+      mod1.preds <- merge(mod1.preds, mod1.obs, by = c("time", "exit_category"), all.x = TRUE, all.y = TRUE)
       mod1.preds <- mod1.preds[, .(Quarter = rads::round2(time, 0), 
                                    `Exit Type` = exit_category, 
                                    `Predicted wages (95% CI)` = paste0(
                                      "$",
                                      prettyNum(wage, big.mark = ','),
-                                     " (", 
+                                     " ($", 
                                      prettyNum(lower, big.mark = ','), 
-                                     ", ", 
+                                     ", $", 
                                      prettyNum(upper, big.mark = ','), 
-                                     ")")
+                                     ")"), 
+                                   Predicted = paste0("$", prettyNum(wage, big.mark = ',')),
+                                   Observed = paste0("$", prettyNum(Observed, big.mark = ','))
                                    # ,SE = se
                                    )]
+      mod1.preds[, "Predicted wages (95% CI)" := gsub("\\$-", "-\\$", `Predicted wages (95% CI)`)]
+      setorder(mod1.preds, `Exit Type`, Quarter)
       
     # Save plots ----
       saveplots(plot.object = plot1, plot.name = 'figure_2_pre_post_by_qtr')      
-      saveplots(plot.object = plot.resid.5, plot.name = 'appendix_figure_3_residuals')      
+      saveplots(plot.object = plot.resid.mod1, plot.name = 'appendix_figure_3_residuals')      
       saveplots(plot.object = OvE.mod1, plot.name = 'appendix_figure_3_trends_Obs_v_Exp')      
 
+# Model 2: Secondary analysis with %AMI as outcome ----
+    # Create dt2 for complete quarterly analysis ----
+      dt2 <- copy(raw)[qtr %in% -4:4]
+      dt2[qtr %in% -4:4, time := qtr]
+      
+      # identify and drop any clients who are missing percent_ami for any of the quarters
+      dt2 <- dt2[!id_kc_pha %in% unique(dt2[is.na(percent_ami)]$id_kc_pha)]
+      
+      dt2[, .N, .(exit, time)] # check to see how much data there is
+      message("Unique persons with percent AMI:", length(unique(dt2$id_kc_pha)))
+      message("Unique households with percent AMI:", length(unique(dt2$hh_id_kc_pha)))
+      # dt2$time <- relevel(dt21$time, ref = '0')
+      
+    # Model ----
+      mod2.formula <- paste0("percent_ami ~ ",
+                             "exit*splines::bs(as.integer(time), df = 3) + ", 
+                             # "exit*time + ", 
+                             confounders, " + ",
+                             "(1 | id_kc_pha) + ", # random intercept for persons
+                             "(1 + exit | hh_id_kc_pha)") # random intercept and slope for households
+      mod2 <- lmerTest::lmer(mod2.formula, data = setDF(copy(dt2))) # use lmerTest rather than lme4 because gives p.values but estimates and SE are identical
+      mod2.tidy <- model.clean(mod2, myformat = 'percent')
+      mod2.rsquared <- MuMIn::r.squaredGLMM(mod2) # psuedo-R squared
+      
+    # test if p-value for interaction term is < 0.05 ----
+      mod2.formula.alt <- paste0("wage ~ ",
+                                 "exit + time + ", 
+                                 confounders, " + ",
+                                 "(1 | id_kc_pha) + ", # random intercept for persons
+                                 "(1 + exit | hh_id_kc_pha)") # random intercept and slope for households
+      mod2.alt <- lmerTest::lmer(mod2.formula.alt, data = setDF(copy(dt2)))
+      
+      mod2.test = anova(mod2, mod2.alt, test = 'LRT')
+      
+      if( mod2.test[["Pr(>Chisq)"]][2] < 0.05 ) {
+        print("The exit:time interaction term is significant, so keep the full model with the interaction term")
+        caption.text <- paste0("", mod2.formula)
+      } else {
+        print("The exit:time interaction term is NOT significant, so use more parsimonuous model.")
+        mod2.formula <- paste0("wage ~ ",
+                               "exit + time + ", 
+                               confounders, " + ",
+                               "(1 | id_kc_pha) + ", # random intercept for persons
+                               "(1 + exit | hh_id_kc_pha)") # random intercept and slope for households
+        mod2 <- lmerTest::lmer(mod2.formula, data = dt2)
+        mod2.tidy <- model.clean(mod2)
+        caption.text <- paste0("", mod2.formula)
+      }
+      
+    # predictions ----
+      # standard predictions ----
+        mod2.preds <- as.data.table(predictions(mod2, 
+                                                newdata = copy(dt2),
+                                                re.form=~0)) # re.form=~0 means include no random effects, so population level estimates
+        mod2.preds <- prediction_summary(mod2.preds, ndraw = 10000)
+      
+      # calculate counterfactual (ascribe change observed in negative exits to positive exits) ----
+        mod2.preds <- calc.counterfactual(mod2.preds)
+        setnames(mod2.preds, "wage", "percent_ami") # formally change column name to prevent confusion below
+        # mod2.preds[]
+        
+    # Plot data four quarters before and after exit ----
+      plot2 <- ggplot() +
+        # commented out errorbars because don't trust standard error calculation from prediction_summary()
+        geom_line(data = mod2.preds[exit_category != "Counterfactual"], aes(x = time, y = percent_ami, color = exit_category), size = 1) +
+        geom_line(data = mod2.preds[exit_category == "Counterfactual"], aes(x = time, y = percent_ami, color = exit_category), linetype="dashed", size = 1) +
+        geom_point(data = mod2.preds[exit_category != "Counterfactual"], 
+                   aes(x = time, y = percent_ami, color = exit_category), 
+                   size = 2.5) +
+        labs(
+          x = "", 
+          y = "Predicted percent AMI") 
+      
+      plot2 <- formatplots(plot2) + 
+        scale_color_manual("Exit type", 
+                           values=c('Positive' = '#2c7fb8', 
+                                    'Counterfactual' = '#e41a1c', 
+                                    'Negative' = '#2ca25f')) +
+        scale_y_continuous(labels=scales::label_percent(scale = 1)) +
+        scale_x_continuous(labels=c("1 year prior", "Exit", "1 year post"), breaks=c(-4, 0, 4))
+      
+      # dev.new(width = 6,  height = 4, unit = "in", noRStudioGD = TRUE)
+      plot(plot2)
+      
+    # Plot observed vs expected to assess model quality and problems ----
+      OvE.mod2 <- copy(dt2)[, fitted := fitted(mod2)]
+      OvE.mod2 <- ggplot(data = OvE.mod2, aes(x = percent_ami, y = fitted, color = exit_category)) + 
+        geom_point() +
+        labs(
+          x = "Observed percent AMI",
+          y = "Predicted percent AMI") 
+      OvE.mod2 <- formatplots(OvE.mod2) +
+        scale_x_continuous(labels=scales::label_percent(scale = 1)) + 
+        scale_y_continuous(labels=scales::label_percent(scale = 1)) +
+        geom_abline(intercept = 0 , slope = 1) + 
+        xlim(0,200)+ylim(0,200)
+      
+      plot(OvE.mod2)
+      
+    # Plot of residuals vs time to assess autocorrelation ----
+      mod2.resid <- copy(dt2)[, fitted := fitted(mod2)][time %in% -4:4]
+      mod2.resid[, residual := percent_ami - fitted]
+      mod2.resid[, time := as.numeric(as.character(time))]
+      mod2.resid[exit_category == "Negative", time := time - .05]
+      mod2.resid[exit_category == "Positive", time := time + .05]
+      set.seed(98104) # because jitter is 'random'
+      
+      plot.resid.mod2 <- ggplot() +
+        geom_point(data = mod2.resid[exit_category != "Counterfactual"], 
+                   aes(x = time, y = residual, color = exit_category), 
+                   size = 2.5, 
+                   position=position_jitterdodge(dodge.width=0.65, jitter.height=0, jitter.width=0.15), alpha=0.7) +
+        labs(
+          # title = paste0("Quarterly wage history by exit type and time"), 
+          # subtitle = "Model 5: residuals", 
+          # caption = caption.text, 
+          x = "", 
+          y = "Percent AMI residuals") +
+        scale_x_continuous(labels=c("1 year prior", "Exit", "1 year post"), breaks=c(-4, 0, 4))
+      
+      plot.resid.mod2 <- formatplots(plot.resid.mod2) + 
+        scale_color_manual("Exit type", 
+                           values=c('Positive' = '#2c7fb8', 
+                                    'Negative' = '#2ca25f')) +
+        scale_y_continuous(labels=scales::label_percent(scale = 1))
+      
+      message("No pattern with residuals, so evidence of autocorrelation, and no need for including lag dependent variables")
+      plot.resid.mod2
+      
+    # Tidy predictions for saving ----
+      roundvars <- c("percent_ami", "lower", "upper", "se")
+      mod2.preds[, (roundvars) := rads::round2(.SD, 0), .SDcols = roundvars]
+      mod2.obs = dt2[, .(Observed = rads::round2(mean(percent_ami))), 
+                     .(time, exit_category)]
+      mod2.preds <- merge(mod2.preds, mod2.obs, by = c("time", "exit_category"), all.x = TRUE, all.y = TRUE)
+      mod2.preds <- mod2.preds[, .(Quarter = rads::round2(time, 0), 
+                                   `Exit Type` = exit_category, 
+                                   `Predicted percent AMI (95% CI)` = paste0(
+                                     prettyNum(percent_ami, big.mark = ','),
+                                     "% (", 
+                                     prettyNum(lower, big.mark = ','), 
+                                     "%, ", 
+                                     prettyNum(upper, big.mark = ','), 
+                                     "%)"), 
+                                   Predicted = paste0(prettyNum(percent_ami, big.mark = ','), '%'),
+                                   Observed = paste0(prettyNum(Observed, big.mark = ','), '%')
+      )]
+      setorder(mod2.preds, `Exit Type`, Quarter)
+      
+    # Save plots ----
+      saveplots(plot.object = plot2, plot.name = 'figure_3_pre_post_by_qtr')      
+      saveplots(plot.object = plot.resid.mod2, plot.name = 'appendix_figure_5_residuals')      
+      saveplots(plot.object = OvE.mod2, plot.name = 'appendix_figure_6_trends_Obs_v_Exp')      
+      
+      
 # Save regression results ----
       # Write Tables 1 & 2 using openxlsx----
       wb <- createWorkbook() # initiate a new / empty workbook
+      
       addWorksheet(wb, 'appendix_Table_3_est') 
       writeDataTable(wb, sheet = 'appendix_Table_3_est', mod1.tidy, 
                      rowNames = F, colNames = T)    
+      
       addWorksheet(wb, 'appendix_Table_4_preds')
       writeDataTable(wb, sheet = 'appendix_Table_4_preds', mod1.preds, 
                      rowNames = F, colNames = T)   
-      saveWorkbook(wb, file = paste0(outputdir, "Tables_regresssion.xlsx"), overwrite = T)
+      
+      addWorksheet(wb, 'appendix_Table_5_est') 
+      writeDataTable(wb, sheet = 'appendix_Table_5_est', mod2.tidy, 
+                     rowNames = F, colNames = T)    
+      
+      addWorksheet(wb, 'appendix_Table_6_preds')
+      writeDataTable(wb, sheet = 'appendix_Table_6_preds', mod2.preds, 
+                     rowNames = F, colNames = T)   
+      
+      saveWorkbook(wb, file = paste0(outputdir, "Tables_regresssion.xlsx"), 
+                   overwrite = T)
       
 
 # The end ----

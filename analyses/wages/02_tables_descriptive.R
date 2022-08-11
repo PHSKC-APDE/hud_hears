@@ -32,7 +32,7 @@
                                  "SELECT * FROM [hudhears].[wage_analytic_table]"))
     
 # Preparatory data manipulation ----
-    raw[, quarter := as.factor(quarter(exit_date))]
+    raw[, season := factor(quarter(exit_date), levels = 1:4, labels = c("Winter", "Spring", "Summer", "Fall"))]
     raw[, exit_year := as.factor(exit_year)]
     
 # Table 0: ID counts ----
@@ -115,22 +115,28 @@
     )
     
   # create table ----
+    # temporarily multiple opportunity index by 1000 so rounding will not obscure differences
+      raw[, opportunity_index1k := 1000*opportunity_index]
+      
     table2 <- as.data.table(summary(
       arsenal::tableby(exit_category ~ 
-                         age_at_exit +
-                         gender_me +
-                         race_eth_me +
-                         housing_time_at_exit +
-                         quarter +
-                         exit_year +
-                         wage + 
-                         hrs +
-                         wage_hourly +
-                         percent_ami +
-                         hh_disability +
-                         single_caregiver +
-                         agency +
-                         major_prog, 
+                         # individual
+                           age_at_exit +
+                           gender_me +
+                           race_eth_me +
+                           wage + 
+                           hrs +
+                           wage_hourly +
+                         # household
+                           exit_year +
+                           season +
+                           housing_time_at_exit +
+                           hh_disability +
+                           single_caregiver + 
+                           opportunity_index1k +
+                           percent_ami +
+                           agency +
+                           major_prog, 
                        data = raw[qtr == 0], 
                        control = my_controls)
       ))
@@ -146,6 +152,7 @@
     table2[, col1 := gsub("Wages_hourly", "Wages hourly", col1)]
     table2[, col1 := gsub("hrs", "Hours", col1)]
     table2[, col1 := gsub("percent_ami", "Percent AMI", col1)]
+    table2[, col1 := gsub("opportunity_index1k", "Opportunity index", col1)]
     table2[, col1 := gsub("race_eth_me", "Race/ethnicity", col1)]
     table2[, col1 := gsub("gender_me", "Gender", col1)]
     table2[, col1 := gsub("age_at_exit", "Age", col1)]
@@ -154,13 +161,43 @@
     table2[, col1 := gsub("housing_time_at_exit", "Years in public housing", col1)]
     table2[, col1 := gsub("agency", "Agency", col1)]
     table2[, col1 := gsub("major_prog", "Major program", col1)]
-    table2[, col1 := gsub("quarter", "Quarter", col1)]
+    table2[, col1 := gsub("season", "Season", col1)]
     table2[, col1 := gsub("exit_year", "Exit Year", col1)]
     
     table2[, col1 := gsub("&nbsp;|\\*\\*", "", col1)]
     table2[ !is.na(`p value`) & `p value` != "", variable := col1]
     table2[, variable := variable[1], by= .(cumsum(!is.na(variable)) ) ] # fill downward
-    setnames(table2, "col1", "")
+    
+    # when binary true/false, collapse it down to one row
+    table2 <- table2[col1 != "FALSE"]
+    table2[col1 == "TRUE", col1 := variable]
+    tf.vars <- table2[col1 == variable, dup := 1:.N, variable][dup == 2]$col1
+    for(tf in tf.vars){
+      table2[dup == 2 & col1 == tf, "p value" := table2[dup==1 & col1 == tf]$`p value`]
+      table2 <- table2[!(dup == 1 & col1 == tf)]
+    }
+
+    # change opportunity index scale back to real / nominal scale
+    table2[variable == 'Opportunity index' & col1 == 'Mean (SD)', `:=`
+           (oi.m2 = as.integer(gsub("\\(..*", "", get(names(table2)[2])))/ 1000, 
+             oi.sd2 = as.integer(gsub("\\)", "", gsub("..*\\(", "", get(names(table2)[2]))))/1000,
+             oi.m3 = as.integer(gsub("\\(..*", "", get(names(table2)[3])))/1000, 
+             oi.sd3 = as.integer(gsub("\\)", "", gsub("..*\\(", "", get(names(table2)[3]))))/1000,
+             oi.m4 = as.integer(gsub("\\(..*", "", get(names(table2)[4])))/1000, 
+             oi.sd4 = as.integer(gsub("\\)", "", gsub("..*\\(", "", get(names(table2)[4]))))/1000
+           )]
+    table2[variable == 'Opportunity index' & col1 == 'Mean (SD)', names(table2)[2] := paste0(oi.m2, " (", oi.sd2, ")")]
+    table2[variable == 'Opportunity index' & col1 == 'Mean (SD)', names(table2)[3] := paste0(oi.m3, " (", oi.sd3, ")")]
+    table2[variable == 'Opportunity index' & col1 == 'Mean (SD)', names(table2)[4] := paste0(oi.m4, " (", oi.sd4, ")")]
+    
+    # drop missing if all missing are zero
+    table2 <- table2[!(col1 == "Missing" & get(names(table2)[2]) == 0 & get(names(table2)[3]) == 0 & get(names(table2)[4]) == 0)]
+    
+    table2[col1 != variable, col1 := paste0("   ", col1)]
+    
+    table2 <- table2[, 1:5]
+    
+    setnames(table2, c("col1", "p value"), c("", "P-value"))
     
     # setcolorder(table2, "variable")
 

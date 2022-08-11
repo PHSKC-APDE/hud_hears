@@ -42,13 +42,13 @@
     
     # saveplots() ... create function to save plots with proper dimensions ----
       saveplots <- function(plot.object = NULL, plot.name = NULL){
-        ggsave(paste0(outputdir, plot.name, ".pdf"),
+        ggsave(paste0(outputdir, '/pdf/', plot.name, ".pdf"),
                plot = plot.object, 
                dpi=600, 
                width = 6.5, 
                height = 6.5, 
                units = "in") 
-        ggsave(paste0(outputdir, plot.name, ".png"),
+        ggsave(paste0(outputdir, '/png/', plot.name, ".png"),
                plot = plot.object, 
                dpi=600, 
                width = 6.5, 
@@ -137,9 +137,7 @@
                       stat = 'identity', aes(x = time, ymax = upper, ymin = lower), 
                       size = 0.5, 
                       width = .03) +
-        labs(title = paste0(""), 
-             subtitle = "", 
-             x = "", 
+        labs(x = "", 
              y = "", 
              caption = "The black points and error bars are the mean and 95% confidence interval, respectively.") +
         scale_color_manual("Exit type", 
@@ -180,9 +178,7 @@
                       aes(x = time, ymax = upper, ymin = lower), 
                       size = .75, 
                       width = .25) +
-        labs(title = paste0("quarterly wages secular trend"), 
-             subtitle = "", 
-             x = "", 
+        labs(x = "", 
              y = "", 
              caption = "The black points and error bars are the mean and 95% confidence interval, respectively.") +
         # scale_color_manual("Exit type", 

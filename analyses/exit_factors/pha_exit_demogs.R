@@ -114,7 +114,9 @@ consort_df <- exit_timevar %>% filter(!is.na(act_date))
 ### Make diagram ---- 
 # Using approach here: https://stackoverflow.com/questions/61745574/diagrammer-arrow-problems
 # Set up function to toggle Medicaid and household on/off
-consort_maker <- function(df = consort_df, mcaid_prior = F, mcaid_after = F, household = F) {
+consort_maker <- function(df = consort_df, mcaid_prior = F, 
+                          mcaid_after = F, household = F,
+                          exit_type = F) {
   exits_tot <- nrow(df)
   
   ### Set up values for each node ----
@@ -183,6 +185,8 @@ consort_maker <- function(df = consort_df, mcaid_prior = F, mcaid_after = F, hou
   
   exits_demogs <- nrow(df)
   exits_demogs_removed <- exits_death - exits_demogs
+  
+  # Split into exit type
   
   
   # Medicaid coverage

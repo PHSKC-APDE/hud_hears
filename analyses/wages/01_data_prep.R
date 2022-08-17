@@ -401,8 +401,8 @@
         consort09_min_1yr <- length(unique(combo$id_esd))
         consort09_side_min_1yr <- consort08_wages - consort09_min_1yr
         
-    # Drop if age_at_exit is.na OR > 62 for any wage earner ----
-        senior.households <- unique(combo[age_at_exit > 62]$hh_id_kc_pha)
+    # Drop if age_at_exit is.na OR > 61 for any wage earner ----
+        senior.households <- unique(combo[age_at_exit > 61]$hh_id_kc_pha)
         
         consort10_side_agelimit <- length(unique(combo[hh_id_kc_pha %in% senior.households | is.na(age_at_exit)]$id_esd))
         
@@ -474,6 +474,9 @@
           combo[, percent_ami := rads::round2(100*4*hhwage / ami, 1)] # multiply by four because wage is quarterly but AMI is annual
           message("Some KC households will not have an AMI because they have a HH size >8 and the reference sheet only applies to 
                   households with size 1:8")
+          message("There is a substantial increase in missing AMI vs missing wages. Confirmed that
+                  this is due solely to large household sizes, because all combinations of 
+                  amiyear and fips2010 are present in both both the combo[] and ami[] datasets.")
           
       # merge opportunity index onto combo table ----      
           # Not needed because already in demographic table
@@ -547,8 +550,8 @@
         add_box(txt = paste0("Linked to wages: ", consort08_wages))   |>
         add_side_box(txt = paste0("Less than 1 year in public housing: ", consort09_side_min_1yr))   |>
         add_box(txt = paste0("At least one year in public housing: ", consort09_min_1yr)) |>
-        add_side_box(txt = paste0("HH with wage earner over 62 years of age or missing age: ", consort10_side_agelimit)) |>
-        add_box(txt = paste0("HH with all wage earners under 63 years of age: ", consort10_agelimit)) 
+        add_side_box(txt = paste0("HH with wage earner over 61 years of age or missing age: ", consort10_side_agelimit)) |>
+        add_box(txt = paste0("HH with all wage earners under 62 years of age: ", consort10_agelimit)) 
 
       myplot <- plot(consort.complete)
       

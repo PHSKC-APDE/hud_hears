@@ -546,8 +546,7 @@
       
     # model ----
       mod1.formula <- paste0("wage ~ ",
-                             "exit*splines::bs(as.integer(time), df = 3) + ", 
-                             # "exit*time + ", 
+                             "exit*splines::bs(as.integer(time), knots = c(0)) + ", 
                              confounders, " + ",
                              "(1 | id_kc_pha) + ", # random intercept for persons
                              "(1 + exit | hh_id_kc_pha)") # random intercept and slope for households
@@ -703,8 +702,7 @@
       
     # Model ----
       mod2.formula <- paste0("percent_ami ~ ",
-                             "exit*splines::bs(as.integer(time), df = 3) + ", 
-                             # "exit*time + ", 
+                             "exit*splines::bs(as.integer(time), knots = c(0)) + ", 
                              confounders, " + ",
                              "(1 | id_kc_pha) + ", # random intercept for persons
                              "(1 + exit | hh_id_kc_pha)") # random intercept and slope for households

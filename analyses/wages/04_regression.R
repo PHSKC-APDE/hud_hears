@@ -550,11 +550,10 @@
                              confounders, " + ",
                              "(1 | id_kc_pha) + ", # random intercept for persons
                              "(1 + exit | hh_id_kc_pha)") # random intercept and slope for households
-      # mod1 <- lmerTest::lmer(mod1.formula, data = setDF(copy(dt1)))
       mod1 <- lmerTest::lmer(mod1.formula, data = setDF(copy(dt1))) # use lmerTest rather than lme4 because gives p.values but estimates and SE are identical
       mod1.tidy <- model.clean(mod1, myformat = 'dollar')
       mod1.rsquared <- MuMIn::r.squaredGLMM(mod1) # psuedo-R squared
-      
+
     # test if p-value for interaction term is < 0.05 ----
       mod1.formula.alt <- paste0("wage ~ ",
                                  "exit + time + ", 
@@ -697,7 +696,11 @@
       
       dt2[, .N, .(exit, time)] # check to see how much data there is
       message("Unique persons with percent AMI:", length(unique(dt2$id_kc_pha)))
+      message("Unique persons with percent AMI & NEG exit:", length(unique(dt2[exit_category == 'Negative']$id_kc_pha)))
+      message("Unique persons with percent AMI & POS exit:", length(unique(dt2[exit_category == 'Positive']$id_kc_pha)))
       message("Unique households with percent AMI:", length(unique(dt2$hh_id_kc_pha)))
+      message("Unique households with percent AMI & NEG exit:", length(unique(dt2[exit_category == 'Negative']$hh_id_kc_pha)))
+      message("Unique households with percent AMI & POS exit:", length(unique(dt2[exit_category == 'Positive']$hh_id_kc_pha)))
       # dt2$time <- relevel(dt21$time, ref = '0')
       
     # Model ----

@@ -466,9 +466,6 @@ only_exit %>%
 
 # EXITS BY YEAR ----
 ## Any exit vs not ----
-
-### NEED TO UPDATE TIMEVAR TABLE SO HH_ID_HUDHEARS IS INCLUDED -----
-
 exit_count <- function(year, hh = F, drop_death = F) {
   message("Working on ", year)
   exits <- setDT(exit_timevar)
@@ -511,25 +508,32 @@ any_exit_hh <- bind_rows(lapply(c(2012:2020), exit_count, hh = T)) %>%
   filter(agency == "SHA" | (agency == "KCHA" & exit_year >= 2016))
 
 
-# Stacked percent bar graph of any exit/no exit
-any_exit %>%
+### Stacked percent bar graph of any exit/no exit ----
+# Ind level
+exit_year_bar <- any_exit %>%
   ggplot(aes(fill = as.character(exited), y = n_supp, x = exit_year)) +
   geom_bar(position = "fill", stat="identity", colour = "black") +
-  geom_text(position = position_fill(vjust = 0.5), size = 3, show.legend = F,
+  geom_text(position = position_fill(vjust = 0.5), size = 2, show.legend = F,
             aes(group = exited, label = paste0(pct_supp, "%"),
                 color = exited)) +
   scale_color_manual(values = c("white", "black")) +
-  geom_text(aes(x = exit_year, y = 1.02, label = year_tot_label), vjust = 0, size = 3) +
+  geom_text(aes(x = exit_year, y = 1.02, label = year_tot_label), vjust = 0, size = 2) +
   scale_fill_viridis(discrete = T) +
   scale_y_continuous(labels = scales::percent) +
-  theme_ipsum(axis_text_size = 10, grid = F) +
-  labs(title = "Proportion of people exiting by year",
-       x = "Year",
+  theme_ipsum(axis_text_size = 10, grid = F, base_family = "Calibri") +
+  labs(x = "Year",
        y = "Percent of people",
        caption = "NB. KCHA exit data is incomplete prior to October 2015.",
        fill = "Exit vs. not") +
-  facet_grid(~ agency, scales = "free_x")
+  facet_wrap(~ agency, nrow = 2)
 
+ggsave(filename = file.path(here::here(), "analyses/exit_factors/exits_by_year_ind.png"),
+       device = "png", plot = exit_year_bar,
+       width = 6.5, height = 6, units = "in")
+
+
+
+# HH level
 any_exit_hh %>%
   ggplot(aes(fill = as.character(exited), y = n_supp, x = exit_year)) +
   geom_bar(position = "fill", stat="identity", colour = "black") +
@@ -540,7 +544,7 @@ any_exit_hh %>%
   geom_text(aes(x = exit_year, y = 1.02, label = year_tot_label), vjust = 0, size = 3) +
   scale_fill_viridis(discrete = T) +
   scale_y_continuous(labels = scales::percent) +
-  theme_ipsum(axis_text_size = 10, grid = F) +
+  theme_ipsum(axis_text_size = 10, grid = F, base_family = "Calibri") +
   labs(title = "Proportion of households exiting by year",
        x = "Year",
        y = "Percent of households",
@@ -602,7 +606,7 @@ label_col <- ifelse(hcl[, "l"] > 50, "black", "white")
 ggplot(exit_year, aes(group = exit_category, y = n_supp, x = exit_year, color = exit_category)) +
   geom_line(size = 1) +
   scale_color_viridis(discrete = T) +
-  theme_ipsum() +
+  theme_ipsum(base_family = "Calibri") +
   labs(title = "Number of exits from KCHA and SHA",
        x = "Year",
        y = "Number of exits",
@@ -611,40 +615,52 @@ ggplot(exit_year, aes(group = exit_category, y = n_supp, x = exit_year, color = 
 
 
 # # Stacked percent bar graph
-ggplot(exit_year, aes(fill = exit_category, y = n_supp, x = exit_year)) +
+exit_type_bar <- exit_year %>%
+  filter(!is.na(exit_category)) %>%
+  ggplot(aes(fill = exit_category, y = n_supp, x = exit_year)) +
   geom_bar(position = "fill", stat="identity", colour = "black") +
-  geom_text(position = position_fill(vjust = 0.5), size = 3, show.legend = F,
+  geom_text(position = position_fill(vjust = 0.5), size = 2.5, show.legend = F,
             aes(group = exit_category, label = paste0(pct_supp, "%"),
                 color = exit_category)) +
   scale_color_manual(values = label_col) +
-  geom_text(aes(x = exit_year, y = 1.02, label = year_tot_label), vjust = 0, size = 3) +
+  geom_text(aes(x = exit_year, y = 1.02, label = year_tot_label), vjust = 0, size = 2.5) +
   scale_fill_viridis(discrete = T) +
   scale_y_continuous(labels = scales::percent) +
-  theme_ipsum() +
-  labs(title = "Proportion of exit types by year",
-       x = "Year",
+  theme_ipsum(axis_text_size = 10, grid = F, base_family = "Calibri") +
+  labs(x = "Year",
        y = "Percent of exits",
+       #title = "Proportion of exit types by year",
        caption = "NB. KCHA exit data is incomplete prior to October 2015",
        fill = "Exit category") +
-  facet_wrap(~agency, scales = "free_x")
+  facet_wrap(~agency, nrow = 2)
 
-ggplot(exit_year_nodeath, aes(fill = exit_category, y = n_supp, x = exit_year)) +
+ggsave(filename = file.path(here::here(), "analyses/exit_factors/exits_by_type_ind.png"),
+       device = "png", plot = exit_type_bar,
+       width = 6.5, height = 6, units = "in")
+
+
+exit_type_no_dth_bar <- exit_year_nodeath %>%
+  filter(!is.na(exit_category)) %>%
+  ggplot(aes(fill = exit_category, y = n_supp, x = exit_year)) +
   geom_bar(position = "fill", stat="identity", colour = "black") +
-  geom_text(position = position_fill(vjust = 0.5), size = 3, show.legend = F,
+  geom_text(position = position_fill(vjust = 0.5), size = 2.5, show.legend = F,
             aes(group = exit_category, label = paste0(pct_supp, "%"),
                 color = exit_category)) +
   scale_color_manual(values = label_col) +
-  geom_text(aes(x = exit_year, y = 1.02, label = year_tot_label), vjust = 0, size = 3) +
+  geom_text(aes(x = exit_year, y = 1.02, label = year_tot_label), vjust = 0, size = 2.5) +
   scale_fill_viridis(discrete = T) +
   scale_y_continuous(labels = scales::percent) +
-  theme_ipsum() +
-  labs(title = "Proportion of exit types by year (excluding deaths)",
-       x = "Year",
+  theme_ipsum(axis_text_size = 10, grid = F, base_family = "Calibri") +
+  labs(x = "Year",
        y = "Percent of exits",
+       #title = "Proportion of exit types by year (excluding deaths)",
        caption = "NB. KCHA exit data is incomplete prior to October 2015",
        fill = "Exit category") +
-  facet_wrap(~agency, scales = "free_x")
+  facet_wrap(~agency, nrow = 2)
 
+ggsave(filename = file.path(here::here(), "analyses/exit_factors/exits_by_type_no_dth_ind.png"),
+       device = "png", plot = exit_type_no_dth_bar,
+       width = 6.5, height = 6, units = "in")
 
 
 ## Set up key values for markdown outpuyt ----

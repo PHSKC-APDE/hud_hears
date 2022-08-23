@@ -8,7 +8,11 @@
 ## Email: alastair.matheson@kingcounty.gov
 ##
 ## Notes:
-##   
+# ******************************* ----
+##  DO NOT RUN THIS CODE ANY MORE ----
+# ******************************* ----
+##  THE 2012 MEDICAID DATA HAS BEEN DELETED SO THE TABLES CANNOT BE RECREATED
+##  
 ##
 
 # SET OPTIONS AND BRING IN PACKAGES ----
@@ -958,12 +962,7 @@ events <- control_match_id_mcaid %>%
   left_join(., bh_events_prior, by = c("level", "id_hudhears", "exit_date")) %>%
   left_join(., homeless_prior, by = c("level", "id_hudhears", "exit_date")) %>%
   mutate(across(c("crisis_prior", "crisis_ed_prior", "recent_homeless"),
-                ~ replace_na(., 0)),
-         # Only keep well child checks if the person is <= 6 because beyond that
-         # the guidance is to have a check every 2 years (so a 1-yr look back is not valid).
-         # This introduces NAs
-         wc_cnt_prior = case_when(age_at_exit <= 6 ~ wc_cnt_prior),
-         wc_cnt_after = case_when(age_at_exit <= 5 ~ wc_cnt_after)) %>%
+                ~ replace_na(., 0))) %>%
   group_by(hh_id_kc_pha, exit_date) %>%
   mutate(hhold_ed_prior = sum(ed_cnt_prior * full_cov_7_prior),
          hhold_hosp_prior = sum(hosp_cnt_prior * full_cov_7_prior),
@@ -1003,3 +1002,14 @@ dbWriteTable(db_hhsaw,
              name = DBI::Id(schema = "hudhears", table = "control_match_covariate_hh"),
              value = covariate_hh,
              overwrite = T)
+
+# Clean up ----
+rm(control_match_long, control_match_hh_long)
+rm(demogs, exit_timevar, hh_demogs_ind, hh_demogs_hh, hh_demogs)
+rm(control_match_id_mcaid, mcaid_elig, mcaid_elig_overlap)
+rm(mcaid_visits_prior, mcaid_visits_after, mcaid_ccw, mcaid_ccw_summ,
+   wc_visits_prior, wc_visits_after)
+rm(bh_crisis_prior, bh_ita_prior, bh_ed_prior, bh_events_prior)
+rm(homeless, homeless_prior, kc_opp_index_data)
+rm(exit_info, events)
+rm(covariate, covariate_ind, covariate_hh)

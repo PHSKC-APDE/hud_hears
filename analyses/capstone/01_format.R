@@ -49,7 +49,8 @@ db_hhsaw <- DBI::dbConnect(odbc::odbc(),
 # one row for each id_hudhears/exit_date combo)
 pha_exit_timevar <- 
   setDT(DBI::dbGetQuery(conn = db_hhsaw, "SELECT id_hudhears, id_kc_pha, exit_year,
-                        act_date, agency, exit_reason_clean, exit_category, true_exit 
+                        act_date, agency, exit_reason_clean, exit_category, true_exit,
+                        exit_order_study, exit_order_max_study, exit_type_keep
                         FROM [pha].[stage_pha_exit_timevar] 
                         WHERE chooser=chooser_max"))
 
@@ -89,14 +90,13 @@ exit_data <- pha_exit_timevar %>%
   # iii) filter for true exits 
   filter(true_exit==1) %>% 
   
-  # iv) filter for unique exits (take most recent exit for people with multiple exits) %>%
-  arrange(id_kc_pha, act_date) %>% 
-  group_by(id_kc_pha) %>%
-  mutate(exit_cnt = n(), exit_order = row_number()) %>% ungroup() %>%
-  filter(exit_cnt == exit_order) %>%
+  # iv) filter for unique exits 
+  # (take most recent exit for people with multiple exits)
+  # (also one exit reason per exit event)
+  filter(exit_order_study == exit_order_max_study & exit_type_keep == 1) %>%
   
   # v) filter out deaths  (exit_reason_clean= "Deceased")
-  filter(exit_reason_clean != "Deceased" | is.na(exit_reason_clean) == TRUE) 
+  filter(exit_reason_clean != "Deceased" & !is.na(exit_reason_clean)) 
 
 # now exit_data is study population
 
@@ -172,7 +172,7 @@ tth_data$tt_homeless <- if_else(tth_data$tt_homeless < 0, 0, tth_data$tt_homeles
 
 #-----
 # Write intermediate data to SQL table
-DBI::dbWriteTable(conn = cxn16,
+DBI::dbWriteTable(conn = db_hhsaw,
                   name = DBI::Id(schema = "hudhears", table = "capstone_data_2"),
                   value = setDF(copy(df)),
                   append = F,
@@ -182,11 +182,9 @@ DBI::dbWriteTable(conn = cxn16,
 ### Step 3) Join KC-standardized opportunity index scores to data by census tract
 
 #-----
-# Set working directory to load opportunity index data
-setwd("~/GitHub/hud_hears/analyses/capstone")
-
 # Load opportunity index data (version standardized in King County)
-kc_opp_index_data <- read_csv("00_opportunity_index/kc_opp_indices_scaled.csv")
+kc_opp_index_data <- read_csv(file.path(here::here(), "analyses/capstone",
+                                        "00_opportunity_index/kc_opp_indices_scaled.csv"))
 
 # Create variables for state, county, and tract identifies
 kc_opp_index_data <- kc_opp_index_data %>%

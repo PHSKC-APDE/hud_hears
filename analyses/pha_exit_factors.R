@@ -84,6 +84,7 @@ covariate_nodeath <- covariate %>% filter(exit_death != 1) %>%
                                    crisis_ed_prior >= 1 ~ 1L),
          recent_homeless_grp = case_when(recent_homeless == 0 ~ 0L,
                                          recent_homeless >= 1 ~ 1L))
+
 covariate_nodeath_hh <- covariate_hh %>% filter(exit_death != 1) %>%
   mutate(crisis_any_prior = case_when(crisis_prior == 0 ~ 0L,
                                 crisis_prior >= 1 ~ 1L),
@@ -339,7 +340,7 @@ mcaid_outcomes_sum <- function(df,
     ed_any_text <- "Experienced 1+ ED visits in year prior to exit"
     hosp_cnt_text <- "Average # hospitalizations in year prior to exit (per 100 people)"
     hosp_any_text <- "Experienced 1+ hospitalizations in year prior to exit"
-    wc_text <- "Completed 1+ well-child visits in the year prior to exit (ages 2-6)"
+    wc_text <- "Completed 1+ well-child visits in the year prior to exit (ages <6)"
     crisis_text <- "Experienced 1+ crisis event in year prior to exit (inc. ED visits)"
   } else if (time == "after") {
     if (cov_time == "7_mth") {
@@ -362,7 +363,7 @@ mcaid_outcomes_sum <- function(df,
     ed_any_text <- "Experienced 1+ ED visits in year after exit"
     hosp_cnt_text <- "Average # hospitalizations in year after exit (per 100 people)"
     hosp_any_text <- "Experienced 1+ hospitalizations in year after exit"
-    wc_text <- "Completed 1+ well-child visits in the year after to exit (ages 2-6)"
+    wc_text <- "Completed 1+ well-child visits in the year after exit (ages <6)"
     crisis_text <- "Crisis events not captured for year after exit - DELETE"
   }
   
@@ -377,7 +378,7 @@ mcaid_outcomes_sum <- function(df,
               hosp_cnt = round(mean(hosp_cnt, na.rm = T), 2),
               hosp_any = number(mean(hosp_any, na.rm = T) * 100, 0.1, suffix = "%"),
               wc_any = number(mean(cur_data() %>% as.data.frame() %>% 
-                                     filter(between(age_at_exit, 2, 6)) %>% 
+                                     filter(age_at_exit <6) %>% 
                                      pull(wc_any), 
                                    na.rm = T) * 100, 0.1, suffix = "%"),
               crisis = number(mean(crisis, na.rm = T) * 100, 0.1, suffix = "%")) %>%
@@ -1238,7 +1239,7 @@ table_3_exit_regression <- table_3_exit_regression %>%
   sub_missing() %>%
   cols_label(category = md("Category"),
              group = md("Group"),
-             OR = md("Odds"),
+             OR = md("Odds ratio"),
              ci = md("95% CI"),
              p = md("p-value"))
 
@@ -1296,10 +1297,10 @@ table_4_exit_regression <- table_4_exit_regression %>%
               level = 1) %>%
   cols_label(category = md("Category"),
              group = md("Group"),
-             Negative_estimate = md("Odds"),
+             Negative_estimate = md("Odds ratio"),
              Negative_ci = md("95% CI"),
              Negative_p.value = md("p-value"),
-             Positive_estimate = md("Odds"),
+             Positive_estimate = md("Odds ratio"),
              Positive_ci = md("95% CI"),
              Positive_p.value = md("p-value"))
 

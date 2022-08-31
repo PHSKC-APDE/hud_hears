@@ -179,26 +179,36 @@ WHERE bh.from_date IS NOT NULL
 condition_count_bh <- bh_conditions %>% group_by(id_hudhears, exit_date) %>% summarize(con_count=n_distinct(bh_conditions)) %>% mutate(any_cond=ifelse(con_count >=1, 1, 0))
 
 ## Outpatient visits ----
+#Includes service minutes
+#Condition considered "managed" if client meets service hours for "medium" need in that month
 outpt_bh <- dbGetQuery(db_hhsaw,
                        "
 
 SELECT z.id_hudhears, z.exit_date, z.exit_category, d.event_date_mth, 
-d.event_date_yr, 'outpt' AS source, d.auth_no, d.program, d.event_date, d.strat_level, d.service_minutes, d.description
+d.event_date_yr, 'outpt' AS source, d.auth_no, d.program, d.event_date, d.service_minutes, d.description
 FROM
 (SELECT id_hudhears, exit_date, exit_category, MONTH(DATEADD(day, 1, exit_date)) AS month_after_exit
   FROM hudhears.control_match_covariate 
   WHERE id_type = 'id_exit' AND exit_death = 0) z
 LEFT JOIN
-(SELECT id_hudhears, auth_no, program, event_date, strat_level, service_minutes, description, MONTH(event_date) AS event_date_mth, 
+(SELECT id_hudhears, auth_no, program, event_date, service_minutes, description, MONTH(event_date) AS event_date_mth, 
 YEAR(event_date) AS event_date_yr FROM hudhears.bh_outpatient_events WHERE event_date IS NOT NULL) d
 ON z.id_hudhears = d.id_hudhears
 AND d.event_date <= z.exit_date AND d.event_date >= DATEADD(month, -13, z.exit_date)
 WHERE d.event_date IS NOT NULL
 ")
 
+# #All events are from 13 months before exit
+# #No visits in 13 months before exit for these programs 
+# 
+outpt_hours <- outpt_bh %>% group_by(id_hudhears, event_date_mth, event_date_yr, auth_no) %>%
+mutate(month_hrs=(sum(service_minutes, na.rm=T)/60))
 
 
 
+
+
+##OLD CODE (Where number of outpatient visits is counted
 #note- This is not dependent on Medicaid data
 
 # #Count behavioral health outpatient visits per person and make indicator for people with 2+ visits
@@ -209,6 +219,9 @@ WHERE d.event_date IS NOT NULL
 #  mutate(out_count2=max(out_count, na.rm=T), 
 #         reg_care2=ifelse(out_count2 >=2, 1, 0), 
 #         reg_care=ifelse(out_count >=2, 1, 0)) %>% ungroup()
+
+
+
 
 
 ## Join all of the above with covariate table made by Alastair----
@@ -261,8 +274,10 @@ all_pop <- all_pop %>%
                                       TRUE ~ as.integer(con_count)))
 
 
-#Join control match covariate with BH OUTPATIENT visits----
-all_pop <-left_join(all_pop, bh_outpt_count, by=c("id_hudhears", "exit_date"))
-#fix number and indicator variables for NAs
-#Assume anyone without an entry has 0 outpatient visits because outpatient visits are not from Medicaid data
-all_pop <- all_pop %>% mutate(out_count=ifelse(is.na(out_count), 0, out_count))%>% mutate(reg_care=ifelse(is.na(reg_care), 0, reg_care))
+
+#No longer using this code (due to change in definition of outpatient care)
+# #Join control match covariate with BH OUTPATIENT visits----
+# all_pop <-left_join(all_pop, bh_outpt_count, by=c("id_hudhears", "exit_date"))
+# #fix number and indicator variables for NAs
+# #Assume anyone without an entry has 0 outpatient visits because outpatient visits are not from Medicaid data
+# # all_pop <- all_pop %>% mutate(out_count=ifelse(is.na(out_count), 0, out_count))%>% mutate(reg_care=ifelse(is.na(reg_care), 0, reg_care))

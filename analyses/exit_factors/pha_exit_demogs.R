@@ -18,7 +18,7 @@ options(dplyr.summarise.inform = FALSE)
 
 if (!require("pacman")) {install.packages("pacman")}
 pacman::p_load(tidyverse, odbc, glue, data.table, ggplot2, viridis, hrbrthemes,
-               knitr, kableExtra, rmarkdown, DiagrammeR)
+               knitr, kableExtra, rmarkdown, DiagrammeR, scales)
 
 # Connect to HHSAW
 db_hhsaw <- DBI::dbConnect(odbc::odbc(),
@@ -268,7 +268,7 @@ consort_maker <- function(df = consort_df, mcaid_prior = F,
     b6 <- ""
   }
   
-  # Edges/connections
+  ### Edges/connections ----
   lines1 <- glue("a1 -> x1 [arrowhead='none'] \n",
                  "x1 -> b1 \n",
                  "x1 -> a2")
@@ -325,7 +325,7 @@ consort_maker <- function(df = consort_df, mcaid_prior = F,
   }
   
   
-  # Bring into one place
+  ### Bring into one place ----
   graph_txt <- 
   glue("digraph prisma {{
     graph [splines = ortho, nodesep = 1, dpi = 72]
@@ -402,6 +402,200 @@ mcaid_prior_graph_hh %>% DiagrammeRsvg::export_svg() %>% charToRaw() %>% rsvg::r
   png::writePNG(file.path(here::here(), "analyses/consort_diag_mcaid_prior_hh.png"))
 nonmcaid_graph_hh %>% DiagrammeRsvg::export_svg() %>% charToRaw() %>% rsvg::rsvg() %>%
   png::writePNG(file.path(here::here(), "analyses/consort_diag_nonmcaid_hh.png"))
+
+
+
+## Just exit types and Medicaid coverage ----
+consort_maker_mcaid_type <- function(df, split_prior = F) {
+  # Set up data frame
+  mcaid_exit_type_df <- df %>%
+    filter(exit_death == 0 & !is.na(exit_death)) %>%
+    filter(!(is.na(age_at_exit) | is.na(gender_me) | is.na(race_eth_me) | race_eth_me == "Unknown" |
+               is.na(agency) | is.na(single_caregiver) | is.na(hh_size) | is.na(hh_disability) | 
+               is.na(housing_time_at_exit) | is.na(major_prog) | is.na(kc_opp_index_score))) %>%
+    filter(age_at_exit < 62)  
+  
+  ### Set up values for each node ----
+  id_type_n <- mcaid_exit_type_df %>% count(id_type) %>% deframe()
+  
+  exit_type_n <- mcaid_exit_type_df %>% 
+    filter(id_type == "id_exit") %>%
+    count(exit_category) %>% deframe()
+  
+  if (split_prior == F) {
+    control_mcaid_n <- mcaid_exit_type_df %>% 
+      filter(id_type == "id_control" & full_cov_7_prior & full_cov_7_after) %>%
+      summarise(cnt = n()) %>% pull()  
+    
+    exit_type_mcaid_n <- mcaid_exit_type_df %>% 
+      filter(id_type == "id_exit" & full_cov_7_prior & full_cov_7_after) %>%
+      count(exit_category) %>% deframe()
+  } else {
+    control_mcaid_prior_n <- mcaid_exit_type_df %>% 
+      filter(id_type == "id_control" & full_cov_7_prior) %>%
+      summarise(cnt = n()) %>% pull()
+    control_mcaid_after_n <- mcaid_exit_type_df %>% 
+      filter(id_type == "id_control" & full_cov_7_prior & full_cov_7_after) %>%
+      summarise(cnt = n()) %>% pull()
+    
+    exit_type_mcaid_prior_n <- mcaid_exit_type_df %>% 
+      filter(id_type == "id_exit" & full_cov_7_prior) %>%
+      count(exit_category) %>% deframe()
+    
+    exit_type_mcaid_after_n <- mcaid_exit_type_df %>% 
+      filter(id_type == "id_exit" & full_cov_7_prior & full_cov_7_after) %>%
+      count(exit_category) %>% deframe()
+  }
+  
+  ### Set up columns ----
+  # Column 1: controls and case-level placeholders (blank text)
+  a1 <- glue("a1 [label = '{format(id_type_n[[1]], big.mark = ',', trim = T)} ", 
+             "controls aged <62 \nwith complete data'];")
+  
+  if (split_prior == F) {
+    a3 <- glue("a3 [label = '{format(control_mcaid_n, big.mark = ',', trim = T)} ",
+               "({percent(control_mcaid_n/id_type_n[[1]], accuracy = 0.1)}) \n",
+               "w/ Medicaid coverage'];")
+    a4 <- ""
+  } else {
+    a3 <- glue("a3 [label = '{format(control_mcaid_prior_n, big.mark = ',', trim = T)} ",
+               "({percent(control_mcaid_prior_n/id_type_n[[1]], accuracy = 0.1)}) \n",
+               "w/ Medicaid coverage prior to exit'];")
+    a4 <- glue("a4 [label = '{format(control_mcaid_after_n, big.mark = ',', trim = T)} \n",
+               "({percent(control_mcaid_after_n/control_mcaid_prior_n, accuracy = 0.1)} of prior coverage, ",
+               "{percent(control_mcaid_after_n/id_type_n[[1]], accuracy = 0.1)} of total)\n",
+               "w/ Medicaid coverage after exit'];")
+  }
+  
+  # Column 2: Positive exits
+  b2 <- glue("b2 [label = '{format(exit_type_n[[3]], big.mark = ',', trim = T)} ",
+             "({percent(exit_type_n[[3]]/id_type_n[[2]], accuracy = 0.1)}) \n",
+             "positive exits'];")
+  
+  if (split_prior == F) {
+    b3 <- glue("b3 [label = '{format(exit_type_mcaid_n[[3]], big.mark = ',', trim = T)} ",
+               "({percent(exit_type_mcaid_n[[3]]/exit_type_n[[3]], accuracy = 0.1)}) \n",
+               "w/ Medicaid coverage'];")
+    b4 <- ""
+  } else {
+    b3 <- glue("b3 [label = '{format(exit_type_mcaid_prior_n[[3]], big.mark = ',', trim = T)} ",
+               "({percent(exit_type_mcaid_prior_n[[3]]/exit_type_n[[3]], accuracy = 0.1)}) \n",
+               "w/ Medicaid coverage prior to exit'];")
+    b4 <- glue("b4 [label = '{format(exit_type_mcaid_after_n[[3]], big.mark = ',', trim = T)} \n",
+               "({percent(exit_type_mcaid_after_n[[3]]/exit_type_mcaid_prior_n[[3]], accuracy = 0.1)} ", 
+               "of prior coverage, ", 
+               "{percent(exit_type_mcaid_after_n[[3]]/exit_type_n[[3]], accuracy = 0.1)} of exits) \n",
+               "w/ Medicaid coverage after exit'];")
+  }
+  
+  # Column 3: Medicaid overall and neutral boxes
+  c1 <- glue("c1 [label = '{format(id_type_n[[2]], big.mark = ',', trim = T)} ",
+             "non-death exits aged <62 with complete data'];")
+  c2 <- glue("c2 [label = '{format(exit_type_n[[2]], big.mark = ',', trim = T)} ",
+             "({percent(exit_type_n[[2]]/id_type_n[[2]], accuracy = 0.1)}) \n",
+             "neutral exits'];")  
+  
+  if (split_prior == F) {
+    c3 <- glue("c3 [label = '{format(exit_type_mcaid_n[[2]], big.mark = ',', trim = T)} ",
+               "({percent(exit_type_mcaid_n[[2]]/exit_type_n[[2]], accuracy = 0.1)}) \n",
+               "w/ Medicaid coverage'];")
+    c4 <- ""
+  } else {
+    c3 <- glue("c3 [label = '{format(exit_type_mcaid_prior_n[[2]], big.mark = ',', trim = T)} ",
+               "({percent(exit_type_mcaid_prior_n[[2]]/exit_type_n[[2]], accuracy = 0.1)}) \n",
+               "w/ Medicaid coverage prior to exit'];")
+    c4 <- glue("c4 [label = '{format(exit_type_mcaid_after_n[[2]], big.mark = ',', trim = T)} \n",
+               "({percent(exit_type_mcaid_after_n[[2]]/exit_type_mcaid_prior_n[[2]], accuracy = 0.1)} ", 
+               "of prior coverage, ", 
+               "{percent(exit_type_mcaid_after_n[[2]]/exit_type_n[[2]], accuracy = 0.1)} of exits) \n",
+               "w/ Medicaid coverage after exit'];")
+  }
+  
+  # Column 4: Negative exits
+  d2 <- glue("d2 [label = '{format(exit_type_n[[1]], big.mark = ',', trim = T)} ",
+             "({percent(exit_type_n[[1]]/id_type_n[[2]], accuracy = 0.1)}) \n",
+             "negative exits'];")
+  
+  if (split_prior == F) {
+    d3 <- glue("d3 [label = '{format(exit_type_mcaid_n[[1]], big.mark = ',', trim = T)} ",
+               "({percent(exit_type_mcaid_n[[1]]/exit_type_n[[1]], accuracy = 0.1)}) \n",
+               "w/ Medicaid coverage'];")
+    d4 <- ""
+  } else {
+    d3 <- glue("d3 [label = '{format(exit_type_mcaid_prior_n[[1]], big.mark = ',', trim = T)} ",
+               "({percent(exit_type_mcaid_prior_n[[1]]/exit_type_n[[1]], accuracy = 0.1)}) \n",
+               "w/ Medicaid coverage prior to exit'];")
+    d4 <- glue("d4 [label = '{format(exit_type_mcaid_after_n[[1]], big.mark = ',', trim = T)} \n",
+               "({percent(exit_type_mcaid_after_n[[1]]/exit_type_mcaid_prior_n[[1]], accuracy = 0.1)} ", 
+               "of prior coverage, ", 
+               "{percent(exit_type_mcaid_after_n[[1]]/exit_type_n[[1]], accuracy = 0.1)} of exits) \n",
+               "w/ Medicaid coverage after exit'];")
+  }
+  
+  ### Edges/connections ----
+  lines1 <- glue("a1 -> a2 [arrowhead='none'] \n",
+                 "a2 -> a3")
+  lines2 <- glue("b1 -> b2 [arrowhead='none', color='none'] \n",
+                 "c1 -> b2 \n",
+                 "b2 -> b3")
+  lines3 <- glue("c1 -> c2 \n",
+                 "c2 -> c3")
+  lines4 <- glue ("d1 -> d2 [arrowhead='none', color='none'] \n",
+                  "c1 -> d2 \n",
+                  "d2 -> d3")
+  
+  if (split_prior == T) {
+    lines1 <- glue("{lines1} \n", "a3 -> a4")
+    lines2 <- glue("{lines2} \n", "b3 -> b4")
+    lines3 <- glue("{lines3} \n", "c3 -> c4")
+    lines4 <- glue("{lines4} \n", "d3 -> d4")
+  }
+
+  ### Bring into one place ----
+  graph_txt <- 
+    glue("digraph prisma {{
+    graph [splines = ortho, nodesep = 1, dpi = 72]
+    
+    # set up control nodes
+    node [shape=box, fontsize = 12, fontname = 'Helvetica', width = 4, 
+    color = '#7F7F7F', fillcolor = '#BFBFBF', style = 'filled'];
+    {a1} {a3} {a4}
+    
+    # set up main exit node
+    node [shape=box, fontsize = 12, fontname = 'Helvetica', width = 6, 
+    color = '#548235', fillcolor = '#B5D8A0', style = 'filled'];
+    {c1}
+    
+    # set up exit nodes
+    node [shape=box, fontsize = 12, fontname = 'Helvetica', width = 4, 
+    color = '#548235', fillcolor = '#B5D8A0', style = 'filled'];
+    {b2} {b3} {b4} {c2} {c3} {c4} {d2} {d3} {d4}
+    
+    # create filler nodes without box around 
+    node [shape = point, width = 0, height = 0]
+    a2; b1; c1
+    
+    # Edge definitions
+    {lines1}
+    {lines2}
+    {lines3}
+    {lines4}
+  
+  }}
+       ")
+  
+  DiagrammeR::grViz(graph_txt)
+}
+
+mcaid_exit_type_graph <- consort_maker_mcaid_type(df = covariate, split_prior = F)
+mcaid_exit_type_graph_prior <- consort_maker_mcaid_type(df = covariate, split_prior = T)
+
+
+mcaid_exit_type_graph %>% DiagrammeRsvg::export_svg() %>% charToRaw() %>% rsvg::rsvg() %>%
+  png::writePNG(file.path(here::here(), "analyses/consort_diag_mcaid_exit_type.png"))
+mcaid_exit_type_graph_prior %>% DiagrammeRsvg::export_svg() %>% charToRaw() %>% rsvg::rsvg() %>%
+  png::writePNG(file.path(here::here(), "analyses/consort_diag_mcaid_exit_type_prior.png"))
+
 
 
 

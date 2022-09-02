@@ -104,7 +104,7 @@ try(DBI::dbExecute(db_hhsaw, "DROP TABLE hudhears.bh_outpatient_events"), silent
 DBI::dbExecute(db_hhsaw,
                "SELECT id.id_hudhears, au.auth_no, au.agency_id, au.program, sp.description,
                ea.event_date, SUM(ea.service_minutes) as service_minutes, 
-			   1 AS outpatient_event  
+			   1 AS outpatient_event, GETDATE() as last_run 
 			   INTO hudhears.bh_outpatient_events
                FROM
                (SELECT id_hudhears, kcid FROM amatheson.hudhears_xwalk_ids
@@ -119,11 +119,34 @@ DBI::dbExecute(db_hhsaw,
                bhrd.sp_program sp
                ON au.program = sp.program 
                WHERE ea.event_date BETWEEN au.start_date AND 
-                IsNull(au.expire_date, DATEADD(day, sp.maximum_length, au.start_date)) -- open authorizations at the time of the event
-               AND sp.action_code in ('A')
+               -- open authorizations at the time of the event
+                IsNull(au.expire_date, DATEADD(day, sp.maximum_length, au.start_date))
+                -- Keep only active newer program codes or any older program codes
+               AND 
+               ((sp.action_code = 'A' AND sp.program in ('400', '401')) OR
+                  (sp.action_code = 'I' AND sp.program in ('3A1', '2X1', '3B1')))
                AND au.status_code in ('TM','AA')
                AND sp.loc in ('OP') -- outpatient services
-               -- Keep only main benefit outpatient programs
+               -- Keep only main benefit outpatient programs (restricting differently now)
                --AND sp.program in ('158', '372', '373', '400', '401', '500', '501')
                AND ea.source_id NOT IN(3, 6, 7, 8, 10)
 			   GROUP BY id.id_hudhears, au.auth_no, au.agency_id, au.program, sp.description, ea.event_date;")
+
+
+# OUTPATIENT STRATUM TABLE ----
+# Remove table if it exists
+try(DBI::dbExecute(db_hhsaw, "DROP TABLE hudhears.bh_outpatient_stratum"), silent = T)
+
+DBI::dbExecute(db_hhsaw,
+               "SELECT DISTINCT id.id_hudhears, au.auth_no, st.calc_date, 
+               st.start_date, st.end_date, st.strat_level
+			   INTO hudhears.bh_outpatient_stratum
+               FROM
+               (SELECT id_hudhears, kcid FROM amatheson.hudhears_xwalk_ids
+                 WHERE kcid IS NOT NULL) id
+               INNER JOIN
+               bhrd.au_master au
+               ON id.kcid = au.kcid
+               LEFT JOIN
+               bhrd.au_stratum st
+               ON au.auth_no = st.auth_no;")

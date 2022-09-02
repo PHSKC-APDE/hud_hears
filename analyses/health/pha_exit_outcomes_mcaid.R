@@ -81,8 +81,8 @@ covariate_nodeath <- covariate %>% filter(exit_death != 1) %>%
                          is.na(race_eth_me) | race_eth_me == "Unknown" |
                          is.na(agency) | is.na(single_caregiver) | 
                          is.na(hh_size) | is.na(hh_disability) | is.na(housing_time_at_exit) | is.na(major_prog) | 
-                         is.na(kc_opp_index_score))
-    ))
+                         is.na(kc_opp_index_score)))
+    )
 
 
 ## Set up numbers for CONSORT diagram ----
@@ -216,36 +216,36 @@ outcome_sum <- function(df,
   if (outcome == "ed_prior") {
     cat_text <- "ED visits prior to exit"
     output <- df %>% 
-      distinct(id_kc_pha, exit_date, ..., ed_cnt_prior, ed_any_prior) %>%
+      distinct(id_hudhears, exit_date, ..., ed_cnt_prior, ed_any_prior) %>%
       mutate(cnt = ed_cnt_prior, any = ed_any_prior)
   } else if (outcome == "ed_after") {
     cat_text <- "ED visits after exit"
     output <- df %>% 
-      distinct(id_kc_pha, exit_date, ..., ed_cnt_after, ed_any_after) %>%
+      distinct(id_hudhears, exit_date, ..., ed_cnt_after, ed_any_after) %>%
       mutate(cnt = ed_cnt_after, any = ed_any_after)
   } else if (outcome == "hosp_prior") {
     cat_text <- "Hospitalizations prior to exit"
     output <- df %>% 
-      distinct(id_kc_pha, exit_date, ..., hosp_cnt_prior, hosp_any_prior) %>%
+      distinct(id_hudhears, exit_date, ..., hosp_cnt_prior, hosp_any_prior) %>%
       mutate(cnt = hosp_cnt_prior, any = hosp_any_prior)
   } else if (outcome == "hosp_after") {
     cat_text <- "Hospitalizations after exit"
     output <- df %>% 
-      distinct(id_kc_pha, exit_date, ..., hosp_cnt_after, hosp_any_after) %>%
+      distinct(id_hudhears, exit_date, ..., hosp_cnt_after, hosp_any_after) %>%
       mutate(cnt = hosp_cnt_after, any = hosp_any_after)
   } else if (outcome == "wc_prior") {
     # Note use 5 as cutoff so that 6 is max age in yr after exit (keep consistent for both)
     cat_text <- "Well child checks prior to exit"
     output <- df %>% 
-      filter(age_at_exit <= 5) %>%
-      distinct(id_kc_pha, exit_date, ..., wc_cnt_prior, wc_any_prior) %>%
+      filter(age_at_exit < 6) %>%
+      distinct(id_hudhears, exit_date, ..., wc_cnt_prior, wc_any_prior) %>%
       mutate(cnt = wc_cnt_prior, any = wc_any_prior)
   } else if (outcome == "wc_after") {
     # Note use 5 as cutoff so that 6 is max age in yr after exit
     cat_text <- "Well child checks after exit"
     output <- df %>% 
-      filter(age_at_exit <= 5) %>%
-      distinct(id_kc_pha, exit_date, ..., wc_cnt_after, wc_any_after) %>%
+      filter(age_at_exit < 6) %>%
+      distinct(id_hudhears, exit_date, ..., wc_cnt_after, wc_any_after) %>%
       mutate(cnt = wc_cnt_after, any = wc_any_after)
   }
   
@@ -314,7 +314,7 @@ model_data_mcaid <- exit_nodeath %>%
          age_grp = fct_relevel(as_factor(case_when(
            age_at_exit < 25 ~ "<25",
            data.table::between(age_at_exit, 25, 44.99, NAbounds = NA) ~ "25-44",
-           data.table::between(age_at_exit, 45, 64.99, NAbounds = NA) ~ "45-64")),
+           data.table::between(age_at_exit, 45, 61.99, NAbounds = NA) ~ "45-<62")),
            "<25"),
          los = fct_relevel(
            as_factor(case_when(housing_time_at_exit < 3 ~ "<3",
@@ -366,7 +366,7 @@ model_run <- function(outcome = c("ed", "hosp", "wc"), neutral = T) {
                           id = hh_id_kc_pha,
                           LORstr = "independence")
   } else if (outcome == "wc") {
-    model_data_mcaid <- model_data_mcaid %>% filter(between(age_at_exit, 2, 6))
+    model_data_mcaid <- model_data_mcaid %>% filter(age_at_exit < 6))
     
     ps_model <- nomLORgee(formula = exit_category ~ age_grp + gender_me + 
                             race_eth_me + single_caregiver + hh_size +
@@ -662,18 +662,13 @@ model_outcomes_graph <- model_outcomes %>%
 # REGRESSION MODEL: EXIT VS NOT ----
 ## Set up data ----
 any_exit_mcaid <- exit_control %>%
-  # Remove anyone with missing covariates since they will be dropped from the propensity scores
-  # Also remove anyone aged 65+ because so few will have non-dual Medicaid
-  filter(include_cov == T & include_demog == T & age_at_exit < 65) %>%
-  # Also remove people without full coverage
-  filter(full_cov_7_prior == T & full_cov_7_after == T) %>%
   mutate(across(c("gender_me", "major_prog", "vouch_type_use"), ~ as_factor(.))) %>%
   # Relevel factors as they are made
   mutate(race_eth_me = fct_relevel(race_eth_me, c("White")),
          age_grp = fct_relevel(as_factor(case_when(
            age_at_exit < 25 ~ "<25",
            data.table::between(age_at_exit, 25, 44.99, NAbounds = NA) ~ "25-44",
-           data.table::between(age_at_exit, 45, 64.99, NAbounds = NA) ~ "45-64")),
+           data.table::between(age_at_exit, 45, 61.99, NAbounds = NA) ~ "45-<62")),
            "<25"),
          los = fct_relevel(
            as_factor(case_when(housing_time_at_exit < 3 ~ "<3",
@@ -1089,10 +1084,10 @@ n_exit_type_hh <- exit_nodeath %>% distinct(hh_id_kc_pha, exit_date, exit_catego
   count(exit_category) %>% deframe()
 
 n_exit_any_wc <- exit_control %>% filter(age_at_exit < 6) %>% 
-  distinct(hh_id_kc_pha, exit_date, id_type) %>% 
+  distinct(id_hudhears, exit_date, id_type) %>% 
   count(id_type) %>% deframe()
 n_exit_type_wc <- exit_nodeath %>% filter(age_at_exit < 6) %>% 
-  distinct(hh_id_kc_pha, exit_date, exit_category) %>% 
+  distinct(id_hudhears, exit_date, exit_category) %>% 
   count(exit_category) %>% deframe()
 
 

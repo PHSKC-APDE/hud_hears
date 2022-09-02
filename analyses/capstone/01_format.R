@@ -151,7 +151,8 @@ joined_data$dummy_date <- if_else(joined_data$housing_status != "homeless" |
 # For each unique individual/exit_date combination, get the earliest dummy date
 tth_data <- joined_data %>% group_by(id_hudhears, exit_date) %>%
   arrange(dummy_date) %>%
-  slice(1L)
+  slice(1L) %>%
+  ungroup()
 
 # Create time to homelessness variable
 tth_data$tt_homeless <- as.numeric(tth_data$dummy_date - tth_data$exit_date,

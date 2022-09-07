@@ -111,7 +111,6 @@ exit_timevar %>%
 # Set up DF to track counts
 consort_df <- exit_timevar %>% filter(!is.na(act_date))
 
-### Make diagram ---- 
 # Using approach here: https://stackoverflow.com/questions/61745574/diagrammer-arrow-problems
 # Set up function to toggle Medicaid and household on/off
 consort_maker <- function(df = consort_df, mcaid_prior = F, 
@@ -376,6 +375,8 @@ consort_maker <- function(df = consort_df, mcaid_prior = F,
   DiagrammeR::grViz(graph_txt)
 }
 
+
+### Make diagram ---- 
 # Run Medicaid and non-Medicaid versions
 mcaid_graph <- consort_maker(df = consort_df, mcaid_prior = T, mcaid_after = T, household = F)
 mcaid_prior_graph <- consort_maker(df = consort_df, mcaid_prior = T, mcaid_after = F, household = F)
@@ -587,6 +588,8 @@ consort_maker_mcaid_type <- function(df, split_prior = F) {
   DiagrammeR::grViz(graph_txt)
 }
 
+
+### Make diagram ---- 
 mcaid_exit_type_graph <- consort_maker_mcaid_type(df = covariate, split_prior = F)
 mcaid_exit_type_graph_prior <- consort_maker_mcaid_type(df = covariate, split_prior = T)
 

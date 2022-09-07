@@ -149,9 +149,9 @@ exit_any_hh_prog <- demog_pct_sum(exit_control, full_demog = T, level = "hh", de
 
 # Medicaid outcomes
 exit_any_mcaid_7_prior <- mcaid_outcomes_sum(exit_control, full_demog = T, 
-                                              time = "prior", cov_time = "7_mth", id_type)
+                                              time = "prior", cov_time = "7_mth", show_num = T, id_type)
 exit_any_mcaid_7_after <- mcaid_outcomes_sum(exit_control, full_demog = T, 
-                                              time = "after", cov_time = "7_mth", id_type)
+                                              time = "after", cov_time = "7_mth", show_num = T, id_type)
 
 # Combine for R markdown
 exit_any_demogs <- bind_rows(exit_any_age, exit_any_gender, exit_any_race, exit_any_hh_los,
@@ -186,9 +186,9 @@ exit_type_hh_prog <- demog_pct_sum(exit_nodeath, full_demog = T, level = "hh", d
 
 # Medicaid outcomes
 exit_type_mcaid_7_prior <- mcaid_outcomes_sum(exit_nodeath, full_demog = T, 
-                                             time = "prior", cov_time = "7_mth", exit_category)
+                                             time = "prior", cov_time = "7_mth", show_num = T, exit_category)
 exit_type_mcaid_7_after <- mcaid_outcomes_sum(exit_nodeath, full_demog = T, 
-                                              time = "after", cov_time = "7_mth", exit_category)
+                                              time = "after", cov_time = "7_mth", show_num = T, exit_category)
 
 
 # Combine for R markdown

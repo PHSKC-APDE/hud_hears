@@ -102,6 +102,10 @@ covariate_nodeath_hh <- covariate_hh %>% filter(exit_death != 1) %>%
 covariate_exits <- covariate_nodeath %>% filter(id_type == "id_exit")
 covariate_exits_hh <- covariate_nodeath_hh %>% filter(id_type == "id_exit")
 
+# Create dfs with additional criteria for Medicaid includsion
+covariate_nodeath_hh_mcaid <- covariate_nodeath_hh %>% filter(age_at_exit < 62) 
+covariate_exits_hh_mcaid <- covariate_exits_hh %>% filter(age_at_exit < 62)
+
 
 # SET UP GENERIC SUMMARY FUNCTIONS ----
 age_sum <- function(df, full_demog = F, ...) {
@@ -195,8 +199,10 @@ demog_pct_sum <- function(df,
     output <- output %>% 
       distinct(id_var, exit_date, ..., crisis_any_prior) %>%
       filter(!is.na(crisis_any_prior)) %>%
-      mutate(group = case_when(crisis_any_prior == 1 ~ "Experienced a behavioral health crisis (excl. Medicaid ED visits)",
-                               crisis_any_prior == 0 ~ "Did not experience a behavioral health crisis (excl. Medicaid ED visits)"))
+      mutate(group = case_when(crisis_any_prior == 1 ~ paste0("Experienced 1+ behavioral health crisis events ", 
+                                                              "in year prior to exit (excl. Medicaid ED visits)"),
+                               crisis_any_prior == 0 ~ paste0("Did not experience a behavioral health crisis ", 
+                                                              "in year prior to exit (excl. Medicaid ED visits)")))
   } else if (demog == "homeless_grp") {
     cat_text <- "Health and homelessness events"
     output <- output %>% 
@@ -308,7 +314,8 @@ hh_demogs_sum <- function(df, full_demog = F, level = c("hh", "ind"), ...) {
 mcaid_outcomes_sum <- function(df, 
                                full_demog = F,
                                time = c("prior", "after"), 
-                               cov_time = c("7_mth", "11_mth"), 
+                               cov_time = c("7_mth", "11_mth"),
+                               show_num = T,
                                ...) {
   col_names <- df %>% select(...) %>% colnames()
   
@@ -341,7 +348,7 @@ mcaid_outcomes_sum <- function(df,
     hosp_cnt_text <- "Average # hospitalizations in year prior to exit (per 100 people)"
     hosp_any_text <- "Experienced 1+ hospitalizations in year prior to exit"
     wc_text <- "Completed 1+ well-child visits in the year prior to exit (ages <6)"
-    crisis_text <- "Experienced 1+ crisis event in year prior to exit (inc. ED visits)"
+    crisis_text <- "Experienced 1+ behavioral health crisis events in year prior to exit (inc. ED visits)"
   } else if (time == "after") {
     if (cov_time == "7_mth") {
       output <- df %>% filter(full_cov_7_after == T)
@@ -370,18 +377,44 @@ mcaid_outcomes_sum <- function(df,
   output <- output %>% 
     distinct(id_hudhears, ..., ed_cnt, ed_any, hosp_cnt, hosp_any, age_at_exit,
              wc_any, crisis, ccw_cnt) %>%
-    group_by(...) %>%
+    group_by(...)
+  
+  output_1 <- output %>%
     summarise(n = number(n(), big.mark = ","), 
-              ccw_cnt = round(mean(ccw_cnt, na.rm = T), 2),
-              ed_cnt = round(mean(ed_cnt, na.rm = T), 2),
-              ed_any = number(mean(ed_any, na.rm = T) * 100, 0.1, suffix = "%"),
-              hosp_cnt = round(mean(hosp_cnt, na.rm = T), 2),
-              hosp_any = number(mean(hosp_any, na.rm = T) * 100, 0.1, suffix = "%"),
-              wc_any = number(mean(cur_data() %>% as.data.frame() %>% 
-                                     filter(age_at_exit <6) %>% 
-                                     pull(wc_any), 
-                                   na.rm = T) * 100, 0.1, suffix = "%"),
-              crisis = number(mean(crisis, na.rm = T) * 100, 0.1, suffix = "%")) %>%
+              ccw_cnt = round(mean(ccw_cnt, na.rm = T), 1),
+              ed_cnt = round(mean(ed_cnt, na.rm = T), 1),
+              hosp_cnt = round(mean(hosp_cnt, na.rm = T), 1))
+  
+  if (show_num == F) {
+    output_2 <- output %>%
+      summarise(ed_any = number(mean(ed_any, na.rm = T) * 100, 0.1, suffix = "%"),
+                hosp_any = number(mean(hosp_any, na.rm = T) * 100, 0.1, suffix = "%"),
+                wc_any = number(mean(cur_data() %>% as.data.frame() %>% 
+                                       filter(age_at_exit <6) %>% 
+                                       pull(wc_any), 
+                                     na.rm = T) * 100, 0.1, suffix = "%"),
+                crisis = number(mean(crisis, na.rm = T) * 100, 0.1, suffix = "%"))
+  } else if (show_num == T) {
+    output_2 <- output %>%
+      summarise(ed_any = paste0(number(sum(ed_any, na.rm = T), big.mark = ","), " (",
+                                number(mean(ed_any, na.rm = T) * 100, 0.1, suffix = "%"), ")"),
+                hosp_any = paste0(number(sum(hosp_any, na.rm = T), big.mark = ","), " (",
+                                number(mean(hosp_any, na.rm = T) * 100, 0.1, suffix = "%"), ")"),
+                wc_any = paste0(number(sum(cur_data() %>% as.data.frame() %>% 
+                                              filter(age_at_exit <6) %>% 
+                                              pull(wc_any), 
+                                            na.rm = T),
+                                       big.mark = ","), " (",
+                                number(mean(cur_data() %>% as.data.frame() %>% 
+                                       filter(age_at_exit <6) %>% 
+                                       pull(wc_any), 
+                                     na.rm = T) * 100, 0.1, suffix = "%"), ")"),
+                crisis = paste0(number(sum(crisis, na.rm = T), big.mark = ","), " (",
+                                number(mean(crisis, na.rm = T) * 100, 0.1, suffix = "%"), ")"))
+  }
+  
+  # Bring pieces together and reshape so each group is in its own column
+  output <- left_join(output_1, output_2, by = col_names) %>%
     pivot_longer(cols = !col_names, values_transform = list(value = as.character)) %>%
     pivot_wider(id_cols = "name", names_from = col_names) %>%
     mutate(category = "Health and homelessness events", .before = "name",
@@ -404,73 +437,56 @@ mcaid_outcomes_sum <- function(df,
 
 
 # FACTORS ASSOCIATED WITH EXIT VS NOT -----
-covariate_nodeath_hh %>% head()
-covariate_nodeath_hh %>% count(id_type)
-
 ## Demogs ----
 # Age
-exit_any_age <- age_sum(covariate_nodeath, full_demog = T, id_type)
 exit_any_age_hh <- age_sum(covariate_nodeath_hh, full_demog = T, id_type)
 
 # Gender
-exit_any_gender <- demog_pct_sum(covariate_nodeath, full_demog = T, level = "ind", demog = "gender", id_type)
 exit_any_gender_hh <- demog_pct_sum(covariate_nodeath_hh, full_demog = T, level = "ind", demog = "gender", id_type)
 
 # Race/eth
-exit_any_race <- demog_pct_sum(covariate_nodeath, full_demog = T, level = "ind", demog = "race", id_type)
 exit_any_race_hh <- demog_pct_sum(covariate_nodeath_hh, full_demog = T, level = "ind", demog = "race", id_type)
 
 # Combine for R markdown
-exit_any_ind <- bind_rows(exit_any_age, exit_any_gender, exit_any_race)
 exit_any_ind_hh <- bind_rows(exit_any_age_hh, exit_any_gender_hh, exit_any_race_hh)
 
 
 ## HH demogs ----
 # Time in housing (this is based on HH data)
-exit_any_hh_los <- demog_num_sum(covariate_nodeath, demog = "los", full_demog = T, id_type)
 exit_any_hh_los_hh <- demog_num_sum(covariate_nodeath_hh, demog = "los", full_demog = T, id_type)
 
 # Size and composition
-exit_any_hh_demogs <- hh_demogs_sum(covariate_nodeath, full_demog = T, level = "hh", id_type)
 exit_any_hh_demogs_hh <- hh_demogs_sum(covariate_nodeath_hh, full_demog = T, level = "hh", id_type)
 
 # Program type
-exit_any_hh_prog <- demog_pct_sum(covariate_nodeath, full_demog = T, level = "hh", demog = "program", id_type)
 exit_any_hh_prog_hh <- demog_pct_sum(covariate_nodeath_hh, full_demog = T, level = "hh", demog = "program", id_type)
 
 # Voucher type
-exit_any_hh_vouch <- demog_pct_sum(covariate_nodeath, full_demog = T, level = "hh", demog = "voucher", id_type)
 exit_any_hh_vouch_hh <- demog_pct_sum(covariate_nodeath_hh, full_demog = T, level = "hh", demog = "voucher", id_type)
 
 # Opportunity index
-exit_any_hh_opp <- demog_num_sum(covariate_nodeath, demog = "opp_index", full_demog = T, id_type)
 exit_any_hh_opp_hh <- demog_num_sum(covariate_nodeath_hh, demog = "opp_index", full_demog = T, id_type)
 
 # Combine for R markdown
-exit_any_hh <- bind_rows(exit_any_hh_los, exit_any_hh_demogs, exit_any_hh_prog, 
-                         exit_any_hh_vouch, exit_any_hh_opp)
 exit_any_hh_hh <- bind_rows(exit_any_hh_los_hh, exit_any_hh_demogs_hh, 
                             exit_any_hh_prog_hh, exit_any_hh_vouch_hh,
                             exit_any_hh_opp_hh)
 
 
 ## Medicaid outcomes ----
-exit_any_mcaid_11_prior <- mcaid_outcomes_sum(covariate_nodeath, full_demog = T, 
-                                              time = "prior", cov_time = "11_mth", id_type)
-exit_any_mcaid_11_prior_hh <- mcaid_outcomes_sum(covariate_nodeath_hh, full_demog = T, 
-                                                 time = "prior", cov_time = "11_mth", id_type)
+exit_any_mcaid_11_prior_hh <- mcaid_outcomes_sum(covariate_nodeath_hh_mcaid, full_demog = T, 
+                                                 time = "prior", cov_time = "11_mth", show_num = T, id_type)
 
-exit_any_mcaid_7_prior <- mcaid_outcomes_sum(covariate_nodeath, full_demog = T, 
-                                             time = "prior", cov_time = "7_mth", id_type)
-exit_any_mcaid_7_prior_hh <- mcaid_outcomes_sum(covariate_nodeath_hh, full_demog = T, 
-                                                time = "prior", cov_time = "7_mth", id_type)
+exit_any_mcaid_7_prior_hh <- mcaid_outcomes_sum(covariate_nodeath_hh_mcaid, full_demog = T, 
+                                                time = "prior", cov_time = "7_mth", show_num = T, id_type)
 
 
 ## BH and homelessness ----
-exit_any_homeless <- demog_pct_sum(covariate_nodeath_hh, full_demog = T, level = "hh", 
+exit_any_homeless_hh <- demog_pct_sum(covariate_nodeath_hh, full_demog = T, level = "hh", 
                                    demog = "homeless_grp", id_type)
-exit_any_crisis <- demog_pct_sum(covariate_nodeath_hh, full_demog = T, level = "hh", 
+exit_any_crisis_hh <- demog_pct_sum(covariate_nodeath_hh, full_demog = T, level = "hh", 
                                    demog = "crisis_any_prior", id_type)
+
 
 
 ## Demogs by exit and Medicaid status ----
@@ -508,6 +524,8 @@ exit_any_mcaid_opp_hh <- demog_num_sum(covariate_nodeath_hh, full_demog = T, dem
 # Prior homelessness
 exit_any_mcaid_homeless_hh <- demog_pct_sum(covariate_nodeath_hh, full_demog = T, level = "hh", 
                                          demog = "homeless_grp", id_type, full_cov_7_prior)
+exit_any_mcaid_crisis_hh <- demog_pct_sum(covariate_nodeath_hh, full_demog = T, level = "hh", 
+                                 demog = "crisis_any_prior", id_type, full_cov_7_prior)
 
 
 
@@ -516,17 +534,14 @@ exit_any_mcaid_prior <- bind_rows(exit_any_mcaid_age_hh, exit_any_mcaid_gender_h
                                   exit_any_mcaid_race_hh, exit_any_mcaid_los_hh,
                                   exit_any_mcaid_demogs_hh, exit_any_mcaid_prog_hh,
                                   exit_any_mcaid_vouch_hh, exit_any_mcaid_opp_hh,
-                                  exit_any_mcaid_homeless_hh,
-                                  mutate(exit_any_mcaid_7_prior_hh, 
-                                         id_control_FALSE = NA_character_,
-                                         id_exit_FALSE = NA_character_) %>%
-                                    rename(id_control_TRUE = id_control,
-                                           id_exit_TRUE = id_exit) %>%
-                                    select(category, group, id_control_FALSE, id_control_TRUE,
-                                           id_exit_FALSE, id_exit_TRUE)) %>% 
+                                  exit_any_mcaid_homeless_hh, exit_any_mcaid_crisis_hh) %>% 
   filter(group != "n" & 
            str_detect(group, "Average # (ED|hosp)", negate = T) &
            str_detect(group, "Did not experience", negate = T))
+
+rm(exit_any_mcaid_age_hh, exit_any_mcaid_gender_hh, exit_any_mcaid_race_hh, exit_any_mcaid_los_hh,
+   exit_any_mcaid_demogs_hh, exit_any_mcaid_prog_hh, exit_any_mcaid_vouch_hh, exit_any_mcaid_opp_hh,
+   exit_any_mcaid_homeless_hh, exit_any_mcaid_crisis_hh)
 
 
 
@@ -591,7 +606,9 @@ lapply(covar, function(x) {
 
 
 ## Including Medicaid factors ----
-model_data_mcaid <- model_data %>% filter(full_cov_7_prior == T)
+model_data_mcaid <- model_data %>% 
+  filter(full_cov_7_prior == T & age_at_exit < 62) %>%
+  mutate(age_grp = fct_drop(age_grp))
 
 anyexit_mcaid <- glm(exit ~ gender_me + race_eth_me + age_grp + los + 
                        major_prog + hh_size + single_caregiver + hh_disability + 
@@ -632,22 +649,17 @@ lapply(covar, function(x) {
 # FACTORS ASSOCIATED WITH EXIT TYPE -----
 ## Demogs ----
 # Age
-exit_type_age <- age_sum(covariate_exits, full_demog = T, exit_category)
 exit_type_age_hh <- age_sum(covariate_exits_hh, full_demog = T, exit_category)
 
 # Gender
-exit_type_gender <- demog_pct_sum(covariate_exits, full_demog = T, level = "ind", demog = "gender", exit_category)
 exit_type_gender_hh <- demog_pct_sum(covariate_exits_hh, full_demog = T, 
                                      level = "ind", demog = "gender", exit_category)
 
 # Race/eth
-exit_type_race <- demog_pct_sum(covariate_exits, full_demog = T, level = "ind", demog = "race", exit_category)
 exit_type_race_hh <- demog_pct_sum(covariate_exits_hh, full_demog = T, 
                                    level = "ind", demog = "race", exit_category)
 
 # Combine for R markdown
-exit_type_ind <- bind_rows(exit_type_age, exit_type_gender, exit_type_race) %>%
-  filter(!group == "n")
 exit_type_ind_hh <- bind_rows(exit_type_age_hh, exit_type_gender_hh, exit_type_race_hh) %>%
   filter(!group == "n")
 
@@ -658,79 +670,42 @@ exit_type_ind_hh <- bind_rows(exit_type_age_hh, exit_type_gender_hh, exit_type_r
 # These are dropped for the HH-level analyses
 
 # Time in housing (this is based on HH data)
-exit_type_hh_los <- demog_num_sum(covariate_exits, demog = "los", full_demog = T, exit_category)
 exit_type_hh_los_hh <- demog_num_sum(covariate_exits_hh, demog = "los", full_demog = T, exit_category)
 
 # Size and composition
-exit_type_hh_demogs <- hh_demogs_sum(covariate_exits, full_demog = T, level = "hh", exit_category)
 exit_type_hh_demogs_hh <- hh_demogs_sum(covariate_exits_hh, full_demog = T, level = "hh", exit_category)
 
 # Program type
-exit_type_hh_prog <- demog_pct_sum(covariate_exits, full_demog = T, level = "hh", demog = "program", exit_category)
 exit_type_hh_prog_hh <- demog_pct_sum(covariate_exits_hh, full_demog = T, 
                                       level = "hh", demog = "program", exit_category)
 
 # Voucher type
-exit_type_hh_vouch <- demog_pct_sum(covariate_exits, full_demog = T, level = "hh", demog = "voucher", exit_category)
 exit_type_hh_vouch_hh <- demog_pct_sum(covariate_exits_hh, full_demog = T, 
                                        level = "hh", demog = "voucher", exit_category)
 
 # Opportunity index
-exit_type_hh_opp <- demog_num_sum(covariate_exits, demog = "opp_index", full_demog = T, exit_category)
 exit_type_hh_opp_hh <- demog_num_sum(covariate_exits_hh, demog = "opp_index", full_demog = T, exit_category)
 
 
 # Combine for R markdown
-exit_type_hh <- bind_rows(exit_type_hh_los, exit_type_hh_demogs, exit_type_hh_prog, 
-                          exit_type_hh_vouch, exit_type_hh_opp) %>%
-  filter(!group == "n")
-
 exit_type_hh_hh <- bind_rows(exit_type_hh_los_hh, exit_type_hh_demogs_hh, 
                              exit_type_hh_prog_hh, exit_type_hh_vouch_hh,
                              exit_type_hh_opp_hh) %>%
   filter(!group == "n")
 
 
-## Repeat but at individual level ----
-# Not used in markdown doc currently
-
-# Size and composition
-exit_type_ind_demogs <- hh_demogs_sum(covariate_exits, level = "ind", exit_category)
-
-# Program type
-exit_type_ind_prog <- demog_pct_sum(covariate_exits, level = "ind", demog = "program", exit_category)
-
-# Voucher type
-exit_type_ind_vouch <- demog_pct_sum(covariate_exits, level = "ind", demog = "voucher", exit_category)
-
-
 ## Medicaid outcomes ----
-covariate_exits %>% 
-  group_by(exit_category) %>%
-  summarise(n = n(),
-            full_cov_11_prior = mean(full_cov_11_prior, na.rm = T),
-            full_cov_7_prior = mean(full_cov_7_prior, na.rm = T),
-            full_cov_11_after = mean(full_cov_11_after, na.rm = T),
-            full_cov_7_after = mean(full_cov_7_after, na.rm = T))
+exit_type_mcaid_11_prior_hh <- mcaid_outcomes_sum(covariate_exits_hh_mcaid, full_demog = T, 
+                                               time = "prior", cov_time = "11_mth", show_num = T, exit_category)
 
-
-exit_type_mcaid_11_prior <- mcaid_outcomes_sum(covariate_exits, full_demog = T, 
-                                               time = "prior", cov_time = "11_mth", exit_category)
-
-exit_type_mcaid_7_prior <- mcaid_outcomes_sum(covariate_exits, full_demog = T, 
-                                              time = "prior", cov_time = "7_mth", exit_category)
-
-exit_type_mcaid_11_prior_hh <- mcaid_outcomes_sum(covariate_exits_hh, full_demog = T, 
-                                               time = "prior", cov_time = "11_mth", exit_category)
-
-exit_type_mcaid_7_prior_hh <- mcaid_outcomes_sum(covariate_exits_hh, full_demog = T, 
-                                              time = "prior", cov_time = "7_mth", exit_category)
+exit_type_mcaid_7_prior_hh <- mcaid_outcomes_sum(covariate_exits_hh_mcaid, full_demog = T, 
+                                              time = "prior", cov_time = "7_mth", show_num = T, exit_category)
 
 
 ## BH and homelessness ----
-exit_type_homeless <- demog_pct_sum(covariate_nodeath_hh, full_demog = T, level = "hh", 
+exit_type_homeless_hh <- demog_pct_sum(covariate_exits_hh, full_demog = T, level = "hh", 
                                    demog = "homeless_grp", exit_category)
-exit_type_crisis <- demog_pct_sum(covariate_nodeath_hh, full_demog = T, level = "hh", 
+exit_type_crisis_hh <- demog_pct_sum(covariate_exits_hh, full_demog = T, level = "hh", 
                                  demog = "crisis_any_prior", exit_category)
 
 
@@ -1048,6 +1023,45 @@ table_formatter <- function(tbl) {
   output
 }
 
+
+# Function for consistently ordering tables
+table_sorter <- function(tbl) {
+  
+  if ("order" %in% names(tbl)) {
+    output <- tbl
+  } else {
+    output <- tbl %>% mutate(order = 1L)
+  }
+  
+  output <- output %>%
+    mutate(cat_order = case_when(category == "Age" ~ 1L,
+                                 category == "Gender" ~ 2L,
+                                 category == "Race/ethnicity" ~ 3L,
+                                 category == "Time in housing" ~ 4L,
+                                 category == "Household characteristics" ~ 5L,
+                                 category == "Program type" ~ 6L,
+                                 category == "Health and homelessness events" ~ 7L),
+           group_order = case_when(group %in% c("recent_homeless_grp", "los<3", "hh_size",
+                                                "Experienced recent homelessness") ~ 1L,
+                                   group %in% c("crisis_any_prior", "los3-5.99", "single_caregiver") ~ 2L,
+                                   str_detect(group, "Experienced .*crisis.*exc") ~ 2L,
+                                   group %in% c("crisis_ed_any_prior", "los6-9.99", "hh_disability") ~ 3L,
+                                   str_detect(group, "Experienced .*crisis.*inc") ~ 3L,
+                                   group %in% c("ed_cnt_prior", "los10+") ~ 4L,
+                                   str_detect(group, "Average .*ED") ~ 4L,
+                                   group == "ed_any_prior" ~ 5L,
+                                   str_detect(group, "Experienced .*ED") ~ 5L,
+                                   group %in% c("hosp_cnt_prior") ~ 6L,
+                                   str_detect(group, "Average .*hospital") ~ 6L,
+                                   str_detect(group, "Experienced .*hospital") ~ 7L,
+                                   group %in% c("ccw_cnt", "ccw_flag") ~ 8L,
+                                   str_detect(group, "chronic") ~ 8L)) %>%
+    arrange(cat_order, order, group_order, group) %>%
+    select(-ends_with("order"))
+  
+  output
+}
+
 # Function for tidying regression output
 table_regression <- function(tbl, type = c("any_exit", "exit_type")) {
   output <- tbl %>%
@@ -1095,12 +1109,6 @@ table_regression <- function(tbl, type = c("any_exit", "exit_type")) {
                                              "ccw_flag") ~ 
                                   "Health and homelessness events",
                                 group == "kc_opp_index_score" ~ "Neighborhood opportunity"),
-           group_order = case_when(group %in% c("recent_homeless_grp", "los<3", "hh_size") ~ 1L,
-                                   group %in% c("crisis_any_prior", "los3-5.99", "single_caregiver") ~ 2L,
-                                   group %in% c("crisis_ed_any_prior", "los6-9.99", "hh_disability") ~ 3L,
-                                   group %in% c("ed_cnt_prior", "ed_any_prior", "los10+") ~ 4L,
-                                   group %in% c("hosp_cnt_prior", "hosp_any_prior") ~ 5L,
-                                   group %in% c("ccw_cnt", "ccw_flag") ~ 6L),
            group = case_when(group == "hh_size" ~ "Household size",
                              group == "single_caregiver" ~ "Single caregiver",
                              group == "hh_disability" ~ "HoH disability",
@@ -1113,7 +1121,8 @@ table_regression <- function(tbl, type = c("any_exit", "exit_type")) {
                              group == "ed_any_prior" ~ "Experienced 1+ ED visit in year prior to exit",
                              group == "hosp_any_prior" ~ "Experienced 1+ hospitalization in year prior to exit",
                              group == "ccw_flag" ~ "2+ chronic conditions",
-                             TRUE ~ str_remove(group, "age_grp|gender_me|los|major_prog|race_eth_me")))
+                             TRUE ~ str_remove(group, "age_grp|gender_me|los|major_prog|race_eth_me"))) %>%
+    filter(group != "(Intercept)")
   
   if (type == "any_exit") {
     output <- output %>%
@@ -1123,17 +1132,7 @@ table_regression <- function(tbl, type = c("any_exit", "exit_type")) {
       select(category, group, Negative_estimate:Positive_p.value, order, group_order)
   }
   
-  output <- output %>%
-    mutate(cat_order = case_when(category == "Age" ~ 1L,
-                                 category == "Gender" ~ 2L,
-                                 category == "Race/ethnicity" ~ 3L,
-                                 category == "Time in housing" ~ 4L,
-                                 category == "Household characteristics" ~ 5L,
-                                 category == "Program type" ~ 6L,
-                                 category == "Health and homelessness events" ~ 7L)) %>%
-    arrange(cat_order, order, group_order, group) %>%
-    filter(group != "(Intercept)") %>%
-    select(-ends_with("order"))
+  output <- table_sorter(output)
   
   output
 }
@@ -1144,24 +1143,52 @@ table_regression <- function(tbl, type = c("any_exit", "exit_type")) {
 n_remain_exit <- covariate_nodeath_hh %>% filter(full_demog == T) %>% count(id_type) %>% deframe()
 n_exit_type <- covariate_exits_hh %>% filter(full_demog == T) %>% count(exit_category) %>% deframe()
 
+n_mcaid_exit <- exit_any_mcaid_7_prior_hh %>% filter(group == "n") %>%
+  select(-category, -group)
+n_mcaid_type <- exit_type_mcaid_7_prior_hh %>% filter(group == "n") %>%
+  select(-category, -group)
+
+
 # Make table
 table_1_demogs <- bind_rows(exit_any_ind_hh, exit_any_hh_hh, 
-                            exit_any_homeless, exit_any_crisis) %>%
+                            exit_any_homeless_hh, exit_any_crisis_hh, 
+                            exit_any_mcaid_7_prior_hh) %>%
   left_join(., bind_rows(exit_type_ind_hh, exit_type_hh_hh,
-                         exit_type_homeless, exit_type_crisis) %>%
+                         exit_type_homeless_hh, exit_type_crisis_hh,
+                         exit_type_mcaid_7_prior_hh) %>%
               select(category, group, Neutral, Positive, Negative),
             by = c("category", "group")) %>%
   filter(category != "Voucher type") %>%
   filter(!group %in% c("n", "Range (years)", "Child (aged <18)")) %>% 
   filter(str_detect(group, "Did not experience", negate = T)) %>%
+  filter(str_detect(group, "well-child", negate = T)) %>%
   rename("Remained" = "id_control", "Exited" = "id_exit") %>%
   mutate(category = str_replace_all(category, "HoH time", "Time"),
-         group = str_replace_all(group, " time in housing \\(years\\)", " time (years)")) %>%
+         group = str_replace_all(group, " time in housing \\(years\\)", " time (years)"))
+
+table_1_demogs <- table_sorter(table_1_demogs)
+
+table_1_demogs <- table_1_demogs %>%
   gt(groupname_col = "category", rowname_col = "group") %>%
   tab_footnote(footnote = "AI/AN = American Indian/Alaskan Native, NH/PI = Native Hawaiian/Pacific Islander", 
                locations = cells_row_groups(groups = "Race/ethnicity")) %>%
   tab_footnote(footnote = "HCV = Housing Choice Voucher, PH = Public housing", 
                locations = cells_row_groups(groups = "Program type")) %>%
+  tab_footnote(footnote = md(glue("Health event data available for those aged <62 enrolled in Medicaid (",
+                               "Remained N={n_mcaid_exit[[1]]}, ",
+                               "Exited N={n_mcaid_exit[[2]]}, ",
+                               "Negative N={n_mcaid_type[[1]]}, ",
+                               "Neutral N={n_mcaid_type[[2]]}, ",
+                               "Positive N={n_mcaid_type[[3]]}",
+                               ")")),
+               locations = cells_stub(rows = group %in%
+                                        c("Experienced 1+ crisis events in year prior to exit (inc. ED visits)",
+                                          "Average # ED visits in year prior to exit",
+                                          "Experienced 1+ ED visits in year prior to exit",
+                                          "Average # hospitalizations in year prior to exit (per 100 people)",
+                                          "Experienced 1+ hospitalizations in year prior to exit",
+                                          "Average # of chronic conditions",
+                                          "2+ chronic conditions"))) %>%
   cols_label(category = md("Category"),
              group = md("Group"),
              Remained = md(paste0("Remained (N=", number(n_remain_exit[1], big.mark = ","), ")")),
@@ -1179,21 +1206,25 @@ gtsave(table_1_demogs, filename = "demog_manuscript_table1.png",
 
 ## Table 2: demographics by exit and Medicaid coverage ----
 # Set up n for col names
-n_remain_exit_mcaid <- covariate_nodeath_hh %>% filter(full_demog == T) %>% count(id_type, full_cov_7_prior)
+n_remain_exit_mcaid <- covariate_nodeath_hh %>% 
+  filter(full_demog == T) %>% 
+  count(id_type, full_cov_7_prior)
 
 # Make table
 table_2_mcaid_demogs <- exit_any_mcaid_prior %>%
   filter(category != "Voucher type") %>%
   filter(!group %in% c("n", "Range (years)", "Child (aged <18)")) %>% 
   mutate(category = str_replace_all(category, "HoH time", "Time"),
-         group = str_replace_all(group, " time in housing \\(years\\)", " time (years)")) %>%
+         group = str_replace_all(group, " time in housing \\(years\\)", " time (years)"))
+
+table_2_mcaid_demogs <- table_sorter(table_2_mcaid_demogs)
+
+table_2_mcaid_demogs <- table_2_mcaid_demogs %>%
   gt(groupname_col = "category", rowname_col = "group") %>%
   tab_footnote(footnote = "AI/AN = American Indian/Alaskan Native, NH/PI = Native Hawaiian/Pacific Islander", 
                locations = cells_row_groups(groups = "Race/ethnicity")) %>%
   tab_footnote(footnote = "HCV = Housing Choice Voucher, PH = Public housing", 
                locations = cells_row_groups(groups = "Program type")) %>%
-  tab_footnote(footnote = "Health event data only available for those enrolled in Medicaid", 
-               locations = cells_row_groups(groups = "Health and homelessness events")) %>%
   sub_missing() %>%
   cols_label(category = md("Category"),
              group = md("Group"),
@@ -1214,6 +1245,9 @@ gtsave(table_2_mcaid_demogs, filename = "demog_manuscript_table2.png",
 
 
 ## Table 3: regression for exit vs. not -----
+# Pull out numbers for footnote
+model_mcaid_n <- model_data_mcaid %>% count(id_type) %>% deframe()
+
 table_3_exit_regression <- bind_rows(select(anyexit_output, group, OR, ci, p), 
                                      select(anyexit_mcaid_output, group, OR, ci, p) %>%
                                        filter(group %in% c("ed_any_prior", "hosp_any_prior",
@@ -1229,8 +1263,9 @@ table_3_exit_regression <- table_3_exit_regression %>%
                locations = cells_row_groups(groups = "Race/ethnicity")) %>%
   tab_footnote(footnote = "HCV = Housing Choice Voucher, PH = Public housing", 
                locations = cells_row_groups(groups = "Program type")) %>%
-  tab_footnote(footnote = paste0("Health event data only available for those enrolled in Medicaid ",
-                                 "(N = ", number(nobs(anyexit_mcaid), big.mark = ","), ")"),
+  tab_footnote(footnote = paste0("Health event data only available for those aged <62 enrolled in Medicaid ",
+                                 "(N = ", number(model_mcaid_n[[1]], big.mark = ','), " for controls, ", 
+                                 number(model_mcaid_n[[2]], big.mark = ','), " for exits)"),
                locations = cells_stub(rows = group %in%
                                         c("Experienced 1+ crisis event in year prior to exit (incl. ED visits)",
                                           "Experienced 1+ ED visit in year prior to exit",
@@ -1272,7 +1307,7 @@ table_4_exit_regression <- table_4_exit_regression %>%
                locations = cells_row_groups(groups = "Race/ethnicity")) %>%
   tab_footnote(footnote = "HCV = Housing Choice Voucher, PH = Public housing", 
                locations = cells_row_groups(groups = "Program type")) %>%
-  tab_footnote(footnote = paste0("Health event data only available for those enrolled in Medicaid ",
+  tab_footnote(footnote = paste0("Health event data only available for those aged <62 enrolled in Medicaid ",
                                  "(N = ", number(sum(n_type_all_exits_mcaid$n[1]), big.mark = ","), "/",
                                  number(sum(n_type_all_exits_mcaid$n[2]), big.mark = ","), "/",
                                  number(sum(n_type_all_exits_mcaid$n[3]), big.mark = ","), 

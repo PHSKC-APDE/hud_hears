@@ -376,3 +376,7 @@ table2 <- table2 %>%
 
 
 table_2 <- table_formatter(table2)
+
+# Save output
+gtsave(table_2, filename = "bh_manuscript_table2.png",
+       path = file.path(here::here(), "analyses/behavioral"))

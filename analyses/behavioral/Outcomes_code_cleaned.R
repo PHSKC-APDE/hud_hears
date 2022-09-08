@@ -16,16 +16,10 @@
 options(scipen = 6, digits = 4, warning.length = 8170)
 
 if (!require("pacman")) {install.packages("pacman")}
-pacman::p_load(tidyverse, odbc, glue, data.table, DiagrammeR, DiagrammeRsvg, rsvg, dplyr, lubridate, MASS)
-#Need to load packages
-library(tidyverse)
-library(odbc)
-library(glue)
-library(data.table)
-# library(DiagrammeR)
-# library(DiagrammeRsvg)
-library(rsvg)
-library(lubridate)
+pacman::p_load(tidyverse, odbc, glue, data.table, scales, multgee, 
+               ggplot2, ggrepel, viridis, hrbrthemes, knitr, rmarkdown, flextable,
+               scales, gt)
+
 
 db_hhsaw <- DBI::dbConnect(odbc::odbc(),
                            driver = "ODBC Driver 17 for SQL Server",
@@ -145,8 +139,12 @@ WHERE m.source IS NOT NULL
 # First set DOES NOT include Medicaid events (crisis_any_before, crisis_num_before)
 # Second DOES include Medicaid events (crisis_any_mcaid_before, crisis_num_mcaid_before)
 
-crisis_count_before <- left_join(crisis_events_before %>% group_by(id_hudhears, exit_date) %>% summarize(crisis_num_mcaid_before=n_distinct(event_date)),
-                          crisis_events_before %>% filter(source != "mcaid") %>% group_by(id_hudhears, exit_date) %>% summarize(crisis_num_before=n_distinct(event_date)),
+crisis_count_before <- left_join(crisis_events_before %>% 
+                                   group_by(id_hudhears, exit_date) %>% 
+                                   summarize(crisis_num_mcaid_before=n_distinct(event_date)),
+                          crisis_events_before %>% filter(source != "mcaid") %>% 
+                            group_by(id_hudhears, exit_date) %>% 
+                            summarize(crisis_num_before=n_distinct(event_date)),
                           by=c("id_hudhears", "exit_date")) %>% 
   mutate(crisis_any_mcaid_before=ifelse(crisis_num_mcaid_before >=1, 1, 0), 
          crisis_any_before=ifelse(crisis_num_before >=1, 1, 0))
@@ -176,14 +174,17 @@ WHERE bh.from_date IS NOT NULL
 ")
 
 #Number of conditions by person (N=6878 with at least 1 condition)--Only includes Medicaid conditions
-condition_count_bh <- bh_conditions %>% group_by(id_hudhears, exit_date) %>% summarize(con_count=n_distinct(bh_conditions)) %>% mutate(any_cond=ifelse(con_count >=1, 1, 0))
+condition_count_bh <- bh_conditions %>% 
+  group_by(id_hudhears, exit_date) %>% 
+  summarize(con_count = n_distinct(bh_cond)) %>% 
+  ungroup() %>%
+  mutate(any_cond=ifelse(con_count >=1, 1, 0))
 
 ## Outpatient visits ----
 #Includes service minutes
 #Condition considered "managed" if client meets service hours for "medium" need in that month
 outpt_bh <- dbGetQuery(db_hhsaw,
                        "
-
 SELECT z.id_hudhears, z.exit_date, z.exit_category, d.event_date_mth, 
 d.event_date_yr, 'outpt' AS source, d.auth_no, d.program, d.event_date, d.service_minutes, d.description
 FROM
@@ -202,7 +203,7 @@ WHERE d.event_date IS NOT NULL
 # #No visits in 13 months before exit for these programs 
 # 
 outpt_hours <- outpt_bh %>% group_by(id_hudhears, event_date_mth, event_date_yr, auth_no) %>%
-mutate(month_hrs=(sum(service_minutes, na.rm=T)/60))
+  mutate(month_hrs=(sum(service_minutes, na.rm=T)/60))
 
 
 
@@ -227,20 +228,38 @@ mutate(month_hrs=(sum(service_minutes, na.rm=T)/60))
 ## Join all of the above with covariate table made by Alastair----
 
 #Read in covariate table for exits only
-control_match_covariate <- dbGetQuery(db_hhsaw, "SELECT *, DATEADD(year, -1, exit_date) as yr_before, DATEADD(year, 1, exit_date) AS yr_later FROM hudhears.control_match_covariate
-                                                 WHERE id_type = 'id_exit' AND exit_death = 0
-                                      ")
+control_match_covariate <- dbGetQuery(db_hhsaw, "SELECT *, 
+DATEADD(year, -1, exit_date) as yr_before, 
+DATEADD(year, 1, exit_date) AS yr_later 
+FROM hudhears.control_match_covariate WHERE id_type = 'id_exit' AND exit_death = 0")
+
+# Set up variables for filtering populations
+control_match_covariate <- control_match_covariate %>%
+  mutate(
+    # Flag people with coverage before and after exit
+    include_cov = full_cov_7_prior == T & full_cov_7_after == T,
+    include_cov_age = full_cov_7_prior == T & full_cov_7_after == T & age_at_exit < 62,
+    # Flag anyone with missing covariates since they will be dropped from the propensity scores
+    include_demog = (!(is.na(exit_category) | is.na(age_at_exit) | is.na(gender_me) | 
+                         is.na(race_eth_me) | race_eth_me == "Unknown" |
+                         is.na(agency) | is.na(single_caregiver) | 
+                         is.na(hh_size) | is.na(hh_disability) | is.na(housing_time_at_exit) | is.na(major_prog) | 
+                         is.na(kc_opp_index_score)))
+    )
+
 
 #Join control match covariate with NON MEDICAID CRISIS EVENTS----
 all_pop <-left_join(control_match_covariate, crisis_count, by=c("id_hudhears", "exit_date"))
 
 #fix number and indicator variable NOT INCLUDING Medicaid events (Set NAs to zero)
-all_pop <- all_pop %>% mutate(crisis_any=ifelse(is.na(crisis_any), 0,crisis_any))%>% mutate(crisis_num=ifelse(is.na(crisis_num), 0,crisis_num))
+all_pop <- all_pop %>% 
+  mutate(crisis_any = ifelse(is.na(crisis_any), 0, crisis_any),
+         crisis_num = ifelse(is.na(crisis_num), 0, crisis_num))
 
 #fix number and indicator variable for crises INCLUDING Medicaid events
 #Only include individuals who have full coverage 7 months before and after exit, everyone else is set to NA
 all_pop <- all_pop %>%
-  mutate(crisis_any_mcaid = case_when(is.na(crisis_any_mcaid) & full_cov_7_prior == T & full_cov_7_after == T ~ 0L,
+  mutate(crisis_any_mcaid = case_when(is.na(crisis_any_mcaid) & include_cov == T ~ 0L,
                                       full_cov_7_prior == F | full_cov_7_after == F ~ NA_integer_,
                                       TRUE ~ as.integer(crisis_any_mcaid)),
          crisis_num_mcaid = case_when(is.na(crisis_num_mcaid) ~ 0L,
@@ -251,12 +270,14 @@ all_pop <- all_pop %>%
 all_pop <-left_join(all_pop, crisis_count_before, by=c("id_hudhears", "exit_date"))
 
 #fix number and indicator variable NOT INCLUDING Medicaid events (Set NAs to zero)
-all_pop <- all_pop %>% mutate(crisis_any_before=ifelse(is.na(crisis_any_before), 0,crisis_any_before))%>% mutate(crisis_num_before=ifelse(is.na(crisis_num_before), 0,crisis_num_before))
+all_pop <- all_pop %>% 
+  mutate(crisis_any_before = ifelse(is.na(crisis_any_before), 0, crisis_any_before),
+         crisis_num_before = ifelse(is.na(crisis_num_before), 0, crisis_num_before))
 
 #fix number and indicator variable for crises INCLUDING Medicaid events
 #Only include individuals who have full coverage 7 months before and after exit, everyone else is set to NA
 all_pop <- all_pop %>%
-  mutate(crisis_any_mcaid_before = case_when(is.na(crisis_any_mcaid_before) & full_cov_7_prior == T & full_cov_7_after == T ~ 0L,
+  mutate(crisis_any_mcaid_before = case_when(is.na(crisis_any_mcaid_before) & include_cov == T ~ 0L,
                                       full_cov_7_prior == F | full_cov_7_after == F ~ NA_integer_,
                                       TRUE ~ as.integer(crisis_any_mcaid_before)),
          crisis_num_mcaid_before = case_when(is.na(crisis_num_mcaid_before) ~ 0L,
@@ -267,7 +288,7 @@ all_pop <- all_pop %>%
 #Only include individuals who have full coverage 7 months before and after exit, everyone else is set to NA
 all_pop <-left_join(all_pop, condition_count_bh, by=c("id_hudhears", "exit_date"))
 all_pop <- all_pop %>% 
-  mutate(any_cond= case_when(is.na(any_cond) & full_cov_7_prior == T & full_cov_7_after == T ~ 0L,
+  mutate(any_cond = case_when(is.na(any_cond) & include_cov == T ~ 0L,
                                       full_cov_7_prior == F | full_cov_7_after == F ~ NA_integer_,
                                       TRUE ~ as.integer(any_cond)),
          condition_count_bh = case_when(is.na(con_count) ~ 0L,

@@ -1,213 +1,378 @@
-## HUD HEARS Behavioral Health Exit Type Regression Code ----
-#Code updated on 05/02/2022
-#Author: Megan Suter 
+## HUD HEARS Behavioral Health Exit Type Regression Code
+#Code updated on September 7, 2022
+#Author: Megan Suter
+
+
 
 #Code Purpose: Run regression models for exit type and BH analysis
 #NOTE: behavioral health conditions and Medicaid ED visits are based on Medicaid
-# data. Those included in this sample have 7 months or greater of full Medicaid coverage 
+# data. Those included in this sample have 7 months or greater of full Medicaid coverage
 # before and after date of exit
+
+
 
 #Run after file "Outcomes_code_cleaned.R"
 
 
-#Preliminary Models (With covariate adjustment)----
+# Data Prep ----
 #Set  unknown race==missing
-all_pop <- all_pop %>% mutate(race_eth_me = ifelse(race_eth_me=="Unknown", NA, race_eth_me))
-#Change exit category to a factor variable
-all_pop$exit_category <- as.factor(all_pop$exit_category)
+all_pop <- all_pop %>% 
+  # Remove people with missing variables since they aren't in the model
+  filter(include_demog == T) %>%
+  # Change exit category to a factor variable
+         mutate(across(c("gender_me", "major_prog", "exit_category"), ~ as_factor(.)),
+         race_eth_me = fct_relevel(race_eth_me, c("White")))
 
-###Run models that include all, regardless of Medicaid status----
-
-####Unadjusted model----
-model1 <-glm(crisis_any ~ exit_category, family="binomial", data=all_pop)
-exp(cbind(OR = coef(model1), confint(model1)))
-
-####Covariate adjustment----
-model2 <- glm(crisis_any ~ exit_category + gender_me + age_at_exit + race_eth_me  + hh_size + single_caregiver + housing_time_at_exit + reg_care,  family="binomial", data=all_pop)
-exp(cbind(OR = coef(model2), confint(model2)))
-
-##Add in adjustment for prior BH crisis (not including Medicaid)
-model3 <- glm(crisis_any ~ exit_category + gender_me + age_at_exit + race_eth_me  + hh_size + single_caregiver + housing_time_at_exit + reg_care + crisis_any_before,  family="binomial", data=all_pop)
-exp(cbind(OR = coef(model3), confint(model3)))
-
-##MCAID coverage preliminary models that include subset with medicaid coverage 7 months before and after----
-mcaid_subset7mo <- all_pop %>% filter(full_cov_7_prior==T & full_cov_7_after==T)
-
-####Unadjusted model----
-model11 <-glm(crisis_any_mcaid ~ exit_category, family="binomial", data=mcaid_subset7mo)
-exp(cbind(OR = coef(model11), confint(model11)))
-
-####Covariate adjustment----
-model22 <- glm(crisis_any_mcaid ~ exit_category + gender_me + age_at_exit + race_eth_me  + hh_size + single_caregiver + housing_time_at_exit + reg_care + crisis_any_mcaid_before,  family="binomial", data=mcaid_subset7mo)
-exp(cbind(OR = coef(model22), confint(model22)))
-
-###Covariate adjustment + BH conditions
-model33 <- glm(crisis_any_mcaid ~ exit_category + gender_me + age_at_exit + race_eth_me  + hh_size + single_caregiver + housing_time_at_exit + reg_care + crisis_any_mcaid_before +any_cond,  family="binomial", data=mcaid_subset7mo)
-exp(cbind(OR = coef(model33), confint(model33)))
-
-##Add in adjustment for prior BH crisis (not including Medicaid)
-model44 <- glm(crisis_any ~ exit_category + gender_me + age_at_exit + race_eth_me  + hh_size + single_caregiver + housing_time_at_exit + reg_care + crisis_any_mcaid_before + any_cond,  family="binomial", 
-               data=mcaid_subset7mo[(mcaid_subset7mo$gender_me != "Multiple" & mcaid_subset7mo$race_eth_me !="NH/PI"),])
-exp(cbind(OR = coef(model44), confint(model44)))
+# Set up numeric IDs for households
+# Needed for geeglm to work properly
+hh_ids <- all_pop %>% filter(!is.na(hh_id_kc_pha)) %>%
+  distinct(hh_id_kc_pha) %>%
+  arrange(hh_id_kc_pha) %>%
+  mutate(id_hh = row_number())
 
 
-# ##association between any condition and exit type
-# model3 <-polr(exit_category ~ any_condition, data=all_pop, Hess=T)
-# exp(cbind(OR = coef(model3), confint(model3)))
-# 
-# ##Checking association between routine care and exit type
-# model4 <-polr(exit_category ~ reg_care, data=all_pop, Hess=T)
-# exp(cbind(OR = coef(model4), confint(model4)))
-
-#Check association between prior event and bh condition
-
-# model5 <- glm(crisis_any_mcaid_before ~ any_cond,
-#               family="binomial", 
-#               data=mcaid_subset7mo[(mcaid_subset7mo$gender_me != "Multiple" & mcaid_subset7mo$race_eth_me !="NH/PI"),])
-# exp(cbind(OR = coef(model5), confint(model5)))
-
-#Model with propensity score matching----
-library(multgee)
-library(geepack)
-##Models not including Medicaid ED visits ----
-
-### 1a) First, fit the multinomial logistic regression model, using GEE ----
-
-##### Remove anyone with missing variables-----
-all_pop2<- all_pop %>%
-  filter(!(is.na(exit_category) | is.na(gender_me) | is.na(age_at_exit) |
-             is.na(race_eth_me) | race_eth_me == "Unknown" | is.na(hh_size) | is.na(single_caregiver) |
-             is.na(housing_time_at_exit) | is.na(reg_care) | is.na(crisis_any_before)
-             ))
-
-##### Fit the multinomial logistic regression model, using GEE----
-ps_mod <- nomLORgee(formula = exit_category ~ gender_me + age_at_exit + race_eth_me + hh_size
-                    + single_caregiver + housing_time_at_exit + reg_care + crisis_any_before,
-                    data = all_pop2,
-                    id = hh_id_kc_pha,
-                    LORstr = "independence")
-
-##### Next, calculate generalized propensity scores----
-ps <- as.data.frame(fitted(ps_mod))
-colnames(ps) <- c("Negative", "Neutral", "Positive")
-ps <- cbind("id_hudhears" = all_pop2$id_hudhears, ps)
+all_pop <- all_pop %>%
+  left_join(., hh_ids, by = "hh_id_kc_pha")
 
 
-### 1b) Then, calculate inverse weights and assign to each observation  ----
-all_pop2 <- all_pop2 %>%
-  left_join(., ps, by = "id_hudhears") %>%
-  mutate(iptw = case_when(exit_category == "Neutral" ~ 1/Neutral,
-                          exit_category == "Negative" ~ 1/Negative,
-                          exit_category == "Positive" ~ 1/Positive))
-
-### 1c) Finally, fit model----
-# This model does not account for clustering by household
-
-#Change referent category
-all_pop2$exit_category <- relevel(all_pop2$exit_category, ref="Negative")
-no_mcaid_neutral <- glm(crisis_any ~ exit_category, 
-                        family=quasibinomial, data=all_pop2, weights=iptw, id = hh_id_kc_pha)
-exp(cbind(OR = coef(no_mcaid_neutral), confint(no_mcaid_neutral)))
+# MCAID coverage preliminary models that include subset with medicaid coverage 7/12 months before and after and age restriction
+mcaid_subset7mo <- all_pop %>% filter(include_cov_age == T)
 
 
-#This model includes everyone, but no Medicaid ED visit
-no_mcaid <- glm(crisis_any ~ exit_category + exit_category*reg_care, 
-                 family=quasibinomial, data=all_pop2, weights=iptw)
-exp(cbind(OR = coef(no_mcaid), confint(no_mcaid)))
+# Summary table of outcomes ----
+## Functions to make and format tables
+summarizer <- function(df,
+                       outcome = c("all", "mcaid"),
+                       ...) {
+    # Set things up to select in pivot_ functions
+  # There is probably a better way to do this but it works
+  col_names <- df %>% dplyr::select(...) %>% colnames()
+  
+  outcome <- match.arg(outcome)
+  
+  if (outcome == "all") {
+    cat_text <- "Crisis events (excl. Medicaid ED visits)"
+    output <- df %>% 
+      distinct(id_hudhears, exit_date, ..., crisis_num, crisis_any) %>%
+      mutate(cnt = crisis_num, any = crisis_any)
+  } else if (outcome == "mcaid") {
+    cat_text <- "Crisis events (inc. Medicaid ED visits)"
+    output <- df %>% 
+      distinct(id_hudhears, exit_date, ..., crisis_num_mcaid, crisis_any_mcaid) %>%
+      mutate(cnt = crisis_num_mcaid, any = crisis_any_mcaid)
+  }
+  
+  output <- output %>%
+    group_by(...) %>%
+    summarise(n = number(n(), big.mark = ","), 
+              any = scales::percent(mean(any, na.rm = T), accuracy = 0.1),
+              visit_mean = round(mean(cnt * 100, na.rm = T), 1), 
+              vist_med = median(cnt, na.rm = T),
+              visit_range = paste0(min(cnt, na.rm = T), "-", max(cnt, na.rm = T))) %>%
+    pivot_longer(cols = !col_names, values_transform = list(value = as.character)) %>%
+    pivot_wider(id_cols = "name", names_from = col_names) %>%
+    mutate(category = cat_text, .before = "name",
+           name = case_when(name == "any" ~ "Proportion with 1+ crisis event",
+                             name == "visit_mean" ~ "Mean number crisis events (per 100)",
+                             name == "vist_med" ~ "Median number events",
+                             name == "visit_range" ~ "Range of crisis event numbers",
+                             TRUE ~ name)) %>%
+    rename("group" = "name")
+  
+  output
+}
 
-
-#This model includes Medicaid pop only, but NO Medicaid ED visits
-no_mcaid_fullcov <- glm(crisis_any ~ exit_category, 
-                family=quasibinomial, 
-                data=all_pop2[(all_pop2$full_cov_7_prior== T & all_pop2$full_cov_7_after ==T),], 
-                weights=iptw)
-exp(cbind(OR = coef(no_mcaid_fullcov), confint(no_mcaid_fullcov)))
-
-#Change referent category
-all_pop2$exit_category <- relevel(all_pop2$exit_category, ref="Neutral")
-no_mcaid_neutral <- glm(crisis_any ~ exit_category, 
-                family=quasibinomial, data=all_pop2, weights=iptw)
-exp(cbind(OR = coef(no_mcaid_neutral), confint(no_mcaid_neutral)))
+## Make table ----
+descriptive <- bind_rows(summarizer(all_pop, outcome = "all", exit_category),
+                         summarizer(mcaid_subset7mo, outcome = "mcaid", exit_category))
 
 
 
+# REGRESSION MODEL: EXCLUDING MCAID ----
+## Crude ----
+any_crude <- geepack::geeglm(crisis_any ~ exit_category, 
+                            data = all_pop,
+                            id = id_hh,
+                            family = "binomial")
 
-              
-#Repeat propensity score models with Medicaid Coverage group ----
+summary(any_crude)
+broom::tidy(any_crude, conf.int = TRUE, exponentiate = T)
 
-##This version DOES NOT adjust for BH conditions
+## Adjusted ----
+# Multiple categories model (use this)
+any_adj <- geepack::geeglm(crisis_any ~ exit_category + gender_me + age_at_exit + race_eth_me  + 
+                                  hh_size + single_caregiver + housing_time_at_exit + major_prog + 
+                                  hh_disability + kc_opp_index_score + crisis_any_before, 
+                               data = all_pop, 
+                               id = id_hh,
+                               family = "binomial")
 
-### 1a) First, fit the multinomial logistic regression model, using GEE ----
-
-##### Remove anyone with missing variables-----
-
-mcaid_subset7mo2<- mcaid_subset7mo %>%
-  filter(!(is.na(exit_category) | is.na(gender_me) | is.na(age_at_exit) |
-             is.na(race_eth_me) | race_eth_me == "Unknown" | is.na(hh_size) | is.na(single_caregiver) |
-             is.na(housing_time_at_exit) | is.na(reg_care) | is.na (any_cond)) | is.na (crisis_any_mcaid_before))
-
-##### Fit the multinomial logistic regression model, using GEE----
-ps_mod2 <- nomLORgee(formula = exit_category ~ gender_me + age_at_exit + race_eth_me + hh_size
-                    + single_caregiver + housing_time_at_exit + reg_care + any_cond + crisis_any_mcaid_before,
-                    data = mcaid_subset7mo2,
-                    id = hh_id_kc_pha,
-                    LORstr = "independence")
-
-##### Next, calculate generalized propensity scores----
-ps2 <- as.data.frame(fitted(ps_mod2))
-colnames(ps2) <- c("Negative", "Neutral", "Positive")
-ps2 <- cbind("id_hudhears" = mcaid_subset7mo2$id_hudhears, ps2)
+summary(any_adj)
+broom::tidy(any_adj, conf.int = TRUE, exponentiate = T) %>% as.data.frame()
 
 
-### 1b) Then, calculate inverse weights and assign to each observation  ----
-mcaid_subset7mo2 <- mcaid_subset7mo2 %>%
-  left_join(., ps2, by = "id_hudhears") %>%
-  mutate(iptw2 = case_when(exit_category == "Neutral" ~ 1/Neutral,
-                          exit_category == "Negative" ~ 1/Negative,
-                          exit_category == "Positive" ~ 1/Positive))
+# Poisson model (not being used but just for interest's sake)
+any_adj_pois <- geepack::geeglm(crisis_num ~ exit_category + gender_me + age_at_exit + race_eth_me  + 
+                                  hh_size + single_caregiver + housing_time_at_exit + major_prog + 
+                                  hh_disability + kc_opp_index_score  + crisis_any_before, 
+                               data = all_pop, 
+                               id = id_hh,
+                               family = "poisson")
 
-### 1c) Finally, fit model----
-# This model does not account for clustering by household
-#Change referent category
-mcaid_subset7mo2$exit_category <- relevel(mcaid_subset7mo2$exit_category, ref="Negative")
-no_mcaid_neutral <- glm(crisis_any ~ exit_category, 
-                        family=quasibinomial, data=a, weights=iptw)
-exp(cbind(OR = coef(no_mcaid_neutral), confint(no_mcaid_neutral)))
-mcaid <- glm(crisis_any ~ exit_category, 
-                family=quasibinomial, mcaid_subset7mo2, weights=iptw2)
-exp(cbind(OR = coef(mcaid), confint(mcaid)))
-
-#Note this model is not working !
-#mcaid2 <-geepack::geeglm(formula = crisis_any ~ exit_category,
-                           # weights = iptw2,
-                           # data = mcaid_subset7mo2,
-                           # id=hh_id_kc_pha,
-                           # family = "binomial")
+summary(any_adj_pois)
+broom::tidy(any_adj_pois, conf.int = TRUE, exponentiate = T) %>% as.data.frame()
 
 
-#Now calculate Medicaid subset, not adjustinhg for BH conditions, but including ED outcomes
-mcaid_subset7mo2<- mcaid_subset7mo %>%
-  filter(!(is.na(exit_category) | is.na(gender_me) | is.na(age_at_exit) |
-             is.na(race_eth_me) | race_eth_me == "Unknown" | is.na(hh_size) | is.na(single_caregiver) |
-             is.na(housing_time_at_exit) | is.na(reg_care) | is.na (crisis_any_mcaid_before)))
+## Stratified by prior crisis (not using these at this time) ----
+# No prior BH crises
+any_stat_no_prior <- geepack::geeglm(crisis_any ~ exit_category + gender_me + age_at_exit + race_eth_me  + 
+                                       hh_size + single_caregiver + housing_time_at_exit + major_prog + 
+                                       hh_disability + kc_opp_index_score, 
+                                     data = all_pop[all_pop$crisis_any_before == 0, ], 
+                                     id = id_hh,
+                                     family = "binomial")
 
-##### Fit the multinomial logistic regression model, using GEE----
-ps_mod2 <- nomLORgee(formula = exit_category ~ gender_me + age_at_exit + race_eth_me + hh_size
-                     + single_caregiver + housing_time_at_exit + reg_care + crisis_any_mcaid_before,
-                     data = mcaid_subset7mo2,
-                     id = hh_id_kc_pha,
-                     LORstr = "independence")
+summary(any_stat_no_prior)
+broom::tidy(any_stat_no_prior, conf.int = TRUE, exponentiate = T) %>% as.data.frame()
 
-##### Next, calculate generalized propensity scores----
-ps2 <- as.data.frame(fitted(ps_mod2))
-colnames(ps2) <- c("Negative", "Neutral", "Positive")
-ps2 <- cbind("id_hudhears" = mcaid_subset7mo2$id_hudhears, ps2)
+# Prior BH crises
+any_stat_prior <- geepack::geeglm(crisis_any ~ exit_category + gender_me + age_at_exit + race_eth_me  + 
+                                       hh_size + single_caregiver + housing_time_at_exit + major_prog + 
+                                       hh_disability + kc_opp_index_score, 
+                                     data = all_pop[all_pop$crisis_any_before == 1, ], 
+                                     id = id_hh,
+                                     family = "binomial")
+
+summary(any_stat_prior)
+broom::tidy(any_stat_prior, conf.int = TRUE, exponentiate = T) %>% as.data.frame()
 
 
-### 1b) Then, calculate inverse weights and assign to each observation  ----
-mcaid_subset7mo2 <- mcaid_subset7mo2 %>%
-  left_join(., ps2, by = "id_hudhears") %>%
-  mutate(iptw2 = case_when(exit_category == "Neutral" ~ 1/Neutral,
-                           exit_category == "Negative" ~ 1/Negative,
-                           exit_category == "Positive" ~ 1/Positive))
 
+# REGRESSION MODEL: INCLUDING MCAID ----
+## Crude ----
+mcaid_crude <- geepack::geeglm(crisis_any_mcaid ~ exit_category, 
+                             data = mcaid_subset7mo,
+                             id = id_hh,
+                             family = "binomial")
+
+summary(mcaid_crude)
+broom::tidy(mcaid_crude, conf.int = TRUE, exponentiate = T)
+
+## Adjusted ----
+# Multiple categories model (use this)
+mcaid_adj <- geepack::geeglm(crisis_any_mcaid ~ exit_category + gender_me + age_at_exit + race_eth_me  + 
+                             hh_size + single_caregiver + housing_time_at_exit + major_prog + 
+                             hh_disability + kc_opp_index_score + crisis_any_mcaid_before, 
+                           data = mcaid_subset7mo, 
+                           id = id_hh,
+                           family = "binomial")
+
+summary(mcaid_adj)
+broom::tidy(mcaid_adj, conf.int = TRUE, exponentiate = T) %>% as.data.frame()
+
+
+# Poisson model (not being used but just for interest's sake)
+mcaid_adj_pois <- geepack::geeglm(crisis_num_mcaid ~ exit_category + gender_me + age_at_exit + race_eth_me  + 
+                                  hh_size + single_caregiver + housing_time_at_exit + major_prog + 
+                                  hh_disability + kc_opp_index_score + crisis_any_mcaid_before, 
+                                data = mcaid_subset7mo, 
+                                id = id_hh,
+                                family = "poisson")
+
+summary(mcaid_adj_pois)
+broom::tidy(mcaid_adj_pois, conf.int = TRUE, exponentiate = T) %>% as.data.frame()
+
+
+
+# MAKE TABLES FOR MANUSCRIPT ----
+# Constants
+c_col = c("#1e3048", "#274060", "#2f5375", "#4073a0", "#5088b9")
+
+# Function for formatting
+# Adapted from here: https://towardsdatascience.com/create-flawless-tables-from-your-dataframe-ready-for-publication-7e3fe2d63a52
+table_formatter <- function(tbl) {
+  output <- tbl %>%
+    tab_options(table.font.name = "Optima",
+                table.font.color = c_col[1],
+                table.border.top.style = "none",
+                table.border.bottom.style = "solid",
+                table.border.bottom.color = c_col[2],
+                table.border.bottom.width = px(3),
+                column_labels.border.top.color = "white",
+                column_labels.border.top.width = px(3),
+                column_labels.border.bottom.color = c_col[2],
+                column_labels.border.bottom.width = px(3),
+                data_row.padding = px(1),
+                footnotes.font.size = px(10)
+    ) %>%
+    tab_style(style = list(
+      cell_text(size = px(11))),
+      locations = list(cells_body(gt::everything()))
+    ) %>% 
+    tab_style(style = list(
+      cell_text(size = px(14),
+                color = "#2f5375",
+                font = "Mangal")),
+      locations = list(cells_column_labels(everything()),
+                       cells_column_spanners(everything()))
+    ) %>% 
+    tab_style(
+      style = "padding-left:10px;padding-right:10px;",
+      locations = cells_column_spanners()
+    ) %>%
+    tab_style(style = list(
+      cell_text(size = px(14),
+                color = "#2f5375",
+                font = "Mangal"),
+      cell_borders(sides = c("bottom"),
+                   style = "solid",
+                   color = c_col[1],
+                   weight = px(2))),
+      locations = list(cells_row_groups(gt::everything()))
+    ) %>% 
+    tab_style(style = list(
+      cell_text(size = px(12),
+                color = "#2f5375",
+                font = "Mangal"),
+      cell_borders(sides = c("bottom", "right"),
+                   style = "solid",
+                   color = "white",
+                   weight = px(1))),
+      locations = list(
+        cells_stub(gt::everything()),
+        cells_stubhead())
+    ) %>% 
+    tab_style(style = list(
+      cell_text(font = "Mangal", 
+                size = px(12), 
+                color = "#2f5375")),
+      location = list(cells_body(columns = c("group")))
+    )
+  
+  output
+}
+
+
+table_regression <- function(tbl, type = c("all", "mcaid")) {
+  # Do some basic setup
+  output <- tbl %>%
+    rename(group = term) %>%
+    mutate(estimate = as.character(number(estimate, accuracy = 0.01)),
+           p.value = case_when(p.value < 0.001 ~ "<0.001",
+                               p.value < 0.01 ~ "0.01",
+                               p.value < 0.05 ~ "<0.05",
+                               TRUE ~ as.character(round(p.value, 3))),
+           ci = paste0(number(conf.low, accuracy = 0.01), "–", 
+                       number(conf.high, accuracy = 0.01))) %>%
+    select(group, estimate, ci, p.value)
+  
+  if (type == "all") {
+    output <- output %>%
+      rename(estimate_all = estimate,
+             ci_all = ci,
+             p_all = p.value)
+  } else if (type == "mcaid") {
+    output <- output %>%
+      mutate(group = ifelse(group == "crisis_any_mcaid_before", 
+                            "crisis_any_before",
+                            group)) %>%
+      rename(estimate_mcaid = estimate,
+             ci_mcaid = ci,
+             p_mcaid = p.value)
+  }
+  
+  output
+}
+
+
+# TABLE 1: DESCRIPTIVE STATS (CURRENTLY ONLY OUTCOMES) ----
+# Turn into a gt table and make pretty
+descriptive <- descriptive %>%
+  select(category, group, Positive, Neutral, Negative) %>%
+  gt(groupname_col = "category", rowname_col = "group")
+
+descriptive <- table_formatter(descriptive)
+
+# Save output
+gtsave(descriptive, filename = "bh_manuscript_table1.png",
+       path = file.path(here::here(), "analyses/behavioral"))
+
+
+# TABLE 2: REGRESSION OUTPUT ----
+# Do some basic setup
+any_model <- broom::tidy(any_adj, conf.int = TRUE, exponentiate = T) %>% as.data.frame()
+any_model <- table_regression(any_model, type = "all")
+
+mcaid_model <- broom::tidy(mcaid_adj, conf.int = TRUE, exponentiate = T) %>% as.data.frame()
+mcaid_model <- table_regression(mcaid_model, type = "mcaid")
+
+
+table2 <- left_join(any_model, mcaid_model, by = "group") %>%
+  mutate(order = 2L,
+         category = case_when(str_detect(group, "exit_category") ~ "Exit category",
+                              str_detect(group, "age_") ~ "Age",
+                              str_detect(group, "gender_") ~ "Gender",
+                              str_detect(group, "race_") ~ "Race/ethnicity",
+                              str_detect(group, "^los|housing_time") ~ "Time in housing",
+                              group %in% c("hh_size", "single_caregiver", "hh_disability",
+                                           "kc_opp_index_score") ~ "Household characteristics",
+                              str_detect(group, "major_prog") ~ "Program type",
+                              str_detect(group, "before") ~ "Existing behavioral health"))
+
+# Make and bind the reference rows
+ref_rows <- data.frame(category = c("Exit category", "Gender", "Race/ethnicity", "Program type"),
+                       group = c("exit_categoryNuetral", "gender_meFemale", 
+                                 "race_eth_meWhite", "major_progHCV"),
+                       estimate_all = rep("ref", 4), 
+                       estimate_mcaid = rep("ref", 4),
+                       order = rep(1L, 4))
+
+
+table2 <- bind_rows(table2, ref_rows) %>%
+  mutate(cat_order = case_when(category == "Exit category" ~ 1L,
+                               category == "Age" ~ 2L,
+                               category == "Gender" ~ 3L,
+                               category == "Race/ethnicity" ~ 4L,
+                               category == "Time in housing" ~ 5L,
+                               category == "Household characteristics" ~ 6L,
+                               category == "Program type" ~ 7L,
+                               category == "Existing behavioral health" ~ 8L),
+         group_order = case_when(group %in% c("hh_size") ~ 1L,
+                                 group %in% c("single_caregiver") ~ 2L,
+                                 group %in% c("hh_disability") ~ 3L,
+                                 group %in% c("kc_opp_index_score") ~ 4L)) %>%
+  arrange(cat_order, order, group_order, group) %>%
+  filter(group != "(Intercept)") %>%
+  select(-ends_with("order")) %>%
+  mutate(group = case_when(group == "housing_time_at_exit" ~ "Years in housing",
+                           group == "hh_size" ~ "Household size",
+                           group == "single_caregiver" ~ "Single caregiver",
+                           group == "hh_disability" ~ "HoH disability",
+                           group == "kc_opp_index_score" ~ "Neighborhood opportunity",
+                           group == "age_at_exit" ~ "Age at exit (years)",
+                           str_detect(group, "before") ~ "Prior crisis events",
+                           TRUE ~ str_remove(group, "age_grp|gender_me|los|major_prog|race_eth_me|exit_category")))
+
+# Turn into gt table
+table2 <- table2 %>%
+  gt(groupname_col = "category", rowname_col = "group") %>%
+  tab_spanner(label = md("All exits"), columns = ends_with("_all")) %>%
+  tab_spanner(label = md("Medicaid subset"), columns = ends_with("_mcaid")) %>%
+  cols_label(category = md("Category"),
+             group = md("Group"),
+             estimate_all = md("Odds ratio"),
+             ci_all = md("95% CI"),
+             p_all = md("p-value"),
+             estimate_mcaid = md("Odds ratio"),
+             ci_mcaid = md("95% CI"),
+             p_mcaid = md("p-value")) %>%
+  tab_footnote(footnote = "AI/AN = American Indian/Alaskan Native, NH/PI = Native Hawaiian/Pacific Islander", 
+               locations = cells_row_groups(groups = "Race/ethnicity")) %>%
+  tab_footnote(footnote = "HoH = Head of household", 
+               locations = cells_stub(rows = str_detect(group, "HoH"))) %>%
+  tab_footnote(footnote = "HCV = Housing Choice Voucher, PH = Public housing", 
+               locations = cells_row_groups(groups = "Program type")) %>%
+  sub_missing()
+
+
+table_2 <- table_formatter(table2)

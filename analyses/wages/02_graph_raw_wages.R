@@ -45,14 +45,14 @@
         ggsave(paste0(outputdir, '/pdf/', plot.name, ".pdf"),
                plot = plot.object, 
                dpi=600, 
-               width = 6.5, 
-               height = 6.5, 
+               width = 6, 
+               height = 4, 
                units = "in") 
         ggsave(paste0(outputdir, '/png/', plot.name, ".png"),
                plot = plot.object, 
                dpi=600, 
-               width = 6.5, 
-               height = 6.5, 
+               width = 6, 
+               height = 4, 
                units = "in") 
       }
 

@@ -220,7 +220,7 @@
 
 # Identify confounders (associated with exposure and outcome) ----
     # remove wage / ami since they are the outcomes of interest ----
-      exposure.associated <- setdiff(exposure.associated, c('wage', 'percent_ami', "wage_hourly", "hrs"))
+      exposure.associated <- setdiff(exposure.associated, c('wage', 'percent_ami', "wage_hourly", "hrs", "race_gender"))
       pscovariates <- copy(exposure.associated) # keep a copy if want to create propensity score
       
     # split categorical from continuous ----

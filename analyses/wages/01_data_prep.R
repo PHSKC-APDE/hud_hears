@@ -270,6 +270,12 @@
       demographics <- unique(demographics)
       demographics[, geo_countyfp10 := "033"] # all PHA clients must live in KC
 
+      for(GG in c("Female", "Male")){
+        for(RR in unique(demographics$race_eth_me)){
+          demographics[gender_me == GG & race_eth_me == RR, race_gender := paste(RR, GG)]
+        }
+      }
+      
     # Opportunity index (opportunity) ----
       # Not needed because it is already included in the demographic data
         # opportunity[, geo_tractce10 := substrRight(as.character(GEOID10), 1, 6)]  
@@ -282,12 +288,19 @@
 # Merge main datasets ----
     # merge crosswalk onto exits to get id_esd (create 'combo')----
         combo <- merge(exits, xwalk, by = "id_hudhears", all.x = T, all.y = F)
+      
+        # merge on age to identify who is not able to merge
+        combo <- merge(combo, demographics[, .(id_hudhears, tempage = age_at_exit)], by = "id_hudhears", all.x = T, all.y = F)
         
         missing_id_esd = rads::round2(100*nrow(combo[is.na(id_esd)])/nrow(combo), 0)
         if(missing_id_esd > 5){warning(paste0(
           "After merging the xwalk table onto the exit data, ", missing_id_esd, "% of the rows are missing an `id_esd`.
           These rows will be dropped from the analysis."
         ))}
+        
+        combo.not.matched <- combo[is.na(id_esd)]
+        consort05_side_match_id_not_working_age = nrow(combo.not.matched[tempage <= 14 | tempage >= 65 ])
+        consort05_side_match_id_working_age = nrow(combo.not.matched[tempage %between% c(15, 64) ])
         
         combo <- combo[!is.na(id_esd)] # only keep if was able to merge on id_esd
         
@@ -496,7 +509,7 @@
     combo <- combo[, .(hh_id_kc_pha, id_kc_pha, 
                       exit, exit_category, exit_date, exit_year = year(exit_date), exit_qtr, qtr, qtr_date,
                       wage, hrs, wage_hourly, ami, percent_ami, opportunity_index = kc_opp_index_score,
-                      race_eth_me, gender_me, age_at_exit, hh_size, hh_disability, n_disability, 
+                      race_eth_me, gender_me, race_gender, age_at_exit, hh_size, hh_disability, n_disability, 
                       single_caregiver, housing_time_at_exit, 
                       agency, major_prog, subsidy_type, exit_reason_clean)]
 

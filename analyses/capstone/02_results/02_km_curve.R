@@ -14,7 +14,7 @@
 ##
 
 # set working directory (for output of plots- to utilize more easily)
-setwd("~/GitHub/hud_hears/analyses/capstone/02_results")
+output_path <- paste0(here::here(), "/analyses/capstone/02_results/")
 
 # SET OPTIONS AND BRING IN PACKAGES ----
 options(scipen = 6, digits = 4, warning.length = 8170)
@@ -72,7 +72,7 @@ km_exit_type$cumevents <- km_exit_type$cumevents +
   labs(x = "")
 
 # plot object
-png(file = "KM_curve.png", width = 600, height = 800)
+png(file = paste0(output_path, "KM_curve.png"), width = 600, height = 800)
 km_exit_type
 dev.off()
 
@@ -109,7 +109,7 @@ km_exit_type_pha <- ggsurvplot(fit_exit_type_pha, data = tth_data,
                               gg_theme = theme_bw())
 
 # plot object
-png(file = "KM_curve_pha.png", width = 600, height = 450)
+png(file = paste0(output_path, "KM_curve_pha.png"), width = 600, height = 450)
 km_exit_type_pha
 dev.off()
 
@@ -136,7 +136,7 @@ km_exit_type_pha_facet <- ggsurvplot(fit_exit_type, data = tth_data,
                                     censor.size = 4,
                                     gg_theme = theme_bw())
 
-png(file = "KM_curve_pha_facet.png", width = 600, height = 450)
+png(file = paste0(output_path, "KM_curve_pha_facet.png"), width = 600, height = 450)
 km_exit_type_pha_facet
 dev.off()
 #---

@@ -54,7 +54,7 @@ df <- setDT(DBI::dbGetQuery(conn = db_hhsaw, "SELECT * FROM [hudhears].[capstone
 ## tt_homeless, event
 ##
 ## ----------------------------------------------------------------------------
-# 1. Adjust labels and values of variables to make descriptive statistics look better
+## 1. Adjust labels and values of variables to make descriptive statistics look better ----
 # Create df.table so original data is not altered
 df.table <- df
 
@@ -88,7 +88,7 @@ label(df.table$event) <- "Censored"
 label(df.table$kc_opp_index_score) <- "Opportunity index score"
 
 ## -----------------------------------------------------------------------
-# 2. Make table 1
+## 2. Make table 1 ----
 # How to use table1:
 # table1(~ "variables to see in rows, separated by +" | "variables to see in columns",
 #        data = "desired data")
@@ -121,7 +121,7 @@ table1(~tt_homeless+event+gender_me+race_eth_me+age_at_exit+housing_time_at_exit
 ## exit_reason_clean, exit_category
 ##
 ## ----------------------------------------------------------------------------
-# 1. Select variables that needs to be explored
+## 1. Select variables that needs to be explored ----
 # Create df.miss so original data is not altered
 df.miss <- df 
 
@@ -138,8 +138,9 @@ df.miss <- rename(df.miss, c(opp_score=kc_opp_index_score,
                              single_care=single_caregiver,
                              exit_reason=exit_reason_clean))
 
+
 # -----------------------------------------------------------------------------
-# 2. Create plot (2 plots in one)
+## 2. Create plot (2 plots in one) ----
 aggr_plot <- aggr(df.miss,
                   col=c("navyblue","red"),        # Can change color, first non-missing, second missing
                   bars=F,prop=F,combined=F,

@@ -24,7 +24,6 @@
 ##
 
 # set working directory (for output of plots- to utilize more easily)
-setwd("~/GitHub/hud_hears/analyses/capstone/02_results")
 capstone_path <- file.path(here::here(), "analyses/capstone/02_results")
 
 # SET OPTIONS AND BRING IN PACKAGES ----

@@ -34,7 +34,7 @@
 # Preparatory data manipulation ----
     raw[, season := factor(quarter(exit_date), levels = 1:4, labels = c("Winter", "Spring", "Summer", "Fall"))]
     raw[, exit_year := as.factor(exit_year)]
-    
+
 # Table 0: ID counts ----
     table0_id_counts = rbind(
       data.table(category = "Persons", 
@@ -124,6 +124,7 @@
                            age_at_exit +
                            gender_me +
                            race_eth_me +
+                           race_gender +
                            wage + 
                            hrs +
                            wage_hourly +
@@ -155,6 +156,7 @@
     table2[, col1 := gsub("opportunity_index1k", "Opportunity index", col1)]
     table2[, col1 := gsub("race_eth_me", "Race/ethnicity", col1)]
     table2[, col1 := gsub("gender_me", "Gender", col1)]
+    table2[, col1 := gsub("race_gender", "Race/ethnicity & Gender", col1)]
     table2[, col1 := gsub("age_at_exit", "Age", col1)]
     table2[, col1 := gsub("hh_disability", "Household with disability", col1)]
     table2[, col1 := gsub("single_caregiver", "Single caregiver", col1)]
@@ -200,6 +202,8 @@
     setnames(table2, c("col1", "p value"), c("", "P-value"))
     
     # setcolorder(table2, "variable")
+
+
 
 # Write Tables 1 & 2 using openxlsx----
     wb <- createWorkbook() # initiate a new / empty workbook

@@ -590,7 +590,14 @@
       mod1.preds <- calc.counterfactual(mod1.preds)
       # mod1.preds[]
       
+      # calculate quarterly change ----
+      mod1.preds[, prev.wage := shift(wage), by = "exit_category"]
+      mod1.preds[, change.dollars := wage - prev.wage]
+      mod1.preds[, change.percent := rads::round2(change.dollars / prev.wage, 3)]
+      mod1.preds[, prev.wage := NULL]
+      
     # Plot data four quarters before and after exit ----
+      # Main (predicted wages) ----
       plot1 <- ggplot() +
         # commented out errorbars because don't trust standard error calculation from prediction_summary()
         geom_line(data = mod1.preds[exit_category != "Counterfactual"], aes(x = time, y = wage, color = exit_category), size = 1) +
@@ -615,6 +622,49 @@
       
       # dev.new(width = 6,  height = 4, unit = "in", noRStudioGD = TRUE)
       plot(plot1)
+      
+      # Change in dollars ----
+      plot1.change.dollars <- ggplot() +
+        geom_line(data = mod1.preds[exit_category != "Counterfactual"], aes(x = time, y = change.dollars, color = exit_category), size = 1) +
+        geom_point(data = mod1.preds[exit_category != "Counterfactual"], 
+                   aes(x = time, y = change.dollars, color = exit_category), 
+                   size = 2.5) +
+        labs(
+          x = "", 
+          y = "Predicted increase in quarterly wages") +
+        scale_x_continuous(labels=c("1 year prior", "Exit", "1 year post"), breaks=c(-4, 0, 4))
+      
+      plot1.change.dollars <- formatplots(plot1.change.dollars) + 
+        scale_color_manual("Exit type", 
+                           values=c('Positive' = '#2c7fb8', 
+                                    'Negative' = '#2ca25f')) +
+        coord_cartesian(ylim = c(0, 500)) 
+      
+      
+      # dev.new(width = 6,  height = 4, unit = "in", noRStudioGD = TRUE)
+      plot(plot1.change.dollars)
+      
+      # Change in percent ----
+      plot1.change.percent <- ggplot() +
+        geom_line(data = mod1.preds[exit_category != "Counterfactual"], aes(x = time, y = change.percent, color = exit_category), size = 1) +
+        geom_point(data = mod1.preds[exit_category != "Counterfactual"], 
+                   aes(x = time, y = change.percent, color = exit_category), 
+                   size = 2.5) +
+        labs(
+          x = "", 
+          y = "Predicted increase in quarterly wages") +
+        scale_x_continuous(labels=c("1 year prior", "Exit", "1 year post"), breaks=c(-4, 0, 4))
+      
+      plot1.change.percent <- formatplots(plot1.change.percent) + 
+        scale_color_manual("Exit type", 
+                           values=c('Positive' = '#2c7fb8', 
+                                    'Negative' = '#2ca25f')) +
+        scale_y_continuous(labels=scales::percent_format()) + 
+        coord_cartesian(ylim = c(0, .07)) 
+        
+      
+      # dev.new(width = 6,  height = 4, unit = "in", noRStudioGD = TRUE)
+      plot(plot1.change.percent)
       
     # Plot observed vs expected to assess model quality and problems ----
       OvE.mod1 <- copy(dt1)[, fitted := fitted(mod1)]
@@ -660,7 +710,7 @@
       plot.resid.mod1
       
     # Tidy predictions for saving ----
-      roundvars <- c("wage", "lower", "upper", "se")
+      roundvars <- c("wage", "lower", "upper", "se", "change.dollars")
       mod1.preds[, (roundvars) := rads::round2(.SD, 0), .SDcols = roundvars]
       mod1.obs = dt1[, .(Observed = rads::round2(mean(wage))), .(time, exit_category)]
       mod1.preds <- merge(mod1.preds, mod1.obs, by = c("time", "exit_category"), all.x = TRUE, all.y = TRUE)
@@ -675,14 +725,21 @@
                                      prettyNum(upper, big.mark = ','), 
                                      ")"), 
                                    Predicted = paste0("$", prettyNum(wage, big.mark = ',')),
-                                   Observed = paste0("$", prettyNum(Observed, big.mark = ','))
+                                   Observed = paste0("$", prettyNum(Observed, big.mark = ',')),
+                                   `Increase (dollars)` = paste0("$", prettyNum(change.dollars, big.mark = ',')), 
+                                   `Increase (percent)` = paste0(100*change.percent, "%")
                                    # ,SE = se
                                    )]
       mod1.preds[, "Predicted wages (95% CI)" := gsub("\\$-", "-\\$", `Predicted wages (95% CI)`)]
+      mod1.preds[Observed == "$NA", Observed := NA]
+      mod1.preds[`Increase (dollars)` == "$NA", `Increase (dollars)` := NA]
+      mod1.preds[`Increase (percent)` == "NA%", `Increase (percent)` := NA]
       setorder(mod1.preds, `Exit Type`, Quarter)
       
     # Save plots ----
       saveplots(plot.object = plot1, plot.name = 'figure_2_pre_post_by_qtr')      
+      saveplots(plot.object = plot1.change.percent, plot.name = 'figure_2_pre_post_by_qtr_change_percent')      
+      saveplots(plot.object = plot1.change.dollars, plot.name = 'figure_2_pre_post_by_qtr_change_dollar')      
       saveplots(plot.object = plot.resid.mod1, plot.name = 'appendix_figure_3_residuals')      
       saveplots(plot.object = OvE.mod1, plot.name = 'appendix_figure_3_trends_Obs_v_Exp')      
 

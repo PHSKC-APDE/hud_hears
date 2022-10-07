@@ -33,10 +33,11 @@ db_hhsaw <- DBI::dbConnect(odbc::odbc(),
 
 # BRING IN DATA ----
 # Combined exit/timevar data
-exit_timevar <- dbGetQuery(db_hhsaw, "SELECT * FROM pha.stage_pha_exit_timevar
-                           WHERE chooser = chooser_max") %>%
+exit_timevar_all <- dbGetQuery(db_hhsaw, "SELECT * FROM pha.stage_pha_exit_timevar") %>%
   mutate(portfolio_final = ifelse(str_detect(portfolio_final, "LAKE CITY"),
                                   "LAKE CITY COURT", portfolio_final))
+
+exit_timevar <- exit_timevar_all %>% filter(chooser == chooser_max)
 
 # Demographic table
 pha_demo <- dbGetQuery(db_hhsaw, "SELECT * FROM pha.final_demo")
@@ -603,7 +604,8 @@ mcaid_exit_type_graph_prior %>% DiagrammeRsvg::export_svg() %>% charToRaw() %>% 
 
 
 # EXITS TYPES ----
-exit_timevar %>%
+# Top 10 for each PHA
+exit_timevar_all %>%
   filter(!is.na(act_date) & agency == "KCHA" & act_date >= "2016-01-01" & act_date <= "2018-12-31") %>%
   filter(true_exit == 1) %>%
   distinct(agency, hh_id_kc_pha, act_date, exit_reason_clean, exit_category) %>%
@@ -611,7 +613,7 @@ exit_timevar %>%
   arrange(agency, -n) %>%
   head(10)
 
-exit_timevar %>%
+exit_timevar_all %>%
   filter(!is.na(act_date) & agency == "SHA" & act_date >= "2012-01-01" & act_date <= "2018-12-31") %>%
   filter(true_exit == 1) %>%
   distinct(agency, hh_id_kc_pha, act_date, exit_reason_clean, exit_category) %>%
@@ -619,6 +621,55 @@ exit_timevar %>%
   arrange(agency, -n) %>%
   head(10)
   
+
+## Look at 'Voucher Expired' exits to see if they should be included -----
+expired <- exit_timevar_all %>%
+  filter(!is.na(act_date) & 
+           ((agency == "KCHA" & act_date >= "2016-01-01" & act_date <= "2018-12-31") |
+              (agency == "SHA" & act_date >= "2012-01-01" & act_date <= "2018-12-31"))
+         ) %>%
+  filter(true_exit == 1 & exit_order_study == exit_order_max_study & exit_reason_clean == "Voucher Expired") %>%
+  distinct(id_kc_pha) %>%
+  left_join(., exit_timevar_all, by = "id_kc_pha")
+
+# Look by year and program type
+expired %>% 
+  filter(exit_order_study == exit_order_max_study) %>%
+  distinct(id_hudhears, agency, act_date) %>%
+  mutate(exit_year = year(act_date)) %>%
+  count(agency, exit_year)
+
+expired %>% 
+  filter(exit_order_study == exit_order_max_study) %>%
+  distinct(id_hudhears, agency, act_date, major_prog) %>%
+  count(agency, major_prog)
+
+
+# Look at coverage time per period before exit
+expired_time <- expired %>% 
+  group_by(id_hudhears, period) %>%
+  mutate(period_cov_time = sum(cov_time)) %>%
+  ungroup() %>%
+  filter(exit_order_study == exit_order_max_study) %>%
+  distinct(id_hudhears, id_kc_pha, hh_id_kc_pha, act_date, period, period_cov_time) %>%
+  mutate(d90 = period_cov_time <= 90,
+         y1 = period_cov_time <= 365)
+
+# Find some examples
+set.seed(98104)
+expired_time %>% slice_sample(n = 10)
+
+# Summarize stats
+summarytools::descr(expired_time, period_cov_time)
+map(c("d90", "y1"), ~ summarytools::freq(expired_time[[.x]]))
+summarytools::freq(expired_time[expired_time$id_kc_pha == expired_time$hh_id_kc_pha,], d90)
+summarytools::freq(expired_time[expired_time$id_kc_pha == expired_time$hh_id_kc_pha,], y1)
+
+
+# See if people with short time periods end up being included anyway
+expired_time %>% 
+  filter(period_cov_time < 90) %>% summarise(cnt = n())
+
 
 
 # EXITS NOT CAPTURED IN THE BOTH EXIT AND 50058 DATA ----

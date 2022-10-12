@@ -103,7 +103,7 @@
       total = T,
       numeric.test = "kwt", cat.test = "chisq",
       # numeric.stats = c("meansd", "medianq1q3", "range", "Nmiss2"),
-      numeric.stats = c("meansd", "Nmiss2"),
+      numeric.stats = c("meansd", "median", "Nmiss2"),
       digits = 0,
       cat.stats = c("countpct", "Nmiss2"),
       stats.labels = list(
@@ -199,7 +199,15 @@
     
     table2 <- table2[, 1:5]
     
-    setnames(table2, c("col1", "p value"), c("", "P-value"))
+    setnames(table2, c("p value"), c("P-value"))
+    
+    # only keep median for wage and hours
+    table2[, category := table2[['col1']]]
+    table2[grepl("^ ", category), category := NA] # wipe out sub-values
+    table2[, category := category[1], by= .(cumsum(!is.na(category)) ) ] # fill forward / downward
+    table2 <- table2[!(grepl("Median", col1) & !category %in% c("Wages", "Hours", "Wages hourly"))]
+    table2[, c("category") := NULL]
+    
     
     # setcolorder(table2, "variable")
 

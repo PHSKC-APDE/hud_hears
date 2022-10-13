@@ -342,7 +342,9 @@
         wage_combo_address = foverlaps(wage_address, combo_address, nomatch = NA)
         
         # preferentially trust address data from PHA over that from ESD wages
+        wage_combo_address[, geo_tractce10 := geo_id10_tract]
         wage_combo_address[!is.na(combo_geo_tractce10), geo_tractce10 := combo_geo_tractce10]
+        wage_combo_address[, geo_countyfp10 := geo_id10_county ]
         wage_combo_address[!is.na(combo_geo_countyfp10), geo_countyfp10 := combo_geo_countyfp10]
         
         # keep specific columns
@@ -460,18 +462,21 @@
           # so convert to numeric before using nafill
           combo[, c("geo_tractce10", "geo_countyfp10") := lapply(.SD, as.numeric), .SDcols = c("geo_tractce10", "geo_countyfp10")]
           # use nafill
-            combo[qtr %in% 1:8, geo_tractce10  := nafill(geo_tractce10, type = 'locf'), by = "id_esd" ] # fill geoid backward / upward
+            combo[qtr %in% 1:8, geo_tractce10  := nafill(geo_tractce10, type = 'locf'), by = "id_esd" ] # fill forward / downward
             combo[qtr %in% 1:8, geo_tractce10  := nafill(geo_tractce10, type = 'nocb'), by = "id_esd" ] # fill geoid backward / upward
-            combo[qtr %in% 1:8, geo_countyfp10  := nafill(geo_countyfp10, type = 'locf'), by = "id_esd" ] # fill geoid backward / upward
+            combo[qtr %in% 1:8, geo_countyfp10  := nafill(geo_countyfp10, type = 'locf'), by = "id_esd" ] # fill forward / downward
             combo[qtr %in% 1:8, geo_countyfp10  := nafill(geo_countyfp10, type = 'nocb'), by = "id_esd" ] # fill geoid backward / upward
           # convert geographies back to properly formatted character values
-            # combo[, c("geo_tractce10", "geo_countyfp10") := lapply(.SD, as.character), .SDcols = c("geo_tractce10", "geo_countyfp10")]
-            combo[, geo_tractce10 := sprintf("%06i", geo_tractce10)][geo_tractce10 == "    NA", geo_tractce10 := NA]
-            combo[, geo_countyfp10 := sprintf("%03i", geo_countyfp10)][geo_countyfp10 == " NA", geo_countyfp10 := NA]
+            combo[!is.na(geo_tractce10), temp_geo_tractce10 := sprintf("%06g", geo_tractce10)]
+            combo[!is.na(geo_countyfp10), temp_geo_countyfp10 := sprintf("%03g", geo_countyfp10)]
+            combo[, c("geo_tractce10", "geo_countyfp10") := NULL]
+            setnames(combo, c("temp_geo_tractce10", "temp_geo_countyfp10"), c("geo_tractce10", "geo_countyfp10"))
 
 # Merge on reference data ----
       # merge area median income by county onto combo table ----
           combo[!is.na(geo_countyfp10), fips2010 := paste0("53", geo_countyfp10)]
+          combo[, fips2010 := gsub("^5353", "53", fips2010)] # fix obvious errors in fips coding
+          combo[fips2010 == '5333', fips2010 := '53033'] # fix obvious errors in fips coding
           combo[, amiyear := year(qtr_date)]
           combo <- merge(combo, ami, by = c("amiyear", "fips2010", "hh_size"), all.x = T, all.y = F)
           combo[, c("fips2010", "amiyear") := NULL]

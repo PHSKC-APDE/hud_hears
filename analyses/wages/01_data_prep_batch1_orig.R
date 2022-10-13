@@ -76,10 +76,10 @@
                                            FROM [esd].[final_sow1_address]"))
 
     # Address geocodes ----
-      geocodes <- setDT(DBI::dbGetQuery(conn = hhsaw16, 
-                                            "SELECT geo_hash_geocode, geo_countyfp10, geo_tractce10
+        geocodes <- setDT(DBI::dbGetQuery(conn = hhsaw16, 
+                                          "SELECT geo_hash_geocode, geo_id10_county, geo_id10_tract
                                              FROM ref.address_geocode
-                                             WHERE geo_statefp10 = 53"))
+                                             WHERE geo_id10_state = 53"))
 
     # HUDHEARS <> ESD crosswalk ----
       # from https://github.com/PHSKC-APDE/hud_hears/blob/main/data_processing/load_analytic_tables.R#L46, which in turn is from
@@ -336,7 +336,7 @@
         setkey(address, id_esd, start_date, end_date)
         wage_address = foverlaps(wage, address, mult = "all", nomatch = NA) # keeps all the wage data and just the address data that can be merged by id_esd and date
         
-        wage_address <- wage_address[, .(id_esd, qtr_date, qtr_date2, wage, hrs, geo_countyfp10, geo_tractce10)] # order and keep columns of interest
+        wage_address <- wage_address[, .(id_esd, qtr_date, qtr_date2, wage, hrs, geo_id10_county, geo_id10_tract)] # order and keep columns of interest
         
         # speed up merge below by limiting wage data to id_esds that are in the remaining pool of PHA clients
         wage_address <- wage_address[id_esd %in% unique(combo$id_esd)]
@@ -351,7 +351,9 @@
         wage_combo_address = foverlaps(wage_address, combo_address, nomatch = NA)
         
         # preferentially trust address data from PHA over that from ESD wages
+        wage_combo_address[, geo_tractce10 := geo_id10_tract]
         wage_combo_address[!is.na(combo_geo_tractce10), geo_tractce10 := combo_geo_tractce10]
+        wage_combo_address[, geo_countyfp10 := geo_id10_county ]
         wage_combo_address[!is.na(combo_geo_countyfp10), geo_countyfp10 := combo_geo_countyfp10]
         
         # keep specific columns
@@ -468,18 +470,21 @@
           # so convert to numeric before using nafill
           combo[, c("geo_tractce10", "geo_countyfp10") := lapply(.SD, as.numeric), .SDcols = c("geo_tractce10", "geo_countyfp10")]
           # use nafill
-            combo[qtr %in% 1:8, geo_tractce10  := nafill(geo_tractce10, type = 'locf'), by = "id_esd" ] # fill geoid backward / upward
+            combo[qtr %in% 1:8, geo_tractce10  := nafill(geo_tractce10, type = 'locf'), by = "id_esd" ] # fill geoid forward / downward
             combo[qtr %in% 1:8, geo_tractce10  := nafill(geo_tractce10, type = 'nocb'), by = "id_esd" ] # fill geoid backward / upward
-            combo[qtr %in% 1:8, geo_countyfp10  := nafill(geo_countyfp10, type = 'locf'), by = "id_esd" ] # fill geoid backward / upward
+            combo[qtr %in% 1:8, geo_countyfp10  := nafill(geo_countyfp10, type = 'locf'), by = "id_esd" ] # fill geoid forward / downward
             combo[qtr %in% 1:8, geo_countyfp10  := nafill(geo_countyfp10, type = 'nocb'), by = "id_esd" ] # fill geoid backward / upward
           # convert geographies back to properly formatted character values
-            # combo[, c("geo_tractce10", "geo_countyfp10") := lapply(.SD, as.character), .SDcols = c("geo_tractce10", "geo_countyfp10")]
-            combo[, geo_tractce10 := sprintf("%06i", geo_tractce10)][geo_tractce10 == "    NA", geo_tractce10 := NA]
-            combo[, geo_countyfp10 := sprintf("%03i", geo_countyfp10)][geo_countyfp10 == " NA", geo_countyfp10 := NA]
-
+            combo[!is.na(geo_tractce10), temp_geo_tractce10 := sprintf("%06g", geo_tractce10)]
+            combo[!is.na(geo_countyfp10), temp_geo_countyfp10 := sprintf("%03g", geo_countyfp10)]
+            combo[, c("geo_tractce10", "geo_countyfp10") := NULL]
+            setnames(combo, c("temp_geo_tractce10", "temp_geo_countyfp10"), c("geo_tractce10", "geo_countyfp10"))
+            
 # Merge on reference data ----
       # merge area median income by county onto combo table ----
           combo[!is.na(geo_countyfp10), fips2010 := paste0("53", geo_countyfp10)]
+          combo[, fips2010 := gsub("^5353", "53", fips2010)] # fix obvious errors in fips coding
+          combo[fips2010 == '5333', fips2010 := '53033'] # fix obvious errors in fips coding
           combo[, amiyear := year(qtr_date)]
           combo <- merge(combo, ami, by = c("amiyear", "fips2010", "hh_size"), all.x = T, all.y = F)
           combo[, c("fips2010", "amiyear") := NULL]
@@ -490,14 +495,6 @@
           message("There is a substantial increase in missing AMI vs missing wages. Confirmed that
                   this is due solely to large household sizes, because all combinations of 
                   amiyear and fips2010 are present in both both the combo[] and ami[] datasets.")
-          
-      # merge opportunity index onto combo table ----      
-          # Not needed because already in demographic table
-            # message("!!!NOTE!!!
-            # Opportunity Index is only available for 4 counties identified by the Puget Sound Regional Council.
-            # King (33), Kitsap (35), Pierce (53), Snohomish (61). /n
-            # Raj Chetty's Opportunity Atlas / Opportunity Insights is available by census tract for the whole country
-            # but does not provide a singluar index / composite indicator.")
           
 # Tidy exit definitions for analysis ----
     combo[, exit_category := factor(exit_category, levels = c("Positive", "Negative"))] # to force specific order in graph  

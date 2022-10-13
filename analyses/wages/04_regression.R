@@ -85,7 +85,7 @@
        
     # calculate mean values of predictions for my dataset using random draws ----
       prediction_summary <- function(predDT, ndraw = 1000){
-        myest <- predDT[, .(time, exit_category, predicted, std.error)]
+        myest <- copy(predDT)[, c("lower", "upper") := NULL]
         
         # create summary table of each combination of time and exit_category
         mysets <- unique(myest[, .(time, exit_category, wage = NA_real_, se = NA_real_)])
@@ -149,49 +149,49 @@
         mymod.tidy[, (roundvars) := rads::round2(.SD, 0), .SDcols = roundvars]
         mymod.tidy[, p.value := as.character(rads::round2(p.value, 3))]
         mymod.tidy[as.numeric(p.value) < 0.001, p.value := "<0.001"]
-        if(myformat == 'dollar'){
-          mymod.tidy <- mymod.tidy[, .(Effect = effect, 
-                                       Group = group, 
-                                       Term = term, 
-                                       Estimate = paste0("$",
+        if(!is.na(myformat) && myformat == 'dollar'){
+          mymod.tidy <- mymod.tidy[, .(effect, 
+                                       group, 
+                                       term, 
+                                       estimate = paste0("$",
                                          prettyNum(estimate, big.mark = ','),
                                          " ($", 
                                          prettyNum(conf.low, big.mark = ','), 
                                          ", $", 
                                          prettyNum(conf.high, big.mark = ','), 
                                          ")") , 
-                                       'P-value' = p.value
+                                       'p-value' = p.value
                                        # , SE = std.error
                                        )]
         }
-        if(myformat == 'percent'){
-          mymod.tidy <- mymod.tidy[, .(Effect = effect, 
-                                       Group = group, 
-                                       Term = term, 
-                                       Estimate = paste0(prettyNum(estimate, big.mark = ','),
+        if(!is.na(myformat) && myformat == 'percent'){
+          mymod.tidy <- mymod.tidy[, .(effect, 
+                                       group, 
+                                       term, 
+                                       estimate = paste0(prettyNum(estimate, big.mark = ','),
                                                          "% (", 
                                                          prettyNum(conf.low, big.mark = ','), 
                                                          "%, ", 
                                                          prettyNum(conf.high, big.mark = ','), 
                                                          "%)") , 
-                                       'P-value' = p.value)]
+                                       'p-value' = p.value)]
         }        
-        mymod.tidy[Term == 'exit', Term := "Positive exit"]
-        mymod.tidy[Term %like% 'AI/AN', Term := "American Indian / Alaska Native"]
-        mymod.tidy[Term %like% 'Asian', Term := "Asian"]
-        mymod.tidy[Term %like% 'Latino', Term := "Hispanic"]
-        mymod.tidy[Term %like% 'Multiple', Term := "Multiple"]
-        mymod.tidy[Term %like% 'NH/PI', Term := "Native Hawaiian / Pacific Islander"]
-        mymod.tidy[Term %like% 'White', Term := "White"]
-        mymod.tidy[, Term := gsub("as.integer\\(time\\)", "time", Term)]
-        mymod.tidy[, Term := gsub("exit_year", "Exit year: ", Term)]
-        mymod.tidy[Term == 'single_caregiverTRUE', Term := "Single caregiver household"]
-        mymod.tidy[Term == 'housing_time_at_exit', Term := "Years in public housing"]
-        mymod.tidy[, Term := gsub("splines::bs", "spline", Term)]
-        mymod.tidy[, Estimate := gsub("\\$-", "-\\$", Estimate)]
-        mymod.tidy[, Estimate := gsub(" \\(\\$NA\\, \\$NA\\)", "", Estimate)]
-        mymod.tidy[, Estimate := gsub("\\$NaN", NA, Estimate)]
-        setnames(mymod.tidy, "Estimate", "Estimate (95% CI)")
+        mymod.tidy[term == 'exit', term := "Positive exit"]
+        mymod.tidy[term %like% 'AI/AN', term := "American Indian / Alaska Native"]
+        mymod.tidy[term %like% 'Asian', term := "Asian"]
+        mymod.tidy[term %like% 'Latino', term := "Hispanic"]
+        mymod.tidy[term %like% 'Multiple', term := "Multiple"]
+        mymod.tidy[term %like% 'NH/PI', term := "Native Hawaiian / Pacific Islander"]
+        mymod.tidy[term %like% 'White', term := "White"]
+        mymod.tidy[, term := gsub("as.integer\\(time\\)", "time", term)]
+        mymod.tidy[, term := gsub("exit_year", "Exit year: ", term)]
+        mymod.tidy[term == 'single_caregiverTRUE', term := "Single caregiver household"]
+        mymod.tidy[term == 'housing_time_at_exit', term := "Years in public housing"]
+        mymod.tidy[, term := gsub("splines::bs", "spline", term)]
+        mymod.tidy[, estimate := gsub("\\$-", "-\\$", estimate)]
+        mymod.tidy[, estimate := gsub(" \\(\\$NA\\, \\$NA\\)", "", estimate)]
+        mymod.tidy[, estimate := gsub("\\$NaN", NA, estimate)]
+        setnames(mymod.tidy, "estimate", "Estimate (95% CI)")
       }
 
 # Load data ----

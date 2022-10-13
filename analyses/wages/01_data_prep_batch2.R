@@ -559,13 +559,13 @@
       myplot <- plot(consort.complete)
       
     # save consort diagram ----
-      ggplot2::ggsave(paste0(outputdir, "/pdf/figure_0_consort_diagram_v2.pdf"),
+      ggplot2::ggsave(paste0(outputdir, "/pdf/figure_0_consort_diagram.pdf"),
              plot = consort.complete, 
              dpi=600, 
              width = 6.5, 
              height = 9, 
              units = "in") 
-      ggplot2::ggsave(paste0(outputdir, "/png/figure_0_consort_diagram_v2.png"),
+      ggplot2::ggsave(paste0(outputdir, "/png/figure_0_consort_diagram.png"),
              plot = consort.complete, 
              dpi=600, 
              width = 6.5, 

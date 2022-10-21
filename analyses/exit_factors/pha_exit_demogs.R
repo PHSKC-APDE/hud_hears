@@ -117,7 +117,17 @@ consort_df <- exit_timevar %>% filter(!is.na(act_date))
 consort_maker <- function(df = consort_df, mcaid_prior = F, 
                           mcaid_after = F, household = F,
                           exit_type = F) {
+  
+  # Household level or not
+  if (household == T) {
+    df <- df %>% filter(id_kc_pha == hh_id_kc_pha)
+    covariate_use <- covariate_hh
+  } else {
+    covariate_use <- covariate
+  }
+  
   exits_tot <- nrow(df)
+  
   
   ### Set up values for each node ----
   # Date range
@@ -131,21 +141,10 @@ consort_maker <- function(df = consort_df, mcaid_prior = F,
   
   exits_period <- nrow(df)
   
-  # Household level or not
-  if (household == T) {
-    df <- df %>% filter(id_kc_pha == hh_id_kc_pha)
-    covariate_use <- covariate_hh
-  } else {
-    covariate_use <- covariate
-  }
-  hholds <- nrow(df)
-  one_per_hh <- exits_period - hholds
-  
-  
   # True/false exits
   df <- df %>% filter(true_exit == 1)
   exits_true <- nrow(df)
-  exits_false <- hholds - exits_true
+  exits_false <- exits_period - exits_true
   
   # One exit per person
   df <- df %>% filter(exit_order_study == exit_order_max_study & exit_type_keep == 1)
@@ -213,13 +212,13 @@ consort_maker <- function(df = consort_df, mcaid_prior = F,
   
   ### Set up columns ----
   # Column 1: main boxes and side box placeholders (blank text)
-  a1 <- glue("a1 [label = 'Exits total: {format(exits_tot, big.mark = ',', trim = T)}'];")
-  a2 <- glue("a2 [label = 'Exits in study period: {format(exits_period, big.mark = ',', trim = T)}'];")
   if (household == T) {
-    a2h <- glue("a2h [label = 'Households: {format(hholds, big.mark = ',', trim = T)}'];")
+    a1 <- glue("a1 [label = 'Head of household exits total: {format(exits_tot, big.mark = ',', trim = T)}'];")
+    
   } else {
-    a2h <- "a2h [shape = point, label = '', width = 0, height = 0]"
+    a1 <- glue("a1 [label = 'Exits total: {format(exits_tot, big.mark = ',', trim = T)}'];")
   }
+  a2 <- glue("a2 [label = 'Exits in study period: {format(exits_period, big.mark = ',', trim = T)}'];")
   a3 <- glue("a3 [label = 'True exits: {format(exits_true, big.mark = ',', trim = T)}'];")
   a4 <- glue("a4 [label = 'One exit per person: {format(exits_per_person, big.mark = ',', trim = T)}'];")
   a5 <- glue("a5 [label = 'Non-death exits: {format(exits_death, big.mark = ',', trim = T)}'];")
@@ -235,11 +234,6 @@ consort_maker <- function(df = consort_df, mcaid_prior = F,
   b1 <- glue("b1 [label = 'Exits outside study period \n",
              "KCHA (<2016, >2018): {format(consort_period_excl_kcha, big.mark = ',', trim = T)} \n",
              "SHA (<2012, >2018): {format(consort_period_excl_sha, big.mark = ',', trim = T)}'];")
-  if (household == T) {
-    b1h <- glue("b1h [label = 'Non-heads of household (n = {format(one_per_hh, big.mark = ',', trim = T)})'];")
-  } else {
-    b1h <- ""
-  }
   b2 <- glue("b2 [label = 'False exits (n = {format(exits_false, big.mark = ',', trim = T)})'];")
   b3 <- glue("b3 [label = 'Multiple exits per person (n = {format(exits_multi, big.mark = ',', trim = T)})'];")
   b4 <- glue("b4 [label = 'Exits due to death (n = {format(exits_death_removed, big.mark = ',', trim = T)}) or \n",
@@ -268,23 +262,26 @@ consort_maker <- function(df = consort_df, mcaid_prior = F,
     b6 <- ""
   }
   
+  
+  ## Set up extra blanks and ranks if needed ----
+  if (mcaid_prior == T | mcaid_after == T) {
+    x6 <- "; x6"
+    rank6 <- glue("subgraph {{ \n
+                    rank = same; x6; b6; \n
+                  }}")
+  } else {
+    x6 <- ""
+    rank6 <- ""
+  }
+  
+  
   ### Edges/connections ----
   lines1 <- glue("a1 -> x1 [arrowhead='none'] \n",
                  "x1 -> b1 \n",
                  "x1 -> a2")
-  if (household == T) {
-    lines1h <- glue("a2 -> x1h [arrowhead='none'] \n",
-                   "x1h -> b1h \n",
-                   "x1h -> a2h")
-    lines2 <- glue("a2h -> x2 [arrowhead='none'] \n",
-                   "x2 -> b2 \n",
-                   "x2 -> a3")
-  } else {
-    lines1h <- ""
-    lines2 <- glue("a2 -> x2 [arrowhead='none'] \n",
-                   "x2 -> b2 \n",
-                   "x2 -> a3")
-  }
+  lines2 <- glue("a2 -> x2 [arrowhead='none'] \n",
+                 "x2 -> b2 \n",
+                 "x2 -> a3")
   lines3 <- glue("a3 -> x3 [arrowhead='none'] \n",
                  "x3 -> b3 \n",
                  "x3 -> a4")
@@ -301,28 +298,6 @@ consort_maker <- function(df = consort_df, mcaid_prior = F,
   } else {
     lines6 <- ""
   }
-
-  
-  # Set up extra blanks and ranks if needed
-  if (household == T) {
-    x1h <- "; x1h"
-    rank1h <- glue("subgraph {{ \n
-                    rank = same; x1h; b1h; \n
-                  }}")
-  } else {
-    x1h <- ""
-    rank1h <- ""
-  }
-  
-  if (mcaid_prior == T | mcaid_after == T) {
-    x6 <- "; x6"
-    rank6 <- glue("subgraph {{ \n
-                    rank = same; x6; b6; \n
-                  }}")
-  } else {
-    x6 <- ""
-    rank6 <- ""
-  }
   
   
   ### Bring into one place ----
@@ -332,19 +307,18 @@ consort_maker <- function(df = consort_df, mcaid_prior = F,
     
     # set up main nodes
     node [shape=box, fontsize = 12, fontname = 'Helvetica', width = 2];
-    {a1} {a2h} {a2} {a3} {a4} {a5} {a6} {a7}
+    {a1} {a2} {a3} {a4} {a5} {a6} {a7}
     
     # set up side nodes
     node [shape=box, fontsize = 10, fontname = 'Helvetica', width = 2];
-    {b1} {b1h} {b2} {b3} {b4} {b5} {b6}
+    {b1} {b2} {b3} {b4} {b5} {b6}
     
     # create filler nodes without box around 
     node [shape = point, width = 0, height = 0]
-    x1 {x1h}; x2; x3; x4; x5 {x6}
+    x1; x2; x3; x4; x5 {x6}
     
     # Edge definitions
     {lines1}
-    {lines1h}
     {lines2}
     {lines3}
     {lines4}
@@ -355,7 +329,6 @@ consort_maker <- function(df = consort_df, mcaid_prior = F,
     subgraph {{
       rank = same; x1; b1;
     }}
-    {rank1h}
     subgraph {{
       rank = same; x2; b2;
     }}

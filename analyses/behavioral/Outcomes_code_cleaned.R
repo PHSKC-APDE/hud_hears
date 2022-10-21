@@ -19,11 +19,11 @@ if (!require("pacman")) {install.packages("pacman")}
 pacman::p_load(tidyverse, odbc, glue, data.table, scales, multgee, 
                ggplot2, ggrepel, viridis, hrbrthemes, knitr, rmarkdown, flextable,
                scales, gt)
-
+keyring::key_set(service = "hhsaw", username = "n-mesuter@kingcounty.gov")
 
 db_hhsaw <- DBI::dbConnect(odbc::odbc(),
                            driver = "ODBC Driver 17 for SQL Server",
-                           server = "tcp:kcitazrhpasqlprp16.azds.kingcounty.gov,1433",
+                           server = "tcp:kcitazrhpasqlprp16.azds.kingcounty.gov",
                            database = "hhs_analytics_workspace",
                            uid = keyring::key_list("hhsaw")[["username"]],
                            pwd = keyring::key_get("hhsaw", keyring::key_list("hhsaw")[["username"]]),
@@ -32,6 +32,7 @@ db_hhsaw <- DBI::dbConnect(odbc::odbc(),
                            Authentication = "ActiveDirectoryPassword")
 
 # Pull data from SQL server ----
+
 
 ##Crisis events (From program codes, ITAs, ED visits----
 

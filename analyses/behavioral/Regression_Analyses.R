@@ -102,7 +102,7 @@ broom::tidy(any_crude, conf.int = TRUE, exponentiate = T)
 # Multiple categories model (use this)
 any_adj <- geepack::geeglm(crisis_any ~ exit_category + gender_me + age_at_exit + race_eth_me  + 
                                   hh_size + single_caregiver + housing_time_at_exit + major_prog + 
-                                  hh_disability + kc_opp_index_score + crisis_any_before, 
+                                  hh_disability + crisis_any_before, 
                                data = all_pop, 
                                id = id_hh,
                                family = "binomial")
@@ -114,7 +114,7 @@ broom::tidy(any_adj, conf.int = TRUE, exponentiate = T) %>% as.data.frame()
 # Poisson model (not being used but just for interest's sake)
 any_adj_pois <- geepack::geeglm(crisis_num ~ exit_category + gender_me + age_at_exit + race_eth_me  + 
                                   hh_size + single_caregiver + housing_time_at_exit + major_prog + 
-                                  hh_disability + kc_opp_index_score  + crisis_any_before, 
+                                  hh_disability + crisis_any_before, 
                                data = all_pop, 
                                id = id_hh,
                                family = "poisson")
@@ -127,7 +127,7 @@ broom::tidy(any_adj_pois, conf.int = TRUE, exponentiate = T) %>% as.data.frame()
 # No prior BH crises
 any_stat_no_prior <- geepack::geeglm(crisis_any ~ exit_category + gender_me + age_at_exit + race_eth_me  + 
                                        hh_size + single_caregiver + housing_time_at_exit + major_prog + 
-                                       hh_disability + kc_opp_index_score, 
+                                       hh_disability,
                                      data = all_pop[all_pop$crisis_any_before == 0, ], 
                                      id = id_hh,
                                      family = "binomial")
@@ -138,7 +138,7 @@ broom::tidy(any_stat_no_prior, conf.int = TRUE, exponentiate = T) %>% as.data.fr
 # Prior BH crises
 any_stat_prior <- geepack::geeglm(crisis_any ~ exit_category + gender_me + age_at_exit + race_eth_me  + 
                                        hh_size + single_caregiver + housing_time_at_exit + major_prog + 
-                                       hh_disability + kc_opp_index_score, 
+                                       hh_disability,
                                      data = all_pop[all_pop$crisis_any_before == 1, ], 
                                      id = id_hh,
                                      family = "binomial")
@@ -162,7 +162,7 @@ broom::tidy(mcaid_crude, conf.int = TRUE, exponentiate = T)
 # Multiple categories model (use this)
 mcaid_adj <- geepack::geeglm(crisis_any_mcaid ~ exit_category + gender_me + age_at_exit + race_eth_me  + 
                              hh_size + single_caregiver + housing_time_at_exit + major_prog + 
-                             hh_disability + kc_opp_index_score + crisis_any_mcaid_before, 
+                             hh_disability +  crisis_any_mcaid_before, 
                            data = mcaid_subset7mo, 
                            id = id_hh,
                            family = "binomial")
@@ -174,7 +174,7 @@ broom::tidy(mcaid_adj, conf.int = TRUE, exponentiate = T) %>% as.data.frame()
 # Poisson model (not being used but just for interest's sake)
 mcaid_adj_pois <- geepack::geeglm(crisis_num_mcaid ~ exit_category + gender_me + age_at_exit + race_eth_me  + 
                                   hh_size + single_caregiver + housing_time_at_exit + major_prog + 
-                                  hh_disability + kc_opp_index_score + crisis_any_mcaid_before, 
+                                  hh_disability + crisis_any_mcaid_before, 
                                 data = mcaid_subset7mo, 
                                 id = id_hh,
                                 family = "poisson")
@@ -298,6 +298,7 @@ gtsave(descriptive, filename = "bh_manuscript_table1.png",
        path = file.path(here::here(), "analyses/behavioral"))
 
 
+
 # TABLE 2: REGRESSION OUTPUT ----
 # Do some basic setup
 any_model <- broom::tidy(any_adj, conf.int = TRUE, exponentiate = T) %>% as.data.frame()
@@ -314,8 +315,8 @@ table2 <- left_join(any_model, mcaid_model, by = "group") %>%
                               str_detect(group, "gender_") ~ "Gender",
                               str_detect(group, "race_") ~ "Race/ethnicity",
                               str_detect(group, "^los|housing_time") ~ "Time in housing",
-                              group %in% c("hh_size", "single_caregiver", "hh_disability",
-                                           "kc_opp_index_score") ~ "Household characteristics",
+                              group %in% c("hh_size", "single_caregiver", "hh_disability")
+                                           ~ "Household characteristics",
                               str_detect(group, "major_prog") ~ "Program type",
                               str_detect(group, "before") ~ "Existing behavioral health"))
 
@@ -339,8 +340,7 @@ table2 <- bind_rows(table2, ref_rows) %>%
                                category == "Existing behavioral health" ~ 8L),
          group_order = case_when(group %in% c("hh_size") ~ 1L,
                                  group %in% c("single_caregiver") ~ 2L,
-                                 group %in% c("hh_disability") ~ 3L,
-                                 group %in% c("kc_opp_index_score") ~ 4L)) %>%
+                                 group %in% c("hh_disability") ~ 3L)) %>%
   arrange(cat_order, order, group_order, group) %>%
   filter(group != "(Intercept)") %>%
   select(-ends_with("order")) %>%
@@ -348,7 +348,6 @@ table2 <- bind_rows(table2, ref_rows) %>%
                            group == "hh_size" ~ "Household size",
                            group == "single_caregiver" ~ "Single caregiver",
                            group == "hh_disability" ~ "HoH disability",
-                           group == "kc_opp_index_score" ~ "Neighborhood opportunity",
                            group == "age_at_exit" ~ "Age at exit (years)",
                            str_detect(group, "before") ~ "Prior crisis events",
                            TRUE ~ str_remove(group, "age_grp|gender_me|los|major_prog|race_eth_me|exit_category")))

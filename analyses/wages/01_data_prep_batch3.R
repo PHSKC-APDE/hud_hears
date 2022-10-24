@@ -25,10 +25,12 @@
 #          - stability (time in public housing), 
 #          - agency, 
 #          - program, 
-#          - opportunity index
 #          - exit quarter
 #        id_individual
 #        id_hh
+#
+#   Decided to drop opportunity index from analysis on 10/24/2022 due to reviewer
+#   feedback on initial papers and consistency with those papers
 #
 # Remember! HHSAW20 is DEV and HHSAW16 is PROD 
 
@@ -65,7 +67,6 @@
         )
       
     # ESD wage data ----
-      message("Updated table is called 'stage_sow1_wage3', previous was 'stage_sow1_wages'")
       wage <- setDT(DBI::dbGetQuery(conn = hhsaw20, "SELECT id_hudhears, yr, qtr, wages, hrs FROM [esd].[stage_sow1_wage3]"))
       
     # ESD address data ----
@@ -160,7 +161,7 @@
                                         hh_id_kc_pha, exit_date, gender_me, race_eth_me,
                                         age_at_exit, housing_time_at_exit, hh_size, 
                                         hh_disability, n_disability, single_caregiver, 
-                                        geo_tractce10, kc_opp_index_score
+                                        geo_tractce10
                                         FROM [hudhears].[control_match_covariate]
                                 WHERE id_type = 'id_exit'")) # Where condition limits to exits only, if not specified, can also get controls
 
@@ -218,9 +219,6 @@
       
       wage <- unique(wage)
       
-      # remove wage outliers (those >= 3 standard deviations above the mean)
-      # wage <- wage[wage <= mean(wage, na.rm = T) + (3*sd(wage, na.rm = T))] # will do so below just for those linked to housing
-    
     # ESD address data (esd_geo) ----  
       esd_geo <- unique(esd_geo[id_hudhears %in% wage$id_hudhears]) # only useful if IDs are in the wage data 
 
@@ -359,6 +357,7 @@
 
       # (5) drop outlier wage values ----  
         combo[wage >= mean(wage, na.rm = T) + (3*sd(wage, na.rm = T)), wage := NA] # outlier if wage is > 3 z-scores from mean
+        combo[wage <= mean(wage, na.rm = T) - (3*sd(wage, na.rm = T)), wage := NA] # outlier if wage is > 3 z-scores from mean
         
       # (6) drop person if there is NOT >= one wage data point before AND after exit ----  
         length(unique(combo[]$id_hudhears))
@@ -470,7 +469,7 @@
     setorder(combo, hh_id_kc_pha, id_kc_pha, qtr)
     combo <- combo[, .(hh_id_kc_pha, id_kc_pha, 
                       exit, exit_category, exit_date, exit_year = year(exit_date), exit_qtr, qtr, qtr_date,
-                      wage, hrs, wage_hourly, ami, percent_ami, opportunity_index = kc_opp_index_score,
+                      wage, hrs, wage_hourly, ami, percent_ami, 
                       race_eth_me, gender_me, race_gender, age_at_exit, hh_size, hh_disability, n_disability, 
                       single_caregiver, housing_time_at_exit, 
                       agency, major_prog, subsidy_type, exit_reason_clean)]

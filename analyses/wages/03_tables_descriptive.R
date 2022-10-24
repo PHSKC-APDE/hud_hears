@@ -115,9 +115,6 @@
     )
     
   # create table ----
-    # temporarily multiple opportunity index by 1000 so rounding will not obscure differences
-      raw[, opportunity_index1k := 1000*opportunity_index]
-      
     table2 <- as.data.table(summary(
       arsenal::tableby(exit_category ~ 
                          # individual
@@ -134,7 +131,6 @@
                            housing_time_at_exit +
                            hh_disability +
                            single_caregiver + 
-                           opportunity_index1k +
                            percent_ami +
                            agency +
                            major_prog, 
@@ -153,7 +149,6 @@
     table2[, col1 := gsub("Wages_hourly", "Wages hourly", col1)]
     table2[, col1 := gsub("hrs", "Hours", col1)]
     table2[, col1 := gsub("percent_ami", "Percent AMI", col1)]
-    table2[, col1 := gsub("opportunity_index1k", "Opportunity index", col1)]
     table2[, col1 := gsub("race_eth_me", "Race/ethnicity", col1)]
     table2[, col1 := gsub("gender_me", "Gender", col1)]
     table2[, col1 := gsub("race_gender", "Race/ethnicity & Gender", col1)]
@@ -179,19 +174,6 @@
       table2 <- table2[!(dup == 1 & col1 == tf)]
     }
 
-    # change opportunity index scale back to real / nominal scale
-    table2[variable == 'Opportunity index' & col1 == 'Mean (SD)', `:=`
-           (oi.m2 = as.integer(gsub("\\(..*", "", get(names(table2)[2])))/ 1000, 
-             oi.sd2 = as.integer(gsub("\\)", "", gsub("..*\\(", "", get(names(table2)[2]))))/1000,
-             oi.m3 = as.integer(gsub("\\(..*", "", get(names(table2)[3])))/1000, 
-             oi.sd3 = as.integer(gsub("\\)", "", gsub("..*\\(", "", get(names(table2)[3]))))/1000,
-             oi.m4 = as.integer(gsub("\\(..*", "", get(names(table2)[4])))/1000, 
-             oi.sd4 = as.integer(gsub("\\)", "", gsub("..*\\(", "", get(names(table2)[4]))))/1000
-           )]
-    table2[variable == 'Opportunity index' & col1 == 'Mean (SD)', names(table2)[2] := paste0(oi.m2, " (", oi.sd2, ")")]
-    table2[variable == 'Opportunity index' & col1 == 'Mean (SD)', names(table2)[3] := paste0(oi.m3, " (", oi.sd3, ")")]
-    table2[variable == 'Opportunity index' & col1 == 'Mean (SD)', names(table2)[4] := paste0(oi.m4, " (", oi.sd4, ")")]
-    
     # drop missing if all missing are zero
     table2 <- table2[!(col1 == "Missing" & get(names(table2)[2]) == 0 & get(names(table2)[3]) == 0 & get(names(table2)[4]) == 0)]
     

@@ -226,8 +226,7 @@
     raw[, exit_category := factor(exit_category, levels = c("Positive", "Negative"))]
     raw[, quarter := as.factor(quarter(exit_date))]
     raw[, season := factor(quarter(exit_date), levels = 1:4, labels = c("Winter", "Spring", "Summer", "Fall"))]
-    raw[, opportunity_index1k := 1000*opportunity_index]
-    
+
     raw <- raw[qtr %in% -4:4] # limit to quarters of interest
     
     # set reference for factors

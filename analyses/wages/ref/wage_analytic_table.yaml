@@ -16,7 +16,6 @@ vars:
     wage_hourly: NUMERIC(4,2)
     ami: NUMERIC(38,5)
     percent_ami: NUMERIC(38,5)
-    opportunity_index: NUMERIC(38,5)
     race_eth_me: NVARCHAR(18)
     gender_me: NVARCHAR(18)
     age_at_exit: INT

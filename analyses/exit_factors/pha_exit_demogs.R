@@ -116,7 +116,7 @@ consort_df <- exit_timevar %>% filter(!is.na(act_date))
 # Set up function to toggle Medicaid and household on/off
 consort_maker <- function(df = consort_df, mcaid_prior = F, 
                           mcaid_after = F, household = F,
-                          exit_type = F) {
+                          exit_type = F, opp_index = F) {
   
   # Household level or not
   if (household == T) {
@@ -180,7 +180,11 @@ consort_maker <- function(df = consort_df, mcaid_prior = F,
   df <- df %>%
     filter(!(is.na(age_at_exit) | is.na(gender_me) | is.na(race_eth_me) | race_eth_me == "Unknown" |
                is.na(agency) | is.na(single_caregiver) | is.na(hh_size) | is.na(hh_disability) | 
-               is.na(housing_time_at_exit) | is.na(major_prog) | is.na(kc_opp_index_score)))
+               is.na(housing_time_at_exit) | is.na(major_prog)))
+  
+  if (opp_index == T) {
+    df <- df %>% filter(!is.na(kc_opp_index_score))
+  }
   
   exits_demogs <- nrow(df)
   exits_demogs_removed <- exits_death - exits_demogs
@@ -238,10 +242,16 @@ consort_maker <- function(df = consort_df, mcaid_prior = F,
   b3 <- glue("b3 [label = 'Multiple exits per person (n = {format(exits_multi, big.mark = ',', trim = T)})'];")
   b4 <- glue("b4 [label = 'Exits due to death (n = {format(exits_death_removed, big.mark = ',', trim = T)}) or \n",
              "missing exit reasons (n = {format(exits_missing, big.mark = ',', trim = T)})'];")
-  b5 <- glue("b5 [label = 'Missing demographics (n = {format(exits_demogs_removed, big.mark = ',', trim = T)}): \n",
-             " - Opportunity index: {format(missing_opp_index, big.mark = ',', trim = T)} \n",
-             " - Household demographics: {format(missing_hhsize, big.mark = ',', trim = T)} \n",
-             " - Age: {format(missing_age, big.mark = ',', trim = T)}'];")
+  if (opp_index == F) {
+    b5 <- glue("b5 [label = 'Missing demographics (n = {format(exits_demogs_removed, big.mark = ',', trim = T)}): \n",
+               " - Household demographics: {format(missing_hhsize, big.mark = ',', trim = T)} \n",
+               " - Age: {format(missing_age, big.mark = ',', trim = T)}'];")
+  } else if (opp_index == T) {
+    b5 <- glue("b5 [label = 'Missing demographics (n = {format(exits_demogs_removed, big.mark = ',', trim = T)}): \n",
+               " - Opportunity index: {format(missing_opp_index, big.mark = ',', trim = T)} \n",
+               " - Household demographics: {format(missing_hhsize, big.mark = ',', trim = T)} \n",
+               " - Age: {format(missing_age, big.mark = ',', trim = T)}'];")
+  }
   if (mcaid_prior == T & mcaid_after == T) {
     b6 <- glue("b6 [label = '<7 months full Medicaid coverage \n", 
                "prior to or after exit \n", 

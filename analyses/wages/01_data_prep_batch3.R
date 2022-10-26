@@ -97,7 +97,7 @@
       # limit both PHA data to 2016-01-01 <> 20218-12-31 to avoid temporal biases
       exits <- setDT(DBI::dbGetQuery(conn = hhsaw16, 
                               "SELECT id_hudhears, id_kc_pha, from_date, exit_date = act_date,
-                                      exit_reason_clean, exit_category, agency, subsidy_type, major_prog
+                                      exit_reason_clean, exit_category, agency, subsidy_type, major_prog, prog_type
                               FROM [pha].[stage_pha_exit_timevar]
                               WHERE true_exit = 1 AND 
                               chooser = chooser_max AND
@@ -472,10 +472,15 @@
                       wage, hrs, wage_hourly, ami, percent_ami, 
                       race_eth_me, gender_me, race_gender, age_at_exit, hh_size, hh_disability, n_disability, 
                       single_caregiver, housing_time_at_exit, 
-                      agency, major_prog, subsidy_type, exit_reason_clean)]
+                      agency, prog_type, major_prog, subsidy_type, exit_reason_clean)]
 
     count10_final <- rbind(unique(combo[, .(id_kc_pha, agency)])[, .N, agency], data.table(agency = "Either", N = length(unique(combo$id_kc_pha)) ))
 
+# Create PH/PBV/TBV flag ----    
+    combo[prog_type %in% c("PBS8", "COLLABORATIVE HOUSING"), prog_type_use := "PBV"]
+    combo[prog_type %in% c("PH", "SHA OWNED AND MANAGED"), prog_type_use := "PH"]
+    combo[prog_type %in% c("PORT", "TBS8", "TENANT BASED"), prog_type_use := "TBV"]
+    
 # Create consort diagram ----
     # nicely format all consort counts ----
       counts <- sort(grep("^consort[0-9][0-9]", ls(), value = T))
@@ -546,6 +551,9 @@
     # write table to Azure 16 (production) SQL server ----
     table_config <- yaml::yaml.load(httr::GET(url = "https://raw.githubusercontent.com/PHSKC-APDE/hud_hears/main/analyses/wages/ref/wage_analytic_table.yaml", 
                                               httr::authenticate(Sys.getenv("GITHUB_TOKEN"), "")))
+
+    setcolorder(combo, names(table_config$vars))
+      
     DBI::dbWriteTable(conn = hhsaw16,
                       name = DBI::Id(schema = table_config$schema, table = table_config$table),
                       value = setDF(copy(combo)),

@@ -287,8 +287,7 @@ table_regression <- function(tbl, type = c("all", "mcaid")) {
 
 # TABLE 1: DESCRIPTIVE STATS (CURRENTLY ONLY OUTCOMES) ----
 # Turn into a gt table and make pretty
-descriptive <- descriptive %>%
-  select(category, group, Positive, Neutral, Negative) %>%
+descriptive <- descriptive %>% select(category, group, Positive, Neutral, Negative) %>%
   gt(groupname_col = "category", rowname_col = "group")
 
 descriptive <- table_formatter(descriptive)
@@ -322,7 +321,7 @@ table2 <- left_join(any_model, mcaid_model, by = "group") %>%
 
 # Make and bind the reference rows
 ref_rows <- data.frame(category = c("Exit category", "Gender", "Race/ethnicity", "Program type"),
-                       group = c("exit_categoryNuetral", "gender_meFemale", 
+                       group = c("exit_categoryNeutral", "gender_meFemale", 
                                  "race_eth_meWhite", "major_progHCV"),
                        estimate_all = rep("ref", 4), 
                        estimate_mcaid = rep("ref", 4),

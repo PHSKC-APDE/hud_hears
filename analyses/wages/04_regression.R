@@ -232,6 +232,8 @@
     # set reference for factors
     raw[, race_eth_me := factor(race_eth_me)]
     raw$race_eth_me <- relevel(raw$race_eth_me, ref = 'Black')
+    raw[, prog_type_use := factor(prog_type_use, levels = c("TBV", "PBV", "PH"))]
+    raw <- raw[!is.na(prog_type_use)]
 
 # Model Appendix 1: assess parallel trends prior to exit ----
     # Create dtappdx1 for assessing parallel trend assumption from quarter -4:0 ----

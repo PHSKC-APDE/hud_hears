@@ -17,6 +17,7 @@ vars:
     ami: NUMERIC(38,5)
     percent_ami: NUMERIC(38,5)
     race_eth_me: NVARCHAR(18)
+    race_gender: NVARCHAR(18)
     gender_me: NVARCHAR(18)
     age_at_exit: INT
     hh_size: INT
@@ -25,6 +26,8 @@ vars:
     single_caregiver: BIT
     housing_time_at_exit: NUMERIC(38,5)
     agency: NVARCHAR(10)
+    prog_type_use: NVARCHAR(3)
+    prog_type: NVARCHAR(25)
     major_prog: NVARCHAR(8)
     subsidy_type: NVARCHAR(46)
     exit_reason_clean: NVARCHAR(98)

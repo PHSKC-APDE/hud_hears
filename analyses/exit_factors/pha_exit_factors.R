@@ -154,7 +154,7 @@ age_sum <- function(df, full_demog = F, ...) {
 demog_pct_sum <- function(df, 
                           full_demog = F,
                           level = c("ind", "hh"),
-                          demog = c("gender", "race", "program", "voucher", 
+                          demog = c("gender", "race", "program_major", "program_type", "voucher", 
                                     "program_ind", "voucher_ind", "crisis_any_prior", 
                                     "homeless_grp"), 
                       ...) {
@@ -187,12 +187,18 @@ demog_pct_sum <- function(df,
       distinct(id_var, exit_date, ..., race_eth_me) %>%
       filter(!is.na(race_eth_me) & race_eth_me != "Unknown") %>%
       mutate(group = ifelse(race_eth_me == "Latino", "Latina/o/x", race_eth_me))
-  } else if (demog == "program") {
+  } else if (demog == "program_major") {
     cat_text <- "Program type"
     output <- output %>% 
       distinct(id_var, exit_date, ..., major_prog) %>%
       filter(!is.na(major_prog)) %>%
       mutate(group = major_prog)
+  } else if (demog == "program_type") {
+    cat_text <- "Program type"
+    output <- output %>% 
+      distinct(id_var, exit_date, ..., prog_type_use) %>%
+      filter(!is.na(prog_type_use)) %>%
+      mutate(group = prog_type_use)
   } else if (demog == "voucher") {
     cat_text <- "Voucher type"
     output <- output %>% 
@@ -466,7 +472,7 @@ exit_any_hh_los_hh <- demog_num_sum(covariate_nodeath_hh, demog = "los", full_de
 exit_any_hh_demogs_hh <- hh_demogs_sum(covariate_nodeath_hh, full_demog = T, level = "hh", id_type)
 
 # Program type
-exit_any_hh_prog_hh <- demog_pct_sum(covariate_nodeath_hh, full_demog = T, level = "hh", demog = "program", id_type)
+exit_any_hh_prog_hh <- demog_pct_sum(covariate_nodeath_hh, full_demog = T, level = "hh", demog = "program_type", id_type)
 
 # Voucher type
 exit_any_hh_vouch_hh <- demog_pct_sum(covariate_nodeath_hh, full_demog = T, level = "hh", demog = "voucher", id_type)
@@ -515,7 +521,7 @@ exit_any_mcaid_demogs_hh <- hh_demogs_sum(covariate_nodeath_hh, full_demog = T,
 
 # Program type
 exit_any_mcaid_prog_hh <- demog_pct_sum(covariate_nodeath_hh, full_demog = T, 
-                                        level = "hh", demog = "program", id_type, full_cov_7_prior)
+                                        level = "hh", demog = "program_type", id_type, full_cov_7_prior)
 
 # Voucher type
 exit_any_mcaid_vouch_hh <- demog_pct_sum(covariate_nodeath_hh, full_demog = T, 
@@ -549,7 +555,8 @@ rm(exit_any_mcaid_age_hh, exit_any_mcaid_gender_hh, exit_any_mcaid_race_hh, exit
 ## Not including Medicaid factors ----
 model_data <- covariate_nodeath_hh %>%
   filter(full_demog == T) %>%
-  mutate(across(c("gender_me", "major_prog", "vouch_type_use"), ~ as_factor(.))) %>%
+  filter(!is.na(prog_type_use)) %>%
+  mutate(across(c("gender_me", "major_prog", "prog_type_use", "vouch_type_use"), ~ as_factor(.))) %>%
   # Relevel factors as they are made
   mutate(race_eth_me = fct_relevel(race_eth_me, c("White")),
     age_grp = fct_relevel(as_factor(case_when(
@@ -559,6 +566,7 @@ model_data <- covariate_nodeath_hh %>%
       age_at_exit >= 62 ~ "62+",
       is.na(age_at_exit) ~ NA_character_)),
       "<25"),
+    prog_type_use = fct_relevel(prog_type_use, "TBV"),
     los = fct_relevel(
       as_factor(case_when(housing_time_at_exit < 3 ~ "<3",
                           between(housing_time_at_exit, 3, 5.999, NAbounds = NA) ~ "3-5.99",
@@ -573,7 +581,7 @@ model_data <- covariate_nodeath_hh %>%
 
 
 anyexit <- glm(exit ~ gender_me + race_eth_me + age_grp + los + 
-                 major_prog + hh_size + single_caregiver + hh_disability + 
+                 prog_type_use + hh_size + single_caregiver + hh_disability + 
                  crisis_any_prior + recent_homeless_grp, 
                data = model_data, family = "binomial")
 
@@ -593,8 +601,8 @@ anyexit_output <- cbind(OR = exp(coef(anyexit)),
 anyexit_simulation_output <- simulateResiduals(fittedModel = anyexit, plot = F)
 
 # Look at residuals for each covariate
-covar = c("gender_me", "race_eth_me", "age_grp", "los", "major_prog", 
-          "hh_size", "single_caregiver", "hh_disability", "kc_opp_index_score", 
+covar = c("gender_me", "race_eth_me", "age_grp", "los", "prog_type_use", 
+          "hh_size", "single_caregiver", "hh_disability", 
           "crisis_any_prior", "recent_homeless_grp")
 
 # Need to delay between each run or only the last graph shows
@@ -611,7 +619,7 @@ model_data_mcaid <- model_data %>%
   mutate(age_grp = fct_drop(age_grp))
 
 anyexit_mcaid <- glm(exit ~ gender_me + race_eth_me + age_grp + los + 
-                       major_prog + hh_size + single_caregiver + hh_disability + 
+                       prog_type_use + hh_size + single_caregiver + hh_disability + 
                        ed_any_prior + hosp_any_prior + ccw_flag + 
                        crisis_ed_any_prior + recent_homeless_grp, 
                data = model_data_mcaid, family = "binomial")
@@ -678,7 +686,7 @@ exit_type_hh_demogs_hh <- hh_demogs_sum(covariate_exits_hh, full_demog = T, leve
 
 # Program type
 exit_type_hh_prog_hh <- demog_pct_sum(covariate_exits_hh, full_demog = T, 
-                                      level = "hh", demog = "program", exit_category)
+                                      level = "hh", demog = "program_type", exit_category)
 
 # Voucher type
 exit_type_hh_vouch_hh <- demog_pct_sum(covariate_exits_hh, full_demog = T, 
@@ -712,7 +720,8 @@ exit_type_crisis_hh <- demog_pct_sum(covariate_exits_hh, full_demog = T, level =
 ## Not including Medicaid factors ----
 model_data_exits <- covariate_exits_hh %>%
   filter(full_demog == T) %>%
-  mutate(across(c("gender_me", "major_prog", "vouch_type_use"), ~ as_factor(.))) %>%
+  filter(!is.na(prog_type_use)) %>%
+  mutate(across(c("gender_me", "major_prog", "prog_type_use", "vouch_type_use"), ~ as_factor(.))) %>%
   # Relevel factors as they are made
   mutate(race_eth_me = fct_relevel(race_eth_me, c("White")),
          age_grp = fct_relevel(
@@ -728,6 +737,7 @@ model_data_exits <- covariate_exits_hh %>%
                           between(housing_time_at_exit, 6, 9.999, NAbounds = NA) ~ "6-9.99",
                           housing_time_at_exit >= 10 ~ "10+")),
       "<3", "3-5.99"),
+    prog_type_use = fct_relevel(prog_type_use, "TBV"),
     ed_any_prior = case_when(ed_cnt_prior >= 1 ~ 1L,
                              ed_cnt_prior == 0 ~ 0L),
     hosp_any_prior = case_when(hosp_cnt_prior >= 1 ~ 1L,
@@ -743,7 +753,7 @@ model_data_exits$exit_category2 <- relevel(model_data_exits$exit_category, ref =
 
 ### Multinomial approach ----
 exit_type <- multinom(exit_category2 ~ gender_me + race_eth_me + age_grp + los + 
-                        major_prog + hh_size + single_caregiver + hh_disability + 
+                        prog_type_use + hh_size + single_caregiver + hh_disability + 
                         crisis_any_prior + recent_homeless_grp, 
                       data = model_data_exits)
 
@@ -770,7 +780,7 @@ exit_type_results <- broom::tidy(exit_type, exponentiate = T, conf.int = T) %>%
 
 ### Separated binomial approach ----
 exit_type_neg <- glm(exit_neg ~ gender_me + race_eth_me + age_grp + los + 
-                       major_prog + hh_size + single_caregiver + hh_disability, 
+                       prog_type_use + hh_size + single_caregiver + hh_disability, 
                      data = model_data_exits[!is.na(model_data_exits$exit_neg),], 
                      family = "binomial")
 
@@ -781,7 +791,7 @@ exit_type_neg_results <- cbind(OR = exp(coef(exit_type_neg)),
 
 
 exit_type_pos <- glm(exit_pos ~ gender_me + race_eth_me + age_grp + los + 
-                       major_prog + hh_size + single_caregiver + hh_disability, 
+                       prog_type_use + hh_size + single_caregiver + hh_disability, 
                      data = model_data_exits[!is.na(model_data_exits$exit_pos),], 
                      family = "binomial")
 
@@ -803,7 +813,7 @@ model_data_exits_mcaid <- model_data_exits %>%
 
 ### Multinomial approach ----
 exit_type_mcaid <- multinom(exit_category2 ~ gender_me + race_eth_me + age_grp + los + 
-                              major_prog + hh_size + single_caregiver + hh_disability + 
+                              prog_type_use + hh_size + single_caregiver + hh_disability + 
                               ed_any_prior + hosp_any_prior + ccw_flag + 
                               crisis_ed_any_prior + recent_homeless_grp, 
                             data = model_data_exits_mcaid)
@@ -832,7 +842,7 @@ exit_type_mcaid_results <- broom::tidy(exit_type_mcaid, exponentiate = T, conf.i
 
 ### Separated binomial approach ----
 exit_type_mcaid_neg <- glm(exit_neg ~ gender_me + race_eth_me + age_grp + los + 
-                       major_prog + hh_size + single_caregiver + hh_disability, 
+                       prog_type_use + hh_size + single_caregiver + hh_disability, 
                      data = model_data_exits_mcaid[!is.na(model_data_exits_mcaid$exit_neg),], 
                      family = "binomial")
 
@@ -843,7 +853,7 @@ exit_type_mcaid_neg_results <- cbind(OR = exp(coef(exit_type_mcaid_neg)),
 
 
 exit_type_mcaid_pos <- glm(exit_pos ~ gender_me + race_eth_me + age_grp + los + 
-                       major_prog + hh_size + single_caregiver + hh_disability, 
+                       prog_type_use + hh_size + single_caregiver + hh_disability, 
                      data = model_data_exits_mcaid[!is.na(model_data_exits_mcaid$exit_pos),], 
                      family = "binomial")
 
@@ -1090,7 +1100,7 @@ table_regression <- function(tbl, type = c("any_exit", "exit_type")) {
   if (type == "any_exit") {
     output <- output %>%
       bind_rows(., data.frame(group = c("gender_meFemale", "race_eth_meWhite",
-                                        "age_grp<25", "los<3", "major_progHCV"),
+                                        "age_grp<25", "los<3", "prog_type_useTBV"),
                               OR = rep("ref", 5), 
                               ci = rep(NA_character_, 5), 
                               p = rep(NA_character_, 5),
@@ -1098,7 +1108,7 @@ table_regression <- function(tbl, type = c("any_exit", "exit_type")) {
   } else if (type == "exit_type") {
     output <- output %>%
       bind_rows(., data.frame(group = c("gender_meFemale", "race_eth_meWhite",
-                                        "age_grp<25", "los<3", "major_progHCV"),
+                                        "age_grp<25", "los<3", "prog_type_useTBV"),
                               Negative_estimate = rep("ref", 5), 
                               Negative_ci = rep(NA_character_, 5), 
                               Negative_p.value = rep(NA_character_, 5),
@@ -1114,7 +1124,7 @@ table_regression <- function(tbl, type = c("any_exit", "exit_type")) {
                                 str_detect(group, "^los") ~ "Time in housing",
                                 group %in% c("hh_size", "single_caregiver", "hh_disability") ~ 
                                   "Household characteristics",
-                                str_detect(group, "major_prog") ~ "Program type",
+                                str_detect(group, "major_prog|prog_type_use") ~ "Program type",
                                 group %in% c("crisis_any_prior", "crisis_ed_any_prior", 
                                              "recent_homeless_grp", 
                                              "ed_cnt_prior", "ed_any_prior",
@@ -1134,7 +1144,7 @@ table_regression <- function(tbl, type = c("any_exit", "exit_type")) {
                              group == "ed_any_prior" ~ "Experienced 1+ ED visit in year prior to exit",
                              group == "hosp_any_prior" ~ "Experienced 1+ hospitalization in year prior to exit",
                              group == "ccw_flag" ~ "2+ chronic conditions",
-                             TRUE ~ str_remove(group, "age_grp|gender_me|los|major_prog|race_eth_me"))) %>%
+                             TRUE ~ str_remove(group, "age_grp|gender_me|los|major_prog|prog_type_use|race_eth_me"))) %>%
     filter(group != "(Intercept)")
   
   if (type == "any_exit") {
@@ -1185,7 +1195,7 @@ table_1_demogs <- table_1_demogs %>%
   gt(groupname_col = "category", rowname_col = "group") %>%
   tab_footnote(footnote = "AI/AN = American Indian/Alaskan Native, NH/PI = Native Hawaiian/Pacific Islander", 
                locations = cells_row_groups(groups = "Race/ethnicity")) %>%
-  tab_footnote(footnote = "HCV = Housing Choice Voucher, PH = Public housing", 
+  tab_footnote(footnote = "PBV = Project-based voucher, PH = Public housing, TBV = Tenant-based voucher", 
                locations = cells_row_groups(groups = "Program type")) %>%
   tab_footnote(footnote = md(glue("Health event data available for those aged <62 enrolled in Medicaid (",
                                "Remained N={n_mcaid_exit[[1]]}, ",
@@ -1236,7 +1246,7 @@ table_2_mcaid_demogs <- table_2_mcaid_demogs %>%
   gt(groupname_col = "category", rowname_col = "group") %>%
   tab_footnote(footnote = "AI/AN = American Indian/Alaskan Native, NH/PI = Native Hawaiian/Pacific Islander", 
                locations = cells_row_groups(groups = "Race/ethnicity")) %>%
-  tab_footnote(footnote = "HCV = Housing Choice Voucher, PH = Public housing", 
+  tab_footnote(footnote = "PBV = Project-based voucher, PH = Public housing, TBV = Tenant-based voucher", 
                locations = cells_row_groups(groups = "Program type")) %>%
   sub_missing() %>%
   cols_label(category = md("Category"),
@@ -1274,7 +1284,7 @@ table_3_exit_regression <- table_3_exit_regression %>%
   gt(groupname_col = "category", rowname_col = "group") %>%
   tab_footnote(footnote = "AI/AN = American Indian/Alaskan Native, NH/PI = Native Hawaiian/Pacific Islander", 
                locations = cells_row_groups(groups = "Race/ethnicity")) %>%
-  tab_footnote(footnote = "HCV = Housing Choice Voucher, PH = Public housing", 
+  tab_footnote(footnote = "PBV = Project-based voucher, PH = Public housing, TBV = Tenant-based voucher", 
                locations = cells_row_groups(groups = "Program type")) %>%
   tab_footnote(footnote = paste0("Health event data only available for those aged <62 enrolled in Medicaid ",
                                  "(N = ", number(model_mcaid_n[[1]], big.mark = ','), " for controls, ", 

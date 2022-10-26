@@ -133,7 +133,7 @@
                            single_caregiver + 
                            percent_ami +
                            agency +
-                           major_prog, 
+                         prog_type_use, 
                        data = raw[qtr == 0], 
                        control = my_controls)
       ))
@@ -157,7 +157,7 @@
     table2[, col1 := gsub("single_caregiver", "Single caregiver", col1)]
     table2[, col1 := gsub("housing_time_at_exit", "Years in public housing", col1)]
     table2[, col1 := gsub("agency", "Agency", col1)]
-    table2[, col1 := gsub("major_prog", "Major program", col1)]
+    table2[, col1 := gsub("prog_type_use", "Program type", col1)]
     table2[, col1 := gsub("season", "Season", col1)]
     table2[, col1 := gsub("exit_year", "Exit Year", col1)]
     
@@ -190,11 +190,6 @@
     table2 <- table2[!(grepl("Median", col1) & !category %in% c("Wages", "Hours", "Wages hourly"))]
     table2[, c("category") := NULL]
     
-    
-    # setcolorder(table2, "variable")
-
-
-
 # Write Tables 1 & 2 using openxlsx----
     wb <- createWorkbook() # initiate a new / empty workbook
     addWorksheet(wb, 'Table_0_counts') 

@@ -6,6 +6,7 @@
 
 # Set up ----
 pacman::p_load(httr)
+auth <- Sys.getenv("GITHUB_TOKEN") 
 
 # 01_prep ----
   eval(parse(text = httr::content(httr::GET( 

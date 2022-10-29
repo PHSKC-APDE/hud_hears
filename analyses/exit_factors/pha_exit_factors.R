@@ -55,7 +55,8 @@ covariate <- dbGetQuery(db_hhsaw, "SELECT * FROM hudhears.control_match_covariat
          full_demog = (!(is.na(exit_category) | is.na(age_at_exit) | is.na(gender_me) | 
                               is.na(race_eth_me) | race_eth_me == "Unknown" |
                               is.na(agency) | is.na(single_caregiver) | 
-                              is.na(hh_size) | is.na(hh_disability) | is.na(housing_time_at_exit) | is.na(major_prog)))
+                              is.na(hh_size) | is.na(hh_disability) | is.na(housing_time_at_exit) | 
+                           is.na(prog_type_use)))
   )
 
 covariate_hh <- dbGetQuery(db_hhsaw, "SELECT * FROM hudhears.control_match_covariate_hh") %>%
@@ -80,7 +81,8 @@ covariate_hh <- dbGetQuery(db_hhsaw, "SELECT * FROM hudhears.control_match_covar
          full_demog = (!(is.na(exit_category) | is.na(age_at_exit) | is.na(gender_me) | 
                               is.na(race_eth_me) | race_eth_me == "Unknown" |
                               is.na(agency) | is.na(single_caregiver) | 
-                              is.na(hh_size) | is.na(hh_disability) | is.na(housing_time_at_exit) | is.na(major_prog)))
+                              is.na(hh_size) | is.na(hh_disability) | is.na(housing_time_at_exit) | 
+                           is.na(prog_type_use)))
          )
 
 covariate_nodeath <- covariate %>% filter(exit_death != 1) %>%
@@ -555,7 +557,6 @@ rm(exit_any_mcaid_age_hh, exit_any_mcaid_gender_hh, exit_any_mcaid_race_hh, exit
 ## Not including Medicaid factors ----
 model_data <- covariate_nodeath_hh %>%
   filter(full_demog == T) %>%
-  filter(!is.na(prog_type_use)) %>%
   mutate(across(c("gender_me", "major_prog", "prog_type_use", "vouch_type_use"), ~ as_factor(.))) %>%
   # Relevel factors as they are made
   mutate(race_eth_me = fct_relevel(race_eth_me, c("White")),
@@ -720,7 +721,6 @@ exit_type_crisis_hh <- demog_pct_sum(covariate_exits_hh, full_demog = T, level =
 ## Not including Medicaid factors ----
 model_data_exits <- covariate_exits_hh %>%
   filter(full_demog == T) %>%
-  filter(!is.na(prog_type_use)) %>%
   mutate(across(c("gender_me", "major_prog", "prog_type_use", "vouch_type_use"), ~ as_factor(.))) %>%
   # Relevel factors as they are made
   mutate(race_eth_me = fct_relevel(race_eth_me, c("White")),
@@ -1086,17 +1086,17 @@ table_sorter <- function(tbl) {
 }
 
 # Function for tidying regression output
-table_regression <- function(tbl, type = c("any_exit", "exit_type")) {
+table_regression <- function(tbl, type = c("any_exit", "exit_type"), p_value = F) {
   output <- tbl %>%
     mutate(across(c(starts_with("OR"), ends_with("estimate")), 
                   ~ as.character(number(., accuracy = 0.01))),
            across(any_of(c(matches("^p$"), contains("value"))), ~ 
                     case_when(. < 0.001 ~ "<0.001",
-                              . < 0.01 ~ "0.01",
+                              . < 0.01 ~ "<0.01",
                               . < 0.05 ~ "<0.05",
                               TRUE ~ as.character(round(., 3)))),
            order = 2L)
-  
+
   if (type == "any_exit") {
     output <- output %>%
       bind_rows(., data.frame(group = c("gender_meFemale", "race_eth_meWhite",
@@ -1150,9 +1150,29 @@ table_regression <- function(tbl, type = c("any_exit", "exit_type")) {
   if (type == "any_exit") {
     output <- output %>%
       select(category, group, OR:p, order)
+    if (p_value == F) {
+      output <- output %>%
+        mutate(OR = case_when(p =="<0.05" ~ paste0(OR, "*"),
+                              p =="<0.01" ~ paste0(OR, "**"),
+                              p =="<0.001" ~ paste0(OR, "***"),
+                              TRUE ~ as.character(OR))) %>%
+        select(-p)
+    }
   } else if (type == "exit_type") {
     output <- output %>%
       select(category, group, Negative_estimate:Positive_p.value, order)
+    if (p_value == F) {
+      output <- output %>%
+        mutate(Negative_estimate = case_when(Negative_p.value =="<0.05" ~ paste0(Negative_estimate, "*"),
+                                             Negative_p.value =="<0.01" ~ paste0(Negative_estimate, "**"),
+                                             Negative_p.value =="<0.001" ~ paste0(Negative_estimate, "***"),
+                                             TRUE ~ as.character(Negative_estimate)),
+               Positive_estimate = case_when(Positive_p.value =="<0.05" ~ paste0(Positive_estimate, "*"),
+                                             Positive_p.value =="<0.01" ~ paste0(Positive_estimate, "**"),
+                                             Positive_p.value =="<0.001" ~ paste0(Positive_estimate, "***"),
+                                             TRUE ~ as.character(Positive_estimate))) %>%
+        select(-Negative_p.value, -Positive_p.value)
+    }
   }
   
   output <- table_sorter(output)
@@ -1282,6 +1302,8 @@ table_3_exit_regression <- table_regression(table_3_exit_regression, type = "any
 # Turn into gt table
 table_3_exit_regression <- table_3_exit_regression %>%
   gt(groupname_col = "category", rowname_col = "group") %>%
+  tab_footnote(footnote = "* = p<0.05, ** = p<0.01, *** = p<0.001",
+               locations = cells_column_labels(columns = "OR")) %>%
   tab_footnote(footnote = "AI/AN = American Indian/Alaskan Native, NH/PI = Native Hawaiian/Pacific Islander", 
                locations = cells_row_groups(groups = "Race/ethnicity")) %>%
   tab_footnote(footnote = "PBV = Project-based voucher, PH = Public housing, TBV = Tenant-based voucher", 
@@ -1298,8 +1320,7 @@ table_3_exit_regression <- table_3_exit_regression %>%
   cols_label(category = md("Category"),
              group = md("Group"),
              OR = md("Odds ratio"),
-             ci = md("95% CI"),
-             p = md("p-value"))
+             ci = md("95% CI"))
 
 # Add standard formatting
 table_3_exit_regression <- table_formatter(table_3_exit_regression)
@@ -1307,6 +1328,40 @@ table_3_exit_regression <- table_formatter(table_3_exit_regression)
 # Save output
 gtsave(table_3_exit_regression, filename = "demog_manuscript_table3.png",
        path = file.path(here::here(), "analyses/exit_factors"))
+
+
+### Table 3a: just the Medicaid output ----
+# Most of the Medicaid model ORs are stripped out above.
+# This produces a table of just the Medicaid model results
+# Run through clean up
+table_3a_exit_regression <- table_regression(select(anyexit_mcaid_output, group, OR, ci, p), type = "any_exit")
+
+# Turn into gt table
+table_3a_exit_regression <- table_3a_exit_regression %>%
+  gt(groupname_col = "category", rowname_col = "group") %>%
+  tab_footnote(footnote = paste0("Health event data available for those aged <62 enrolled in Medicaid ",
+                                 "(N = ", number(model_mcaid_n[[1]], big.mark = ','), " for controls, ", 
+                                 number(model_mcaid_n[[2]], big.mark = ','), " for exits)")) %>%
+  tab_footnote(footnote = "* = p<0.05, ** = p<0.01, *** = p<0.001",
+               locations = cells_column_labels(columns = "OR")) %>%
+  tab_footnote(footnote = "AI/AN = American Indian/Alaskan Native, NH/PI = Native Hawaiian/Pacific Islander", 
+               locations = cells_row_groups(groups = "Race/ethnicity")) %>%
+  tab_footnote(footnote = "PBV = Project-based voucher, PH = Public housing, TBV = Tenant-based voucher", 
+               locations = cells_row_groups(groups = "Program type")) %>%
+  sub_missing() %>%
+  cols_label(category = md("Category"),
+             group = md("Group"),
+             OR = md("Odds ratio"),
+             ci = md("95% CI"))
+
+# Add standard formatting
+table_3a_exit_regression <- table_formatter(table_3a_exit_regression)
+
+# Save output
+gtsave(table_3a_exit_regression, filename = "demog_manuscript_table3a.png",
+       path = file.path(here::here(), "analyses/exit_factors"))
+
+
 
 
 ## Table 4: regression for exit type -----
@@ -1326,6 +1381,8 @@ table_4_exit_regression <- table_regression(table_4_exit_regression, type = "exi
 # Turn into gt table
 table_4_exit_regression <- table_4_exit_regression %>%
   gt(groupname_col = "category", rowname_col = "group") %>%
+  tab_footnote(footnote = "* = p<0.05, ** = p<0.01, *** = p<0.001",
+               locations = cells_column_labels(columns = c("Negative_estimate", "Positive_estimate"))) %>%
   tab_footnote(footnote = "AI/AN = American Indian/Alaskan Native, NH/PI = Native Hawaiian/Pacific Islander", 
                locations = cells_row_groups(groups = "Race/ethnicity")) %>%
   tab_footnote(footnote = "HCV = Housing Choice Voucher, PH = Public housing", 
@@ -1357,10 +1414,8 @@ table_4_exit_regression <- table_4_exit_regression %>%
              group = md("Group"),
              Negative_estimate = md("Odds ratio"),
              Negative_ci = md("95% CI"),
-             Negative_p.value = md("p-value"),
              Positive_estimate = md("Odds ratio"),
-             Positive_ci = md("95% CI"),
-             Positive_p.value = md("p-value"))
+             Positive_ci = md("95% CI"))
 
 # Add standard formatting
 table_4_exit_regression <- table_formatter(table_4_exit_regression)
@@ -1369,3 +1424,43 @@ table_4_exit_regression <- table_formatter(table_4_exit_regression)
 gtsave(table_4_exit_regression, filename = "demog_manuscript_table4.png",
        path = file.path(here::here(), "analyses/exit_factors"))
 
+
+### Table 4a: Just the Medicaid data ----
+# Run through clean up
+table_4a_exit_regression <- table_regression(exit_type_mcaid_results, type = "exit_type")
+
+# Turn into gt table
+table_4a_exit_regression <- table_4a_exit_regression %>%
+  gt(groupname_col = "category", rowname_col = "group") %>%
+  tab_footnote(footnote = "* = p<0.05, ** = p<0.01, *** = p<0.001",
+               locations = cells_column_labels(columns = c("Negative_estimate", "Positive_estimate"))) %>%
+  tab_footnote(footnote = "AI/AN = American Indian/Alaskan Native, NH/PI = Native Hawaiian/Pacific Islander", 
+               locations = cells_row_groups(groups = "Race/ethnicity")) %>%
+  tab_footnote(footnote = "HCV = Housing Choice Voucher, PH = Public housing", 
+               locations = cells_row_groups(groups = "Program type")) %>%
+  sub_missing() %>%
+  tab_spanner(label = md(paste0("Negative/positive exits vs. neutral exits <br>", 
+                                "(neutral N=", number(n_type_all_exits_mcaid$n[1], big.mark = ","), ")")),
+              columns = everything(),
+              level = 2) %>%
+  tab_spanner(label = md(paste0("Negative exits (N=", 
+                                number(n_type_all_exits_mcaid$n[2], big.mark = ","), ")")),
+              columns = starts_with("Negative"),
+              level = 1) %>%
+  tab_spanner(label = md(paste0("Positive exits (N=", 
+                                number(n_type_all_exits_mcaid$n[3], big.mark = ","), ")")),
+              columns = starts_with("Positive"),
+              level = 1) %>%
+  cols_label(category = md("Category"),
+             group = md("Group"),
+             Negative_estimate = md("Odds ratio"),
+             Negative_ci = md("95% CI"),
+             Positive_estimate = md("Odds ratio"),
+             Positive_ci = md("95% CI"))
+
+# Add standard formatting
+table_4a_exit_regression <- table_formatter(table_4a_exit_regression)
+
+# Save output
+gtsave(table_4a_exit_regression, filename = "demog_manuscript_table4a.png",
+       path = file.path(here::here(), "analyses/exit_factors"))

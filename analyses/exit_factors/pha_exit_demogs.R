@@ -31,20 +31,34 @@ db_hhsaw <- DBI::dbConnect(odbc::odbc(),
                            TrustServerCertificate = "yes",
                            Authentication = "ActiveDirectoryPassword")
 
+
 # BRING IN DATA ----
+# Set up function to add cleaned program type
+prog_type_add <- function(df) {
+  output <- df %>%
+  mutate(prog_type_use = case_when(prog_type %in% c("PBS8", "COLLABORATIVE HOUSING") ~ "PBV",
+                              prog_type %in% c("PH", "SHA OWNED AND MANAGED") ~ "PH",
+                              prog_type %in% c("PORT", "TBS8", "TENANT BASED") ~ "TBV"))
+  output
+}
+
 # Combined exit/timevar data
 exit_timevar_all <- dbGetQuery(db_hhsaw, "SELECT * FROM pha.stage_pha_exit_timevar") %>%
   mutate(portfolio_final = ifelse(str_detect(portfolio_final, "LAKE CITY"),
                                   "LAKE CITY COURT", portfolio_final))
 
 exit_timevar <- exit_timevar_all %>% filter(chooser == chooser_max)
+exit_timevar <- prog_type_add(exit_timevar)
 
 # Demographic table
 pha_demo <- dbGetQuery(db_hhsaw, "SELECT * FROM pha.final_demo")
 
 # Covariate table
 covariate <- dbGetQuery(db_hhsaw, "SELECT * FROM hudhears.control_match_covariate")
+covariate <- prog_type_add(covariate)
+
 covariate_hh <- dbGetQuery(db_hhsaw, "SELECT * FROM hudhears.control_match_covariate_hh")
+covariate_hh <- prog_type_add(covariate_hh)
 
 
 # Calyear table
@@ -175,12 +189,13 @@ consort_maker <- function(df = consort_df, mcaid_prior = F,
   missing_disability <- nrow(df %>% filter(is.na(hh_disability)))
   missing_los <- nrow(df %>% filter(is.na(housing_time_at_exit)))
   missing_prog <- nrow(df %>% filter(is.na(major_prog)))
+  missing_prog_type <- nrow(df %>% filter(is.na(prog_type_use)))
   missing_opp_index <- nrow(df %>% filter(is.na(kc_opp_index_score)))
   
   df <- df %>%
     filter(!(is.na(age_at_exit) | is.na(gender_me) | is.na(race_eth_me) | race_eth_me == "Unknown" |
                is.na(agency) | is.na(single_caregiver) | is.na(hh_size) | is.na(hh_disability) | 
-               is.na(housing_time_at_exit) | is.na(major_prog)))
+               is.na(housing_time_at_exit) | is.na(prog_type_use)))
   
   if (opp_index == T) {
     df <- df %>% filter(!is.na(kc_opp_index_score))
@@ -245,11 +260,13 @@ consort_maker <- function(df = consort_df, mcaid_prior = F,
   if (opp_index == F) {
     b5 <- glue("b5 [label = 'Missing demographics (n = {format(exits_demogs_removed, big.mark = ',', trim = T)}): \n",
                " - Household demographics: {format(missing_hhsize, big.mark = ',', trim = T)} \n",
+               " - Program type: {format(missing_prog_type, big.mark = ',', trim = T)} \n",
                " - Age: {format(missing_age, big.mark = ',', trim = T)}'];")
   } else if (opp_index == T) {
     b5 <- glue("b5 [label = 'Missing demographics (n = {format(exits_demogs_removed, big.mark = ',', trim = T)}): \n",
                " - Opportunity index: {format(missing_opp_index, big.mark = ',', trim = T)} \n",
                " - Household demographics: {format(missing_hhsize, big.mark = ',', trim = T)} \n",
+               " - Program type: {format(missing_prog_type, big.mark = ',', trim = T)} \n",
                " - Age: {format(missing_age, big.mark = ',', trim = T)}'];")
   }
   if (mcaid_prior == T & mcaid_after == T) {

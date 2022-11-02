@@ -1137,10 +1137,11 @@ table_regression <- function(tbl, type = c("any_exit", "exit_type"), p_value = F
                              group == "hh_disability" ~ "HoH disability",
                              group == "kc_opp_index_score" ~ "Neighborhood opportunity",
                              group == "recent_homeless_grp" ~ "Experienced recent homelessness",
-                             group == "crisis_any_prior" ~ paste0("Experienced 1+ crisis event in year prior to exit ",
+                             group == "crisis_any_prior" ~ paste0("Experienced 1+ behavioral health crisis event in year prior to exit ",
                                                             "(excl. ED visits)"),
-                             group == "crisis_ed_any_prior" ~ paste0("Experienced 1+ crisis event in year prior to exit ",
-                                                               "(incl. ED visits)"),
+                             group == "crisis_ed_any_prior" ~ 
+                               paste0("Experienced 1+ behavioral health crisis event in year prior to exit ",
+                                      "(incl. ED visits)"),
                              group == "ed_any_prior" ~ "Experienced 1+ ED visit in year prior to exit",
                              group == "hosp_any_prior" ~ "Experienced 1+ hospitalization in year prior to exit",
                              group == "ccw_flag" ~ "2+ chronic conditions",
@@ -1225,7 +1226,7 @@ table_1_demogs <- table_1_demogs %>%
                                "Positive N={n_mcaid_type[[3]]}",
                                ")")),
                locations = cells_stub(rows = group %in%
-                                        c("Experienced 1+ crisis events in year prior to exit (inc. ED visits)",
+                                        c("Experienced 1+ behavioral health crisis events in year prior to exit (inc. ED visits)",
                                           "Average # ED visits in year prior to exit",
                                           "Experienced 1+ ED visits in year prior to exit",
                                           "Average # hospitalizations in year prior to exit (per 100 people)",
@@ -1312,7 +1313,7 @@ table_3_exit_regression <- table_3_exit_regression %>%
                                  "(N = ", number(model_mcaid_n[[1]], big.mark = ','), " for controls, ", 
                                  number(model_mcaid_n[[2]], big.mark = ','), " for exits)"),
                locations = cells_stub(rows = group %in%
-                                        c("Experienced 1+ crisis event in year prior to exit (incl. ED visits)",
+                                        c("Experienced 1+ behavioral health crisis event in year prior to exit (incl. ED visits)",
                                           "Experienced 1+ ED visit in year prior to exit",
                                           "Experienced 1+ hospitalization in year prior to exit",
                                           "2+ chronic conditions"))) %>%
@@ -1393,7 +1394,7 @@ table_4_exit_regression <- table_4_exit_regression %>%
                                  number(sum(n_type_all_exits_mcaid$n[3]), big.mark = ","), 
                                  " for neutral/negative/positive exits"),
                locations = cells_stub(rows = group %in%
-                                        c("Experienced 1+ crisis event in year prior to exit (incl. ED visits)",
+                                        c("Experienced 1+ behavioral health crisis event in year prior to exit (incl. ED visits)",
                                           "Experienced 1+ ED visit in year prior to exit",
                                           "Experienced 1+ hospitalization in year prior to exit",
                                           "2+ chronic conditions"))) %>%

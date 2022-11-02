@@ -39,37 +39,48 @@ db_hhsaw <- DBI::dbConnect(odbc::odbc(),
                            TrustServerCertificate = "yes",
                            Authentication = "ActiveDirectoryPassword")
 
-#--------------------------------------------------
-### Step 1) Obtain study population, join covariates, and join homeless status data
 
-#-----
-## 1a) Pull Tables 
+# Step 1) Obtain study population, join covariates, and join homeless status data ----
+
+## 1a) Pull Tables ----
 
 # Select PHA exit data Table (and for which chooser = chooser_max to take just
 # one row for each id_hudhears/exit_date combo)
 pha_exit_timevar <- 
-  setDT(DBI::dbGetQuery(conn = db_hhsaw, "SELECT id_hudhears, id_kc_pha, exit_year,
+  setDT(DBI::dbGetQuery(conn = db_hhsaw, "SELECT id_hudhears, id_kc_pha, hh_id_kc_pha, exit_year,
                         act_date, agency, exit_reason_clean, exit_category, true_exit,
                         exit_order_study, exit_order_max_study, exit_type_keep
                         FROM [pha].[stage_pha_exit_timevar] 
                         WHERE chooser=chooser_max"))
 
 # Select Covariate Table and filter for id_type is exit
-covariate_data <- setDT(DBI::dbGetQuery(conn = db_hhsaw, "SELECT id_hudhears, id_type,
-                                        hh_id_kc_pha, exit_date, gender_me, race_eth_me,
-                                        age_at_exit, housing_time_at_exit, agency,
-                                        major_prog, prog_type, geo_tractce10, hh_size,
-                                        hh_disability, n_disability, single_caregiver 
-                                        FROM [hudhears].[control_match_covariate]")) %>% 
-  filter(id_type=="id_exit")
+covariate_data <- dbGetQuery(db_hhsaw, 
+                             "SELECT id_hudhears, id_kc_pha, hh_id_kc_pha, exit_date, exit_category, 
+                             gender_me, race_eth_me, age_at_exit, housing_time_at_exit, agency,
+                             major_prog, prog_type, geo_tractce10, hh_size,
+                             hh_disability, n_disability, single_caregiver, recent_homeless
+                             FROM hudhears.control_match_covariate
+                             WHERE id_type = 'id_exit'") %>%
+  mutate(# Clean up program types
+         prog_type_use = case_when(prog_type %in% c("PBS8", "COLLABORATIVE HOUSING") ~ "PBV",
+                                   prog_type %in% c("PH", "SHA OWNED AND MANAGED") ~ "PH",
+                                   prog_type %in% c("PORT", "TBS8", "TENANT BASED") ~ "TBV"),
+         # Flag anyone with missing covariates (to get numbers to align with consort diagram)
+         full_demog = (!(is.na(exit_category) | is.na(age_at_exit) | is.na(gender_me) | 
+                           is.na(race_eth_me) | race_eth_me == "Unknown" |
+                           is.na(agency) | is.na(single_caregiver) | 
+                           is.na(hh_size) | is.na(hh_disability) | is.na(housing_time_at_exit) | 
+                           is.na(prog_type_use)))
+  )
+
 
 # Select Homeless Status Table
 homeless_status_data <- setDT(DBI::dbGetQuery(conn = db_hhsaw, "SELECT id_hudhears,
                                               start_date, housing_status, sourcesystemnm 
                                               FROM [hudhears].[pha_homeless_status]"))
 
-#-----
-## 1b) Filter PHA data to obtain dataset of study participants
+
+## 1b) Filter PHA data to obtain dataset of study participants ----
 # Filter for:
 # i) total exits
 # ii) exits in study period (SHA 01/01/2012-12/31/2018, KCHA 01/01/2016-12/31/2018)
@@ -100,33 +111,22 @@ exit_data <- pha_exit_timevar %>%
 
 # now exit_data is study population
 
-#-----
-## 1c) Join covariates and homeless status data to study population
-joined_data <- left_join((exit_data %>% 
-                          select(id_hudhears, exit_year, act_date,
-                                 exit_reason_clean, exit_category) %>%
-                          rename(exit_date=act_date)),
-                         (covariate_data %>%
-                           select(-id_type)),
+
+## 1c) Join covariates and homeless status data to study population ----
+joined_data <- left_join(exit_data %>% 
+                          select(id_hudhears, exit_year, act_date, exit_reason_clean) %>%
+                          rename(exit_date=act_date),
+                         covariate_data,
                          by=c("id_hudhears", "exit_date"))
 
 joined_data <- left_join(joined_data,
                         homeless_status_data,
                         by="id_hudhears")
 
-#-----
-# Write intermediate data to SQL table
-DBI::dbWriteTable(conn = db_hhsaw, 
-                  name = DBI::Id(schema = "hudhears", table = "capstone_data_1"), 
-                  value = setDF(copy(joined_data)), 
-                  append = F, 
-                  overwrite = T)
 
-#---------------------------------------
-### Step 2) Derive time to homelessness variable
+# Step 2) Derive time to homelessness variable ----
 
-#-----
-## 2a) Handle dates beyond threshold and non-homeless status
+## 2a) Handle dates beyond threshold and non-homeless status ----
 
 # Define study end date, censoring threshold, and administrative buffer
 max_date <- as.Date("2019-12-31")
@@ -145,8 +145,8 @@ joined_data$dummy_date <- if_else(joined_data$housing_status != "homeless" |
                                   joined_data$start_date > max_date, max_date,
                                   joined_data$start_date)
 
-#-----
-# 2b) Get time to homelessness variable
+
+## 2b) Get time to homelessness variable ----
 
 # For each unique individual/exit_date combination, get the earliest dummy date
 tth_data <- joined_data %>% group_by(id_hudhears, exit_date) %>%
@@ -158,8 +158,8 @@ tth_data <- joined_data %>% group_by(id_hudhears, exit_date) %>%
 tth_data$tt_homeless <- as.numeric(tth_data$dummy_date - tth_data$exit_date,
                                    units = "days")
 
-#-----
-# 2c) Create censoring/event indicator
+
+## 2c) Create censoring/event indicator ----
 
 # Create variable to indicate event or date censoring
 tth_data$event <- if_else(tth_data$tt_homeless >= max_days, 0, 1)
@@ -171,18 +171,11 @@ tth_data$tt_homeless <- if_else(tth_data$tt_homeless >= max_days, max_days,
 # Make all negative survival times 0
 tth_data$tt_homeless <- if_else(tth_data$tt_homeless < 0, 0, tth_data$tt_homeless)
 
-#-----
-# Write intermediate data to SQL table
-DBI::dbWriteTable(conn = db_hhsaw,
-                  name = DBI::Id(schema = "hudhears", table = "capstone_data_2"),
-                  value = setDF(copy(df)),
-                  append = F,
-                  overwrite = T)
 
-#---------------------------------
-### Step 3) Join KC-standardized opportunity index scores to data by census tract
 
-#-----
+# Step 3) Join KC-standardized opportunity index scores to data by census tract ----
+
+## Opportunity index ----
 # Load opportunity index data (version standardized in King County)
 kc_opp_index_data <- read_csv(file.path(here::here(), "analyses/capstone",
                                         "00_opportunity_index/kc_opp_indices_scaled.csv"))
@@ -195,7 +188,7 @@ kc_opp_index_data <- kc_opp_index_data %>%
   select(GEOID10, GEO_STATE, GEO_COUNTY, GEO_TRACT, everything()) %>%
   rename(kc_opp_index_score = OPP_Z)
 
-#-----
+
 # Join opportunity index scores to housing data by census tract
 tth_data <- left_join(tth_data,
                       (kc_opp_index_data %>% select(GEO_TRACT, kc_opp_index_score)),
@@ -206,11 +199,11 @@ tth_data %>% filter(is.na(kc_opp_index_score)) %>% summarise(total_missing = n()
 tth_data %>% filter(is.na(kc_opp_index_score)) %>% group_by(geo_tractce10) %>%
   summarise(missing = n())
 
-#-----
+
+## Write final data to SQL table ----
 # Write final data to SQL table
 DBI::dbWriteTable(conn = db_hhsaw, 
                   name = DBI::Id(schema = "hudhears", table = "capstone_data_3"), 
                   value = setDF(copy(tth_data)), 
                   append = F, 
                   overwrite = T)
-

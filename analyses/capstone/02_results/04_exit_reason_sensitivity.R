@@ -48,12 +48,7 @@ study_data<- setDT(DBI::dbGetQuery(conn = db_hhsaw, "SELECT * FROM [hudhears].[c
 study_data$exit_category<- relevel(factor(study_data$exit_category), ref="Neutral")
 
 # Remove anyone with missing variables
-study_data <- study_data %>%
-  filter(!(is.na(exit_category) | is.na(age_at_exit) | is.na(gender_me) | 
-             is.na(race_eth_me) | race_eth_me == "Unknown" |
-             is.na(agency) | is.na(single_caregiver) | 
-             is.na(hh_size) | is.na(hh_disability) | is.na(housing_time_at_exit) | is.na(major_prog) | 
-             is.na(kc_opp_index_score)))
+study_data <- study_data %>% filter(full_demog == T)
 
 
 #--------------------------------------------------
@@ -75,8 +70,8 @@ run_analysis <- function(data, gee = T){
     # fit multinomial log reg model with GEE and calculate generalized propensity scores
     ps_mod <- nomLORgee(formula = exit_category ~ age_at_exit + gender_me +
                           race_eth_me + agency + single_caregiver + hh_size +
-                          hh_disability + housing_time_at_exit + major_prog +
-                          kc_opp_index_score,
+                          hh_disability + housing_time_at_exit + prog_type_use +
+                          recent_homeless,
                         data = data,
                         id = hh_id_kc_pha,
                         LORstr = "independence")
@@ -87,8 +82,8 @@ run_analysis <- function(data, gee = T){
     # fit multinomial log reg model without GEE and calculate generalized propensity scores
     ps_mod<- multinom(formula= exit_category ~ age_at_exit + gender_me +
                         race_eth_me + agency + single_caregiver + hh_size +
-                        hh_disability + housing_time_at_exit + major_prog +
-                        kc_opp_index_score,
+                        hh_disability + housing_time_at_exit + prog_type_use +
+                        recent_homeless,
                       data= data,
                       trace=FALSE) 
     ps<- as.data.frame(fitted(ps_mod))

@@ -79,7 +79,7 @@ label(df.table$race_eth_me) <- "Race/Ethnicity"
 label(df.table$age_at_exit) <- "Age at exit (year)"
 label(df.table$housing_time_at_exit) <- "Time in housing at exit (year)"
 label(df.table$agency) <- "Agency"
-label(df.table$major_prog) <- "Subsidy type"
+label(df.table$prog_type_use) <- "Subsidy type"
 label(df.table$hh_size) <- "Household size"
 label(df.table$hh_disability) <- "Head of household disabled"
 label(df.table$single_caregiver) <- "Single caregiver in household"
@@ -95,20 +95,26 @@ label(df.table$kc_opp_index_score) <- "Opportunity index score"
 #
 # 1) For censored individuals
 table1(~gender_me+race_eth_me+age_at_exit+housing_time_at_exit+agency+
-               major_prog+hh_size+hh_disability+single_caregiver+
-               kc_opp_index_score|exit_category, 
+               prog_type_use+hh_size+hh_disability+single_caregiver+
+               exit_category, 
        data=(df.table %>% subset(event=="Yes")))
 
 # 2) For individuals who have homelessness events
 table1(~gender_me+race_eth_me+age_at_exit+housing_time_at_exit+agency+
-         major_prog+hh_size+hh_disability+single_caregiver+
-         kc_opp_index_score|exit_category, 
+         prog_type_use+hh_size+hh_disability+single_caregiver+
+         exit_category, 
        data=(df.table %>% subset(event=="No")))
 
 # 3) For the overall population
 table1(~tt_homeless+event+gender_me+race_eth_me+age_at_exit+housing_time_at_exit+
-         agency+major_prog+hh_size+hh_disability+single_caregiver+
-         kc_opp_index_score|exit_category, 
+         agency+prog_type_use+hh_size+hh_disability+single_caregiver +
+         exit_category, 
+       data=df.table)
+
+# By cat
+table1(~tt_homeless+event+gender_me+race_eth_me+age_at_exit+housing_time_at_exit+
+         agency+prog_type_use+hh_size+hh_disability+single_caregiver |
+         exit_category, 
        data=df.table)
 
 
@@ -127,14 +133,13 @@ df.miss <- df
 
 # Select variables
 df.miss <- df.miss %>% select(gender_me, race_eth_me, age_at_exit, 
-                              housing_time_at_exit, agency, major_prog, hh_size, 
-                              hh_disability, single_caregiver, kc_opp_index_score, 
+                              housing_time_at_exit, agency, prog_type_use, hh_size, 
+                              hh_disability, single_caregiver, 
                               exit_reason_clean, exit_category)
 
 # For variables with a long name, need to make a shorter version or else the label
 # will not show in the plot
-df.miss <- rename(df.miss, c(opp_score=kc_opp_index_score, 
-                             housing_time=housing_time_at_exit,
+df.miss <- rename(df.miss, c(housing_time=housing_time_at_exit,
                              single_care=single_caregiver,
                              exit_reason=exit_reason_clean))
 

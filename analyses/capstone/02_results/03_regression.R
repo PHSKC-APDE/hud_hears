@@ -26,6 +26,9 @@
 if (!require("pacman")) {install.packages("pacman")}
 pacman::p_load(tidyverse, multgee, survival, data.table)
 
+# set working directory (for output of plots- to utilize more easily)
+capstone_path <- file.path(here::here(), "analyses/capstone/02_results")
+
 # Connect to HHSAW
 db_hhsaw <- DBI::dbConnect(odbc::odbc(),
                            driver = "ODBC Driver 17 for SQL Server",
@@ -45,25 +48,14 @@ tth_data <- setDT(DBI::dbGetQuery(conn = db_hhsaw, "SELECT * FROM [hudhears].[ca
 
 
 ## 1a) First, fit the multinomial logistic regression model, using GEE ----
-
-# Formula:
-# exit_category ~ age_at_exit + gender_me + race_eth_me + agency + 
-#                 single_caregiver + hh_size + hh_disability + 
-#                 housing_time_at_exit + major_prog + kc_opp_index_score
-
 # Remove anyone with missing variables
-tth_data <- tth_data %>%
-  filter(!(is.na(exit_category) | is.na(age_at_exit) | is.na(gender_me) | 
-             is.na(race_eth_me) | race_eth_me == "Unknown" |
-             is.na(agency) | is.na(single_caregiver) | 
-             is.na(hh_size) | is.na(hh_disability) | is.na(housing_time_at_exit) | is.na(major_prog) | 
-             is.na(kc_opp_index_score)))
+tth_data <- tth_data %>% filter(full_demog == T)
 
 # First, fit the multinomial logistic regression model, using GEE
 ps_mod <- nomLORgee(formula = exit_category ~ age_at_exit + gender_me + 
                       race_eth_me + agency + single_caregiver + hh_size +
-                      hh_disability + housing_time_at_exit + major_prog +
-                      kc_opp_index_score,
+                      hh_disability + housing_time_at_exit + prog_type_use +
+                      recent_homeless,
                     data = tth_data,
                     id = hh_id_kc_pha,
                     LORstr = "independence")
@@ -99,11 +91,6 @@ summary(tth_mod)
 
 
 ## 2a) First, calculate overlap weights and assign to each observation ----
-
-# Formula:
-# exit_category ~ age_at_exit + gender_me + race_eth_me + agency + 
-#                 single_caregiver + hh_size + hh_disability + 
-#                 housing_time_at_exit + major_prog + kc_opp_index_score
 tth_data <- tth_data %>% 
   mutate(overlap = case_when(exit_category == "Neutral" ~ 1 - Neutral,
                              exit_category == "Negative" ~ 1 - Negative,
@@ -132,7 +119,7 @@ summary(tth_mod_overlap)
     # save(tth_mod_overlap_export, tth_data_export, file = "C:/temp/tth_mod_overlap.RData")
 
 
-#--------------------------------------------------
+
 # Step 3) Perform primary analysis for KCHA and SHA separately ----
 # Note: agency is not in the formula
 
@@ -140,8 +127,8 @@ summary(tth_mod_overlap)
 ### KCHA ----
 ps_mod_kcha <- nomLORgee(formula = exit_category ~ age_at_exit + gender_me + 
                            race_eth_me + single_caregiver + hh_size +
-                           hh_disability + housing_time_at_exit + major_prog +
-                           kc_opp_index_score,
+                           hh_disability + housing_time_at_exit + prog_type_use +
+                           recent_homeless,
                          data = tth_data[tth_data$agency == "KCHA"],
                          id = hh_id_kc_pha,
                          LORstr = "independence")
@@ -157,8 +144,8 @@ ps_kcha <- cbind("id_hudhears" = tth_data$id_hudhears[tth_data$agency == "KCHA"]
 ### SHA ----
 ps_mod_sha <- nomLORgee(formula = exit_category ~ age_at_exit + gender_me + 
                           race_eth_me + single_caregiver + hh_size +
-                          hh_disability + housing_time_at_exit + major_prog +
-                          kc_opp_index_score,
+                          hh_disability + housing_time_at_exit + prog_type_use +
+                          recent_homeless,
                         data = tth_data[tth_data$agency == "SHA"],
                         id = hh_id_kc_pha,
                         LORstr = "independence")
@@ -234,7 +221,7 @@ primary <- data.frame(index=c("pos", "neg"),
                       hi=c(exp(confint(tth_mod))[[4]], exp(confint(tth_mod))[[3]]))
 
 # Create a boxplot with ggplot
-ggplot(data=primary) +
+primary_plot <- ggplot(data=primary) +
   
   # Point estimates
   geom_point(aes(x=hr, y=index, color=index), size=3) +
@@ -265,6 +252,11 @@ ggplot(data=primary) +
         panel.border=element_blank(),
         axis.line=element_line())
 
+png(file = paste0(file.path(capstone_path, "regression_primary.png")), width = 800, height = 600)
+primary_plot
+dev.off()
+
+
 
 ## 4b) Sensitivity analysis plot ----
 
@@ -275,7 +267,7 @@ ow <- data.frame(index=c("pos", "neg"),
                  hi=c(exp(confint(tth_mod_overlap))[[4]], exp(confint(tth_mod_overlap))[[3]]))
 
 # Create a boxplot with ggplot
-ggplot(data=ow) +
+ow_plot <- ggplot(data=ow) +
   
   # Point estimates
   geom_point(aes(x=hr, y=index, color=index), size=3) +
@@ -306,6 +298,10 @@ ggplot(data=ow) +
         panel.border=element_blank(),
         axis.line=element_line())
 
+png(file = paste0(file.path(capstone_path, "regression_sensitivity.png")), width = 800, height = 600)
+ow_plot
+dev.off()
+
 
 ## 4c) PHA stratified analysis plots -----
 ### KCHA specific plot ----
@@ -316,7 +312,7 @@ kcha <- data.frame(index=c("pos", "neg"),
                    hi=c(exp(confint(tth_mod_kcha))[[4]], exp(confint(tth_mod_kcha))[[3]]))
 
 # Create a boxplot with ggplot
-ggplot(data=kcha) +
+kcha_plot <- ggplot(data=kcha) +
   
   # Point estimates
   geom_point(aes(x=hr, y=index, color=index), size=3) +
@@ -347,6 +343,10 @@ ggplot(data=kcha) +
         panel.border=element_blank(),
         axis.line=element_line())
 
+png(file = paste0(file.path(capstone_path, "regression_kcha.png")), width = 800, height = 600)
+kcha_plot
+dev.off()
+
 
 ### SHA specific plot ----
 # Create dataframe of results
@@ -356,7 +356,7 @@ sha <- data.frame(index=c("pos", "neg"),
                   hi=c(exp(confint(tth_mod_sha))[[4]], exp(confint(tth_mod_sha))[[3]]))
 
 # Create a boxplot with ggplot
-ggplot(data=sha) +
+sha_plot <- ggplot(data=sha) +
   
   # Point estimates
   geom_point(aes(x=hr, y=index, color=index), size=3) +
@@ -387,3 +387,6 @@ ggplot(data=sha) +
         panel.border=element_blank(),
         axis.line=element_line())
 
+png(file = paste0(file.path(capstone_path, "regression_sha.png")), width = 800, height = 600)
+sha_plot
+dev.off()

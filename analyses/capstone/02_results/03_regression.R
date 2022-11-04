@@ -105,20 +105,31 @@ tth_mod_overlap <- coxph(formula = Surv(tt_homeless, event) ~ exit_category,
 
 summary(tth_mod_overlap)
 
-  # Create de-identified version for export
-    tth_data_export <- copy(tth_data)
-    tth_data_export[, hh_id := .GRP, by = "hh_id_kc_pha"]
-    tth_data_export <- tth_data_export[, .(hh_id, tt_homeless, event, exit_category, overlap)]
-    
-    tth_mod_overlap_export <- coxph(formula = Surv(tt_homeless, event) ~ exit_category,
-                             data = tth_data_export,
-                             weights = overlap,
-                             cluster = hh_id)
-    
-    summary(tth_mod_overlap_export)
-    # save(tth_mod_overlap_export, tth_data_export, file = "C:/temp/tth_mod_overlap.RData")
+# Create de-identified version for export
+tth_data_export <- copy(tth_data)
+tth_data_export[, hh_id := .GRP, by = "hh_id_kc_pha"]
+tth_data_export <- tth_data_export[, .(hh_id, tt_homeless, event, exit_category, overlap)]
+  
+tth_mod_overlap_export <- coxph(formula = Surv(tt_homeless, event) ~ exit_category,
+                                data = tth_data_export,
+                                weights = overlap,
+                                cluster = hh_id)
+
+summary(tth_mod_overlap_export)
+# save(tth_mod_overlap_export, tth_data_export, file = "C:/temp/tth_mod_overlap.RData")
 
 
+## Test PH assumptions ----
+# Schoenfeld test
+test_tth_mod <- cox.zph(tth_mod, transform = rank)
+
+
+# --------------------------------------------------------------------------------------------------------#
+
+
+
+    
+    
 
 # Step 3) Perform primary analysis for KCHA and SHA separately ----
 # Note: agency is not in the formula

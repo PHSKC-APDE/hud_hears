@@ -36,15 +36,13 @@ db_hhsaw <- DBI::dbConnect(odbc::odbc(),
 # Select table that contains time-to-homelessness variable
 tth_data <- setDT(DBI::dbGetQuery(conn = db_hhsaw, "SELECT * FROM [hudhears].[capstone_data_3]"))
 # Create "survival" object column in data
-tth_data <- tth_data %>% mutate(surv_object= Surv(time=tt_homeless, event=event))
+tth_data <- tth_data %>% mutate(surv_object = Surv(time=tt_homeless, event=event))
 
-#-------------------------------------
-# 1) KM curves by exit type
 
+# 1) KM curves by exit type ----
 # Create KM estimate survival curve by exit type
 fit_exit_type <- survfit(surv_object ~ exit_category, data = tth_data, conf.type = "log-log")
 
-#---
 ## Plotting
 # Create object of Kaplan-Meier survival curve by exit type
 km_exit_type <- ggsurvplot(fit_exit_type, data=tth_data,
@@ -76,20 +74,26 @@ png(file = paste0(output_path, "KM_curve.png"), width = 600, height = 800)
 km_exit_type
 dev.off()
 
-#---
+
 ## Other Descriptive Stats
 # Non-parametric KM-estimated survival at time= 365 days (by exit type)
 summary(fit_exit_type, times = 365)
 
-#------------------------------------
-# 2) KM curves by exit type, stratified by KCHA/SHA
+
+# log-minus-log plot (if PH assumption holds, lines should be parallel)
+png(file = paste0(output_path, "KM_log_log.png"), width = 800, height = 600)
+rms::survplot(rms::npsurv(surv_object ~ exit_category, data = tth_data), loglog=T)
+dev.off()
+
+
+# 2) KM curves by exit type, stratified by KCHA/SHA ----
 
 # Create KM estimate survival curve by exit type
 fit_exit_type_pha <- survfit(surv_object ~ exit_category + agency, 
                             data = tth_data, 
                             conf.type = "log-log")
 
-#---
+
 ## Plotting
 # Create object of Kaplan-Meier survival curve by exit type, stratified by PHA
 km_exit_type_pha <- ggsurvplot(fit_exit_type_pha, data = tth_data,
@@ -113,13 +117,13 @@ png(file = paste0(output_path, "KM_curve_pha.png"), width = 600, height = 450)
 km_exit_type_pha
 dev.off()
 
-#---
+
 ## Other Descriptive Stats
 # Non-parametric KM-estimated survival at time= 365 days (by exit type / PHA combination)
 summary(fit_exit_type_pha, times = 365)
 
-#---------------------------------------
-# 3) KM curves by exit type, faceted by KCHA and SHA (separate plots)
+
+# 3) KM curves by exit type, faceted by KCHA and SHA (separate plots) ----
 km_exit_type_pha_facet <- ggsurvplot(fit_exit_type, data = tth_data,
                                     facet.by = "agency",
                                     short.panel.labs = TRUE,
@@ -139,5 +143,4 @@ km_exit_type_pha_facet <- ggsurvplot(fit_exit_type, data = tth_data,
 png(file = paste0(output_path, "KM_curve_pha_facet.png"), width = 600, height = 450)
 km_exit_type_pha_facet
 dev.off()
-#---
 

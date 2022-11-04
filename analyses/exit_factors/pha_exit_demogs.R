@@ -38,7 +38,12 @@ prog_type_add <- function(df) {
   output <- df %>%
   mutate(prog_type_use = case_when(prog_type %in% c("PBS8", "COLLABORATIVE HOUSING") ~ "PBV",
                               prog_type %in% c("PH", "SHA OWNED AND MANAGED") ~ "PH",
-                              prog_type %in% c("PORT", "TBS8", "TENANT BASED") ~ "TBV"))
+                              prog_type %in% c("PORT", "TBS8", "TENANT BASED") ~ "TBV",
+                              # A better way is to look at voucher type, but that would mean 
+                              # rerunning all analyses for an additional ~10 exits
+                              # This approach lines up the covariate and timevar prog_types
+                              exit_reason_clean == "Other subsidized HSG/HCV" & is.na(prog_type) ~ "TBV"
+                              ))
   output
 }
 

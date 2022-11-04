@@ -193,7 +193,7 @@ consort_maker <- function(df = consort_df, mcaid_prior = F,
   missing_hhsize <- nrow(df %>% filter(is.na(hh_size)))
   missing_disability <- nrow(df %>% filter(is.na(hh_disability)))
   missing_los <- nrow(df %>% filter(is.na(housing_time_at_exit)))
-  missing_prog <- nrow(df %>% filter(is.na(major_prog)))
+  missing_prog <- nrow(df %>% filter(is.na(prog_type_use)))
   missing_prog_type <- nrow(df %>% filter(is.na(prog_type_use)))
   missing_opp_index <- nrow(df %>% filter(is.na(kc_opp_index_score)))
   
@@ -419,7 +419,7 @@ consort_maker_mcaid_type <- function(df, split_prior = F) {
     filter(exit_death == 0 & !is.na(exit_death)) %>%
     filter(!(is.na(age_at_exit) | is.na(gender_me) | is.na(race_eth_me) | race_eth_me == "Unknown" |
                is.na(agency) | is.na(single_caregiver) | is.na(hh_size) | is.na(hh_disability) | 
-               is.na(housing_time_at_exit) | is.na(major_prog) | is.na(kc_opp_index_score))) %>%
+               is.na(housing_time_at_exit) | is.na(prog_type_use))) %>%
     filter(age_at_exit < 62)  
   
   ### Set up values for each node ----
@@ -646,8 +646,8 @@ expired %>%
 
 expired %>% 
   filter(exit_order_study == exit_order_max_study) %>%
-  distinct(id_hudhears, agency, act_date, major_prog) %>%
-  count(agency, major_prog)
+  distinct(id_hudhears, agency, act_date, prog_type_use) %>%
+  count(agency, prog_type_use)
 
 
 # Look at coverage time per period before exit
@@ -935,7 +935,7 @@ sha_max_pos_hh <- exit_year_hh %>%
 # DEMOGS OF PEOPLE EXITING ----
 exit_demogs <- exit_timevar %>%
   distinct(agency, id_hudhears, id_kc_pha, from_date, to_date, act_date, exit_year, exit_reason_clean, exit_category, true_exit,
-           major_prog, disability, portfolio_final) %>%
+           prog_type_use, disability, portfolio_final) %>%
   left_join(., pha_demo, by = "id_kc_pha") %>%
   # Recode Latino so that it trumps in race_eth_me (currently most Latino/a are found under multiple)
   # Consider changing how the pha_demo table sets this up
@@ -951,7 +951,7 @@ exit_demogs_hh <- exit_timevar %>%
 
 # Look at demogs of people who exit vs don't in a given year
 exit_demogs_year <- function(year_run, hh = F, drop_death = F, drop_kcha = T) {
-  demog_list <- c("major_prog", "race_eth_me", "gender_recent", "agegrp", "agegrp_expanded", 
+  demog_list <- c("prog_type_use", "race_eth_me", "gender_recent", "agegrp", "agegrp_expanded", 
                   "time_housing", "disability", "portfolio_final")
   
   if (hh == F) {
@@ -978,7 +978,7 @@ exit_demogs_year <- function(year_run, hh = F, drop_death = F, drop_kcha = T) {
     id_var <- rlang::sym("id_kc_pha")
     exits <- exits %>%
       select(id_var, id_kc_pha, agency, exited, act_date, true_exit, exit_reason_clean, exit_category, 
-             race_eth_me, gender_recent, major_prog, disability, portfolio_final) %>%
+             race_eth_me, gender_recent, prog_type_use, disability, portfolio_final) %>%
       distinct() %>%
       left_join(., filter(pha_calyear, .data[["id_kc_pha"]] == id_kc_pha & year == year_run) %>%
                   select(agency, id_kc_pha, agegrp, agegrp_expanded, time_housing),
@@ -987,7 +987,7 @@ exit_demogs_year <- function(year_run, hh = F, drop_death = F, drop_kcha = T) {
     id_var <- rlang::sym("hh_id_kc_pha")
     exits <- exits %>%
       select(id_var, hh_id_kc_pha, agency, exited, act_date, true_exit, exit_reason_clean, exit_category, 
-             race_eth_me, gender_recent, major_prog, disability, portfolio_final) %>%
+             race_eth_me, gender_recent, prog_type_use, disability, portfolio_final) %>%
       distinct() %>%
       left_join(., filter(pha_calyear, hh_id_kc_pha == id_kc_pha & year == year_run) %>%
                   select(agency, hh_id_kc_pha, agegrp, agegrp_expanded, time_housing),
@@ -1148,7 +1148,7 @@ exit_demogs_sum_nodeath %>%
 
 
 exit_demogs_sum_nodeath %>%
-  filter(category == "major_prog" & !is.na(group) & exit == 1) %>%
+  filter(category == "prog_type_use" & !is.na(group) & exit == 1) %>%
   ggplot(aes(fill = exit_category, y = n_supp, x = exit_year)) +
   geom_bar(position = "fill", stat = "identity", colour = "black") +
   geom_text(position = position_fill(vjust = 0.5), size = 3, show.legend = F,

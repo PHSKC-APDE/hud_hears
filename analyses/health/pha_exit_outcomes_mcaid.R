@@ -967,7 +967,7 @@ table_regression <- function(tbl, type = c("any_exit", "exit_type")) {
                                 str_detect(group, "^los") ~ "Time in housing",
                                 group %in% c("hh_size", "single_caregiver", "hh_disability") ~ 
                                   "Household characteristics",
-                                str_detect(group, "major_prog") ~ "Program type",
+                                str_detect(group, "major_prog|prog_type_use") ~ "Program type",
                                 group %in% c("crisis_any_prior", "crisis_ed_any_prior", 
                                              "recent_homeless_grp", 
                                              "ed_cnt_prior", "ed_any_prior",
@@ -983,7 +983,7 @@ table_regression <- function(tbl, type = c("any_exit", "exit_type")) {
   ref_rows <- data.frame(category = c("Exit category", "Gender", "Race/ethnicity",
                                       "Age", "Time in housing", "Program type"),
                          group = c("exit_categoryRemained", "gender_meFemale", "race_eth_meWhite",
-                                   "age_grp<25", "los<3", "major_progHCV"),
+                                   "age_grp<25", "los<3", "prog_type_useHCV"),
                          estimate_ed = rep("ref", 6), 
                          estimate_h = rep("ref", 6), 
                          estimate_wc_w = c(rep("ref", 3), NA_character_, "ref", "ref"), 
@@ -1037,7 +1037,7 @@ table_regression <- function(tbl, type = c("any_exit", "exit_type")) {
                             group == "hosp_cnt_prior" ~ "No. hospitalizations in year prior to exit",
                             group == "ccw_flag" ~ "2+ chronic conditions",
                             group == "age_at_exit" ~ "Age at exit (years)",
-                            TRUE ~ str_remove(group, "age_grp|gender_me|los|major_prog|race_eth_me|exit_category_neg|exit_category")))
+                            TRUE ~ str_remove(group, "age_grp|gender_me|los|major_prog|prog_type_use|race_eth_me|exit_category_neg|exit_category")))
   
   # Turn into gt table
   output <- output %>%

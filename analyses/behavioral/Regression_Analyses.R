@@ -20,8 +20,9 @@ all_pop <- all_pop %>%
   # Remove people with missing variables since they aren't in the model
   filter(include_demog == T) %>%
   # Change exit category to a factor variable
-         mutate(across(c("gender_me", "major_prog", "exit_category"), ~ as_factor(.)),
-         race_eth_me = fct_relevel(race_eth_me, c("White")))
+         mutate(across(c("gender_me", "prog_type_use", "exit_category"), ~ as_factor(.)),
+         race_eth_me = fct_relevel(race_eth_me, c("White")),
+         prog_type_use = fct_relevel(prog_type_use, c("TBV")))
 
 # Set up numeric IDs for households
 # Needed for geeglm to work properly
@@ -51,12 +52,12 @@ summarizer <- function(df,
   outcome <- match.arg(outcome)
   
   if (outcome == "all") {
-    cat_text <- "Crisis events (excl. Medicaid ED visits)"
+    cat_text <- "Crisis events"
     output <- df %>% 
       distinct(id_hudhears, exit_date, ..., crisis_num, crisis_any) %>%
       mutate(cnt = crisis_num, any = crisis_any)
   } else if (outcome == "mcaid") {
-    cat_text <- "Crisis events (inc. Medicaid ED visits)"
+    cat_text <- "Crisis events (Medicaid subpopulation)"
     output <- df %>% 
       distinct(id_hudhears, exit_date, ..., crisis_num_mcaid, crisis_any_mcaid) %>%
       mutate(cnt = crisis_num_mcaid, any = crisis_any_mcaid)
@@ -101,7 +102,7 @@ broom::tidy(any_crude, conf.int = TRUE, exponentiate = T)
 ## Adjusted ----
 # Multiple categories model (use this)
 any_adj <- geepack::geeglm(crisis_any ~ exit_category + gender_me + age_at_exit + race_eth_me  + 
-                                  hh_size + single_caregiver + housing_time_at_exit + major_prog + 
+                                  hh_size + single_caregiver + housing_time_at_exit + prog_type_use + 
                                   hh_disability + crisis_any_before, 
                                data = all_pop, 
                                id = id_hh,
@@ -113,7 +114,7 @@ broom::tidy(any_adj, conf.int = TRUE, exponentiate = T) %>% as.data.frame()
 
 # Poisson model (not being used but just for interest's sake)
 any_adj_pois <- geepack::geeglm(crisis_num ~ exit_category + gender_me + age_at_exit + race_eth_me  + 
-                                  hh_size + single_caregiver + housing_time_at_exit + major_prog + 
+                                  hh_size + single_caregiver + housing_time_at_exit + prog_type_use + 
                                   hh_disability + crisis_any_before, 
                                data = all_pop, 
                                id = id_hh,
@@ -126,7 +127,7 @@ broom::tidy(any_adj_pois, conf.int = TRUE, exponentiate = T) %>% as.data.frame()
 ## Stratified by prior crisis (not using these at this time) ----
 # No prior BH crises
 any_stat_no_prior <- geepack::geeglm(crisis_any ~ exit_category + gender_me + age_at_exit + race_eth_me  + 
-                                       hh_size + single_caregiver + housing_time_at_exit + major_prog + 
+                                       hh_size + single_caregiver + housing_time_at_exit + prog_type_use + 
                                        hh_disability,
                                      data = all_pop[all_pop$crisis_any_before == 0, ], 
                                      id = id_hh,
@@ -137,7 +138,7 @@ broom::tidy(any_stat_no_prior, conf.int = TRUE, exponentiate = T) %>% as.data.fr
 
 # Prior BH crises
 any_stat_prior <- geepack::geeglm(crisis_any ~ exit_category + gender_me + age_at_exit + race_eth_me  + 
-                                       hh_size + single_caregiver + housing_time_at_exit + major_prog + 
+                                       hh_size + single_caregiver + housing_time_at_exit + prog_type_use + 
                                        hh_disability,
                                      data = all_pop[all_pop$crisis_any_before == 1, ], 
                                      id = id_hh,
@@ -161,7 +162,7 @@ broom::tidy(mcaid_crude, conf.int = TRUE, exponentiate = T)
 ## Adjusted ----
 # Multiple categories model (use this)
 mcaid_adj <- geepack::geeglm(crisis_any_mcaid ~ exit_category + gender_me + age_at_exit + race_eth_me  + 
-                             hh_size + single_caregiver + housing_time_at_exit + major_prog + 
+                             hh_size + single_caregiver + housing_time_at_exit + prog_type_use + 
                              hh_disability +  crisis_any_mcaid_before, 
                            data = mcaid_subset7mo, 
                            id = id_hh,
@@ -173,7 +174,7 @@ broom::tidy(mcaid_adj, conf.int = TRUE, exponentiate = T) %>% as.data.frame()
 
 # Poisson model (not being used but just for interest's sake)
 mcaid_adj_pois <- geepack::geeglm(crisis_num_mcaid ~ exit_category + gender_me + age_at_exit + race_eth_me  + 
-                                  hh_size + single_caregiver + housing_time_at_exit + major_prog + 
+                                  hh_size + single_caregiver + housing_time_at_exit + prog_type_use + 
                                   hh_disability + crisis_any_mcaid_before, 
                                 data = mcaid_subset7mo, 
                                 id = id_hh,
@@ -259,7 +260,7 @@ table_regression <- function(tbl, type = c("all", "mcaid")) {
     rename(group = term) %>%
     mutate(estimate = as.character(number(estimate, accuracy = 0.01)),
            p.value = case_when(p.value < 0.001 ~ "<0.001",
-                               p.value < 0.01 ~ "0.01",
+                               p.value < 0.01 ~ "<0.01",
                                p.value < 0.05 ~ "<0.05",
                                TRUE ~ as.character(round(p.value, 3))),
            ci = paste0(number(conf.low, accuracy = 0.01), "–", 
@@ -288,7 +289,9 @@ table_regression <- function(tbl, type = c("all", "mcaid")) {
 # TABLE 1: DESCRIPTIVE STATS (CURRENTLY ONLY OUTCOMES) ----
 # Turn into a gt table and make pretty
 descriptive <- descriptive %>% select(category, group, Positive, Neutral, Negative) %>%
-  gt(groupname_col = "category", rowname_col = "group")
+  gt(groupname_col = "category", rowname_col = "group") %>%
+  tab_footnote(footnote = "Includes behavioral-health related ED visits not captured in the full analysis",
+               locations = cells_row_groups(groups = "Crisis events (Medicaid subpopulation)"))
 
 descriptive <- table_formatter(descriptive)
 
@@ -316,13 +319,13 @@ table2 <- left_join(any_model, mcaid_model, by = "group") %>%
                               str_detect(group, "^los|housing_time") ~ "Time in housing",
                               group %in% c("hh_size", "single_caregiver", "hh_disability")
                                            ~ "Household characteristics",
-                              str_detect(group, "major_prog") ~ "Program type",
+                              str_detect(group, "prog_type_use") ~ "Program type",
                               str_detect(group, "before") ~ "Existing behavioral health"))
 
 # Make and bind the reference rows
 ref_rows <- data.frame(category = c("Exit category", "Gender", "Race/ethnicity", "Program type"),
                        group = c("exit_categoryNeutral", "gender_meFemale", 
-                                 "race_eth_meWhite", "major_progHCV"),
+                                 "race_eth_meWhite", "prog_type_useTBV"),
                        estimate_all = rep("ref", 4), 
                        estimate_mcaid = rep("ref", 4),
                        order = rep(1L, 4))
@@ -349,7 +352,7 @@ table2 <- bind_rows(table2, ref_rows) %>%
                            group == "hh_disability" ~ "HoH disability",
                            group == "age_at_exit" ~ "Age at exit (years)",
                            str_detect(group, "before") ~ "Prior crisis events",
-                           TRUE ~ str_remove(group, "age_grp|gender_me|los|major_prog|race_eth_me|exit_category")))
+                           TRUE ~ str_remove(group, "age_grp|gender_me|los|prog_type_use|race_eth_me|exit_category")))
 
 # Turn into gt table
 table2 <- table2 %>%
@@ -368,7 +371,7 @@ table2 <- table2 %>%
                locations = cells_row_groups(groups = "Race/ethnicity")) %>%
   tab_footnote(footnote = "HoH = Head of household", 
                locations = cells_stub(rows = str_detect(group, "HoH"))) %>%
-  tab_footnote(footnote = "HCV = Housing Choice Voucher, PH = Public housing", 
+  tab_footnote(footnote = "PBV = Project-based voucher, PH = Public housing, TBV = Tenant-based voucher", 
                locations = cells_row_groups(groups = "Program type")) %>%
   sub_missing()
 

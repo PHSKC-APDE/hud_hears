@@ -240,12 +240,16 @@ control_match_covariate <- control_match_covariate %>%
     # Flag people with coverage before and after exit
     include_cov = full_cov_7_prior == T & full_cov_7_after == T,
     include_cov_age = full_cov_7_prior == T & full_cov_7_after == T & age_at_exit < 62,
+    # Clean up program types
+    prog_type_use = case_when(prog_type %in% c("PBS8", "COLLABORATIVE HOUSING") ~ "PBV",
+                              prog_type %in% c("PH", "SHA OWNED AND MANAGED") ~ "PH",
+                              prog_type %in% c("PORT", "TBS8", "TENANT BASED") ~ "TBV"),
     # Flag anyone with missing covariates since they will be dropped from the propensity scores
     include_demog = (!(is.na(exit_category) | is.na(age_at_exit) | is.na(gender_me) | 
                          is.na(race_eth_me) | race_eth_me == "Unknown" |
                          is.na(agency) | is.na(single_caregiver) | 
-                         is.na(hh_size) | is.na(hh_disability) | is.na(housing_time_at_exit) | is.na(major_prog) | 
-                         is.na(kc_opp_index_score)))
+                         is.na(hh_size) | is.na(hh_disability) | is.na(housing_time_at_exit) | 
+                         is.na(prog_type_use)))
     )
 
 

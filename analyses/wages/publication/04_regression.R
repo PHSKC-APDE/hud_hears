@@ -255,6 +255,190 @@
                                   labels = c("All Programs", "Tenant-Based Vouchers", "Project-Based Vouchers", "Public Housing"))]
     raw <- raw[!is.na(prog_type_use)]
 
+# Model Appendix 1: assess parallel trends prior to exit ----
+    # Create dtappdx1 for assessing parallel trend assumption from quarter -4:0 ----
+      dtappdx1 <- copy(raw)[qtr %in% -4:0]
+      dtappdx1[qtr %in% -4:0, time := qtr]
+      dtappdx1[, .N, .(exit, time)] # check to see how much data there is
+
+    # model ----
+      modappdx1.formula <- paste0("wage ~ ", 
+                             #"exit*time + ", 
+                             "exit*splines::bs(as.integer(time), df = 3) + ", 
+                             confounders, " + ",
+                             "(1 | id_kc_pha) + ", # random intercept for persons
+                             "(1 + exit | hh_id_kc_pha)") # random intercept and slope for households
+      modappdx1 <-lmerTest::lmer(modappdx1.formula, data = dtappdx1)
+      modappdx1.tidy <- model.clean(modappdx1)
+      
+    # test if interaction is significant ----
+      modappdx1.formula.alt <- paste0("wage ~ ", 
+                               "exit + time + ", 
+                               # "exit + splines::bs(as.integer(time), df = 3) + ", 
+                               confounders, " + ",
+                               "(1 | id_kc_pha) + ", # random intercept for persons
+                               "(1 + exit | hh_id_kc_pha)") # random intercept and slope for households
+      modappdx1.alt <- lmerTest::lmer(modappdx1.formula.alt, data = dtappdx1)
+      modappdx1.test = anova(modappdx1, modappdx1.alt, test = 'LRT')
+      
+      if( modappdx1.test[["Pr(>Chisq)"]][2] < 0.05 ) {
+        print("The exit:time interaction term is significant, so keep the full model with the interaction term")
+        caption.text <- paste0("", modappdx1.formula)
+      } else {
+        print("The exit:time interaction term is NOT significant, so use more parsimonuous model.")
+        modappdx1.formula <- copy(modappdx1.formula.alt)
+        modappdx1 <- copy(modappdx1.alt)
+        modappdx1.tidy <- model.clean(modappdx1)
+        caption.text <- paste0("", modappdx1.formula)
+      } 
+      
+    # Plot observed vs expected to assess model quality and problems ----
+      OvE.appx1 <- copy(dtappdx1)[, fitted := fitted(modappdx1)]
+      OvE.appx1 <- ggplot(data = OvE.appx1, aes(x = wage, y = fitted, color = exit_category)) + geom_point()
+      OvE.appx1 <- formatplots(OvE.appx1)
+      
+    # predictions ----  
+      # Using marginaleffects::predictions ----
+        modappdx1.preds <- as.data.table(marginaleffects::predictions(modappdx1, 
+                                                                 newdata = dtappdx1, 
+                                                                 re.form=~0)) # re.form=~0 means include no random effects, so population level estimates
+        modappdx1.preds <- prediction_summary(modappdx1.preds, ndraw = 10000)
+        
+      # Calculate counterfactual ----
+        modappdx1.preds <- calc.counterfactual(modappdx1.preds)
+        modappdx1.preds[exit_category == "Positive", time := time - .0]
+        modappdx1.preds[exit_category == "Negative", time := time + .0]
+        # modappdx1.preds[]
+
+    # plot ----
+        # commented out errorbars because don't trust standard error calculation from prediction_summary()
+        plotappdx1 <- ggplot() +
+          geom_line(data = modappdx1.preds[exit_category != "Counterfactual"], aes(x = time, y = wage, color = exit_category), size = 1) +
+          geom_line(data = modappdx1.preds[exit_category == "Counterfactual"], aes(x = time, y = wage, color = exit_category), linetype="dashed", size = 1) +
+          geom_point(data = modappdx1.preds[exit_category != "Counterfactual"], 
+                     aes(x = time, y = wage, color = exit_category), 
+                     size = 2.5) +
+          # geom_errorbar(data = modappdx1.preds[exit_category != "Counterfactual"], 
+          #               aes(x = time, ymax = upper, ymin = lower, color = exit_category), 
+          #               size = 1, 
+          #               width = .05) + 
+          labs(
+            x = "", 
+            y = "Predicted quarterly wages") +
+          scale_x_continuous(labels=c("1 year prior", "Exit", "1 year post"), breaks=c(-4, 0, 4))
+        
+        plotappdx1 <- formatplots(plotappdx1) + 
+          scale_color_manual("Exit type", 
+                             values=c('Positive' = '#2c7fb8', 
+                                      'Counterfactual' = '#e41a1c', 
+                                      'Negative' = '#2ca25f')) + 
+          scale_y_continuous(limits = c(3000, 9000), breaks=c(seq(4000, 8000, 2000)), labels=scales::dollar_format()) 
+        
+        # dev.new(width = 7,  height = 4, unit = "in", noRStudioGD = TRUE)
+        plot(plotappdx1)
+        
+    # Save plots ----
+      saveplots(plot.object = plotappdx1, plot.name = 'appendix_figure_1_assess_parallel_trends')
+
+# Model Appendix 2: IPW to see if improves parallel trends of pre-exit curves ----
+    # also hope it will reduce the problem with non-parallel slopes prior to exit
+    # create dtappdx2 ----
+      dtappdx2 <- copy(raw)[qtr %in% -4:0]
+      dtappdx2[qtr %in% -4:0, time := qtr]
+      dtappdx2[, .N, .(exit, time)] # check to see how much data there is
+
+    # model ----
+      # propensity score ----
+      modappdx2.psformula <- paste0("exit ~ ", pscovariates) # no random effects bc only at time zero
+      modappdx2.ps <- glm(modappdx2.psformula, 
+                     family = binomial(link=logit),
+                     data = dtappdx2[qtr==0])
+      
+      modappdx2.ps.preds = as.data.table(predictions(modappdx2.ps, newdata = copy(dtappdx2)))
+      modappdx2.ps.preds <- modappdx2.ps.preds[qtr == 0 & !is.na(predicted)]
+      
+      modappdx2.ps.prob <- data.table(hh_id_kc_pha = modappdx2.ps.preds$hh_id_kc_pha, 
+                                 id_kc_pha = modappdx2.ps.preds$id_kc_pha, 
+                                 exit = modappdx2.ps.preds$exit, 
+                                 prob = modappdx2.ps.preds$predicted) # predicted probability
+      
+      modappdx2.ps.prob[exit == 1, ipw := 1 / prob] # weight for IPW
+      modappdx2.ps.prob[exit == 0, ipw := 1 / (1-prob)] # weight for IPW
+      
+      dtappdx2 <- merge(dtappdx2, modappdx2.ps.prob, by = c("hh_id_kc_pha", "id_kc_pha", "exit"), all.x = F, all.y = T)
+      
+      # main model ----
+      dtappdx2[, .N, .(exit, time)]
+      modappdx2.formula <- paste0("wage ~ ", 
+                             "exit*splines::bs(as.integer(time), df = 3) + ", 
+                             "(1 | id_kc_pha) + ", # random intercept for persons
+                             "(1 + exit | hh_id_kc_pha)")  # random intercept and slope for households
+      modappdx2 <- lmerTest::lmer(modappdx2.formula, data = dtappdx2, weights = ipw)
+      modappdx2.tidy <- model.clean(modappdx2)
+      
+    # test if p-value for interaction term is < 0.05 using likelihood ratio test ----
+      modappdx2.formula.alt <- paste0("wage ~ ", 
+                                 "exit + time + ", 
+                                 "(1 | id_kc_pha) + ", # random intercept for persons
+                                 "(1 + exit | hh_id_kc_pha)")  # random intercept and slope for households
+      modappdx2.alt <- lmerTest::lmer(modappdx2.formula.alt, data = dtappdx2, weights = ipw)
+      modappdx2.test = anova(modappdx2, modappdx2.alt, test = 'LRT')
+
+      if( modappdx2.test[["Pr(>Chisq)"]][2] < 0.05 ) {
+        print("The exit:time interaction term is significant, so keep the full model with the interaction term")
+        caption.text <- paste0("", modappdx2.formula)
+      } else {
+        print("The exit:time interaction term is NOT significant, so use more parsimonuous model.")
+        modappdx2.formula <- copy(modappdx2.formula.alt)
+        modappdx2 <- copy(modappdx2.alt)
+        modappdx2.tidy <- model.clean(modappdx2)
+        caption.text <- paste0("", modappdx2.formula)
+      }      
+      
+    # create table of predictions for slopes in ggplot ----
+      modappdx2.preds <- as.data.table(marginaleffects::predictions(modappdx2, 
+                                              newdata = copy(dtappdx2), # copy so not changed to data.frame
+                                              re.form=~0)) # re.form=~0 means include no random effects, so population level estimates
+      modappdx2.preds <- prediction_summary(modappdx2.preds, ndraw = 10000)
+      
+    # calculate counterfactual for positive exits ----
+      modappdx2.preds <- calc.counterfactual(modappdx2.preds)
+      # modappdx2.preds[]
+
+    # Plot data prior to exit ----
+      # commented out errorbars because don't trust standard error calculation from prediction_summary()
+      plotappdx2 <- ggplot() +
+        geom_line(data = modappdx2.preds[exit_category != "Counterfactual"], 
+                  aes(x = time, y = wage, color = exit_category), 
+                  size = 1) +
+        geom_line(data = modappdx2.preds[exit_category == "Counterfactual"], 
+                  aes(x = time, y = wage, color = exit_category), linetype="dashed", 
+                  size = 1) +
+        geom_point(data = modappdx2.preds[exit_category != "Counterfactual"], 
+                   aes(x = time, y = wage, color = exit_category), 
+                   size = 2.5) +
+        # geom_errorbar(data = modappdx2.preds[exit_category != "Counterfactual"], 
+        #               aes(x = time, ymax = upper, ymin = lower, color = exit_category), 
+        #               size = 1, 
+        #               width = .05) + 
+        labs(
+           x = "", 
+           y = "Predicted quarterly wages") +
+        scale_x_continuous(labels=c("1 year prior", "Exit"), breaks=c(-4, 0)) 
+      
+      plotappdx2 <- formatplots(plotappdx2) + 
+        scale_color_manual("Exit type", 
+                           values=c('Positive' = '#2c7fb8', 
+                                    'Counterfactual' = '#e41a1c', 
+                                    'Negative' = '#2ca25f')) +
+       scale_y_continuous(limits = c(3000, 9000), breaks=c(seq(4000, 8000, 2000)), labels=scales::dollar_format()) 
+
+      plot(plotappdx2)
+      
+    # Save plot ----
+      saveplots(plot.object = plotappdx2, plot.name = 'appendix_figure_2_IPTW_assess_parallel_trends')
+
+
 # Model 1: Model for all available quarterly wage data ----
     # Singular regression and then predict for each program type ----
       # get confounder vars ----

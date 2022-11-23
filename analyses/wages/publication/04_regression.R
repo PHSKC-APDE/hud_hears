@@ -27,6 +27,10 @@
 #        with the predictor (exit type), regardless of the association with the 
 #        outcome (change in wages).
 #
+# Notes on regression: 
+#        * use lmerTest rather than lme4 because gives p.values but estimates and SE are identical 
+#        * use Nelder_Mead optimizer because default optimizer (nloptwrap) failed to converge 
+#
 # Notes on predictions:
 #        * Used marginaleffects::predictions because provides estimates + SE & CI
 #        * margins::prediction & prediction::prediction do not provide SE & CI
@@ -36,7 +40,8 @@
 # Set up ----
     rm(list=ls())
     options(scipen = 999)
-    pacman::p_load(lubridate, rads, data.table, DBI, odbc, ggplot2, lme4, marginaleffects, openxlsx)
+    pacman::p_load(lubridate, rads, data.table, DBI, odbc, ggplot2, 
+                   lme4, marginaleffects, openxlsx)
 
     wb <- createWorkbook() # initiate a new / empty workbook
     
@@ -209,15 +214,16 @@
         }
 
         # add referent for program ----
-        split.row <- which(mymod.tidy[,3] == "prog_type_useProject-Based Vouchers")
+        split.row <- which(mymod.tidy[,3] == "prog_type_usePBV")
         if(length(split.row) != 0){
           mymod.tidy <- rbind(
             mymod.tidy[1:(split.row-1)], 
-            data.table(effect = 'fixed', term = "Program: Tenant-Based Vouchers", estimate = "Referent", `p-value` = NA_character_), 
+            data.table(effect = 'fixed', term = "Program: Tenant-Based Voucher", estimate = "Referent", `p-value` = NA_character_), 
             mymod.tidy[(split.row):nrow(mymod.tidy)], 
             fill = TRUE
           )
-          mymod.tidy[, term := gsub("prog_type_use", "Program: ", term)]
+          mymod.tidy[term == 'prog_type_usePBV', term := "Program: Project-Based Voucher"]
+          mymod.tidy[term == 'prog_type_usePH', term := "Program: Public Housing"]
         }
         
         setnames(mymod.tidy, "estimate", "Estimate (95% CI)")
@@ -255,9 +261,10 @@
     # set reference for factors
     raw[, race_eth_me := factor(race_eth_me)]
     raw$race_eth_me <- relevel(raw$race_eth_me, ref = 'Black')
-    raw[, prog_type_use := factor(prog_type_use, 
-                                  levels = c("All Programs", "TBV", "PBV", "PH"), 
-                                  labels = c("All Programs", "Tenant-Based Vouchers", "Project-Based Vouchers", "Public Housing"))]
+    raw[, prog_type_use := factor(prog_type_use, levels = c("TBV", "PBV", "PH"))]
+    # raw[, prog_type_use := factor(prog_type_use, 
+    #                               levels = c("All Programs", "TBV", "PBV", "PH"), 
+    #                               labels = c("All Programs", "Tenant-Based Vouchers", "Project-Based Vouchers", "Public Housing"))] # long names causes predictions to break
     raw <- raw[!is.na(prog_type_use)]
 
 # Model Appendix 1: assess parallel trends prior to exit ----
@@ -272,8 +279,11 @@
                              confounders, " + ",
                              "(1 | id_kc_pha) + ", # random intercept for persons
                              "(1 + exit | hh_id_kc_pha)") # random intercept and slope for households
-      modappdx1 <-lmerTest::lmer(modappdx1.formula, data = dtappdx1)
+      modappdx1 <-lmerTest::lmer(modappdx1.formula, data = dtappdx1,
+                                 control = lmerControl(optimizer = "Nelder_Mead")) # changed optimizer from default 'nloptwrap' because failed to converge
       modappdx1.tidy <- model.clean(modappdx1)
+      # modappdx1.comp <- setDT(tidy(allFit(modappdx1))) # create table of results with all optimizers
+      # modappdx1.comp[term=='exit', 1:8] # explore exit for multiple optimizers to make sure convergence issue isn't really messing things up
       
     # test if interaction is significant ----
       modappdx1.formula.alt <- paste0("wage ~ ", 
@@ -281,7 +291,8 @@
                                confounders, " + ",
                                "(1 | id_kc_pha) + ", # random intercept for persons
                                "(1 + exit | hh_id_kc_pha)") # random intercept and slope for households
-      modappdx1.alt <- lmerTest::lmer(modappdx1.formula.alt, data = dtappdx1)
+      modappdx1.alt <- lmerTest::lmer(modappdx1.formula.alt, data = dtappdx1,
+                                      control = lmerControl(optimizer = "Nelder_Mead"))
       modappdx1.test = anova(modappdx1, modappdx1.alt, test = 'LRT')
       
       if( modappdx1.test[["Pr(>Chisq)"]][2] < 0.05 ) {
@@ -371,7 +382,8 @@
                              "exit*splines::bs(as.integer(time), df = 3) + ", 
                              "(1 | id_kc_pha) + ", # random intercept for persons
                              "(1 + exit | hh_id_kc_pha)")  # random intercept and slope for households
-      modappdx2 <- lmerTest::lmer(modappdx2.formula, data = dtappdx2, weights = ipw)
+      modappdx2 <- lmerTest::lmer(modappdx2.formula, data = dtappdx2, weights = ipw,
+                                  control = lmerControl(optimizer = "Nelder_Mead")) # changed optimizer for consistency with other models
       modappdx2.tidy <- model.clean(modappdx2)
       
     # test if p-value for interaction term is < 0.05 using likelihood ratio test ----
@@ -379,7 +391,8 @@
                                  "exit + time + ", 
                                  "(1 | id_kc_pha) + ", # random intercept for persons
                                  "(1 + exit | hh_id_kc_pha)")  # random intercept and slope for households
-      modappdx2.alt <- lmerTest::lmer(modappdx2.formula.alt, data = dtappdx2, weights = ipw)
+      modappdx2.alt <- lmerTest::lmer(modappdx2.formula.alt, data = dtappdx2, weights = ipw,
+                                      control = lmerControl(optimizer = "Nelder_Mead"))
       modappdx2.test = anova(modappdx2, modappdx2.alt, test = 'LRT')
 
       if( modappdx2.test[["Pr(>Chisq)"]][2] < 0.05 ) {
@@ -393,15 +406,16 @@
         caption.text <- paste0("", modappdx2.formula)
       }      
       
-    # create table of predictions for slopes in ggplot ----
-      modappdx2.preds <- as.data.table(marginaleffects::predictions(modappdx2, 
-                                              newdata = copy(dtappdx2), # copy so not changed to data.frame
-                                              re.form=~0)) # re.form=~0 means include no random effects, so population level estimates
-      modappdx2.preds <- prediction_summary(modappdx2.preds, ndraw = 10000)
-      
-    # calculate counterfactual for positive exits ----
-      modappdx2.preds <- calc.counterfactual(modappdx2.preds)
-      # modappdx2.preds[]
+    # predictions ----
+      # create table of predictions for slopes in ggplot ----
+        modappdx2.preds <- as.data.table(marginaleffects::predictions(modappdx2, 
+                                                newdata = copy(dtappdx2), # copy so not changed to data.frame
+                                                re.form=~0)) # re.form=~0 means include no random effects, so population level estimates
+        modappdx2.preds <- prediction_summary(modappdx2.preds, ndraw = 10000)
+        
+      # calculate counterfactual for positive exits ----
+        modappdx2.preds <- calc.counterfactual(modappdx2.preds)
+        # modappdx2.preds[]
 
     # Plot data prior to exit ----
       # commented out errorbars because don't trust standard error calculation from prediction_summary()
@@ -449,8 +463,13 @@
                                  myconfounders, " + ",
                                  "(1 | id_kc_pha) + ", # random intercept for persons
                                  "(1 + exit | hh_id_kc_pha)") # random intercept and slope for households
-          mod1 <- lmerTest::lmer(mod1.formula, data = setDF(copy(dt1))) # use lmerTest rather than lme4 because gives p.values but estimates and SE are identical
+          mod1 <- lmerTest::lmer(mod1.formula, data = setDF(copy(dt1)),
+                                 control = lmerControl(optimizer = "Nelder_Mead")) # changed optimizer because failed to converge
           mod1.tidy <- model.clean(mod1, myformat = 'dollar')
+          
+          # mod1.comp <- setDT(tidy(allFit(mod1))) # create table of results with all optimizers
+          # mod1.comp[term=='exit', 1:8] # explore exit for multiple optimizers to make sure convergence issue isn't really messing things up
+          
           addWorksheet(wb, paste0('wage_model')) 
           writeDataTable(wb, sheet = paste0('wage_model'), mod1.tidy, rowNames = F, colNames = T)  
           
@@ -486,8 +505,9 @@
           mod1.preds <- as.data.table(predictions(mod1, 
                                                   newdata = setDF(copy(dt1)),
                                                   re.form=~0)) # re.form=~0 means include no random effects, so population level estimates
-          mod1.preds.summary <- data.table()
-          for(prog in c("All Programs", "Tenant-Based Vouchers", "Project-Based Vouchers", "Public Housing")){
+
+          mod1.preds.summary <- data.table() # create predicted mean value for each exit type and quarter, by program
+          for(prog in c("All Programs", "TBV", "PBV", "PH")){
             if(prog == "All Programs"){
               temp.preds <- prediction_summary(mod1.preds, ndraw = 10000)
             } else {
@@ -499,15 +519,13 @@
 
         # calculate counterfactual (ascribe change observed in negative exits to positive exits) ----
           mod1.preds <- data.table() # wipe original table but keep it as an object to build on
-          for(prog in c("All Programs", "Tenant-Based Vouchers", "Project-Based Vouchers", "Public Housing")){
+          for(prog in c("All Programs", "TBV", "PBV", "PH")){
             temp.counter <- calc.counterfactual(mod1.preds.summary[Program == prog])
             temp.counter <- cbind(Program = prog, temp.counter)
             mod1.preds <- rbind(mod1.preds, temp.counter)
           }
 
-      # Add onto to summary table of predictions
-          predictions.model1 <- copy(mod1.preds)
-      
+
       # Clean copy of summary model predictions to export ----
           mod1.tidy.preds <- copy(mod1.preds)[exit_category != "Counterfactual"]
           roundvars <- c("wage", "lower", "upper", "se")
@@ -530,9 +548,8 @@
     
 
     # Plot data four quarters before and after exit ----
-      mod1.preds <- copy(predictions.model1)
       mod1.preds[, program := factor(Program, 
-                                           levels = c("All Programs", "Tenant-Based Vouchers", "Project-Based Vouchers", "Public Housing"), 
+                                           levels = c("All Programs", "TBV", "PBV", "PH"), 
                                            labels = c("All Programs", "Tenant-Based Vouchers", "Project-Based Vouchers", "Public Housing"))]
       plot1 <- ggplot() +
         geom_line(data = mod1.preds[exit_category != "Counterfactual"], aes(x = time, y = wage, color = exit_category), size = 1) +
@@ -624,7 +641,8 @@
                                  myconfounders, " + ",
                                  "(1 | id_kc_pha) + ", # random intercept for persons
                                  "(1 + exit | hh_id_kc_pha)") # random intercept and slope for households
-          mod2 <- lmerTest::lmer(mod2.formula, data = setDF(copy(dt2))) # use lmerTest rather than lme4 because gives p.values but estimates and SE are identical
+          mod2 <- lmerTest::lmer(mod2.formula, data = setDF(copy(dt2)),
+                                 control = lmerControl(optimizer = "Nelder_Mead")) # changed optimizer because failed to converge 
           mod2.tidy <- model.clean(mod2, myformat = 'dollar')
           addWorksheet(wb, paste0('ami_model')) 
           writeDataTable(wb, sheet = paste0('ami_model'), mod2.tidy, rowNames = F, colNames = T)  
@@ -637,7 +655,8 @@
                                      myconfounders, " + ",
                                      "(1 | id_kc_pha) + ", # random intercept for persons
                                      "(1 + exit | hh_id_kc_pha)") # random intercept and slope for households
-          mod2.alt <- lmerTest::lmer(mod2.formula.alt, data = setDF(copy(dt2)))
+          mod2.alt <- lmerTest::lmer(mod2.formula.alt, data = setDF(copy(dt2)),
+                                     control = lmerControl(optimizer = "Nelder_Mead"))
           
           mod2.test = anova(mod2, mod2.alt, test = 'LRT') # compare the two models
           
@@ -662,7 +681,7 @@
                                                   newdata = setDF(copy(dt2)),
                                                   re.form=~0)) # re.form=~0 means include no random effects, so population level estimates
           mod2.preds.summary <- data.table()
-          for(prog in c("All Programs", "Tenant-Based Vouchers", "Project-Based Vouchers", "Public Housing")){
+          for(prog in c("All Programs", "TBV", "PBV", "PH")){
             if(prog == "All Programs"){
               temp.preds <- prediction_summary(mod2.preds, ndraw = 10000)
             } else {
@@ -674,7 +693,7 @@
 
         # calculate counterfactual (ascribe change observed in negative exits to positive exits) ----
           mod2.preds <- data.table() # wipe original table but keep it as an object to build on
-          for(prog in c("All Programs", "Tenant-Based Vouchers", "Project-Based Vouchers", "Public Housing")){
+          for(prog in c("All Programs", "TBV", "PBV", "PH")){
             temp.counter <- calc.counterfactual(mod2.preds.summary[Program == prog])
             temp.counter <- cbind(Program = prog, temp.counter)
             mod2.preds <- rbind(mod2.preds, temp.counter)
@@ -717,7 +736,7 @@
     # Plot data four quarters before and after exit ----
       mod2.preds <- copy(predictions.model2)
       mod2.preds[, program := factor(Program, 
-                                           levels = c("All Programs", "Tenant-Based Vouchers", "Project-Based Vouchers", "Public Housing"), 
+                                           levels = c("All Programs", "TBV", "PBV", "PH"), 
                                            labels = c("All Programs", "Tenant-Based Vouchers", "Project-Based Vouchers", "Public Housing"))]
       plot2 <- ggplot() +
         geom_line(data = mod2.preds[exit_category != "Counterfactual"], aes(x = time, y = percent_ami, color = exit_category), size = 1) +

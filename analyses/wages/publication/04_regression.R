@@ -147,6 +147,7 @@
 
     # clean model estimates ----
       model.clean <- function(mymod, myformat = NA){
+        # basic tidying ----
         mymod.tidy <- as.data.table(broom.mixed::tidy(mymod, conf.int = T))
         roundvars <- c("estimate", "conf.low", "conf.high", "std.error")
         mymod.tidy[, (roundvars) := rads::round2(.SD, 0), .SDcols = roundvars]
@@ -196,21 +197,23 @@
         mymod.tidy[, estimate := gsub(" \\(\\$NA\\, \\$NA\\)", "", estimate)]
         mymod.tidy[, estimate := gsub("\\$NaN", NA, estimate)]
         
-        # add referent for Exit year
+        # add referent for Exit year ----
         split.row <- which(mymod.tidy[,3] == "Exit year: 2017")
-        mymod.tidy <- rbind(
-          mymod.tidy[1:(split.row-1)], 
-          data.table(effect = 'fixed', term = "Exit year: 2016", estimate = "Referent", `p-value` = NA_character_), 
-          mymod.tidy[(split.row):nrow(mymod.tidy)], 
-          fill = TRUE
-        )
-        
-        # add referent for program
-        split.row <- which(mymod.tidy[,3] == "prog_type_usePBV")
+        if(length(split.row) != 0){  # need condition, because IPTW model doesn't have Exit Year as direct adjusment var
+            mymod.tidy <- rbind(
+            mymod.tidy[1:(split.row-1)], 
+            data.table(effect = 'fixed', term = "Exit year: 2016", estimate = "Referent", `p-value` = NA_character_), 
+            mymod.tidy[(split.row):nrow(mymod.tidy)], 
+            fill = TRUE
+          )
+        }
+
+        # add referent for program ----
+        split.row <- which(mymod.tidy[,3] == "prog_type_useProject-Based Vouchers")
         if(length(split.row) != 0){
           mymod.tidy <- rbind(
             mymod.tidy[1:(split.row-1)], 
-            data.table(effect = 'fixed', term = "Program: TBV", estimate = "Referent", `p-value` = NA_character_), 
+            data.table(effect = 'fixed', term = "Program: Tenant-Based Vouchers", estimate = "Referent", `p-value` = NA_character_), 
             mymod.tidy[(split.row):nrow(mymod.tidy)], 
             fill = TRUE
           )
@@ -234,9 +237,11 @@
     # get covariates identified in step 3
     load(paste0(outputdir, "pscovariates.Rdata"))
     pscovariates = pscovariates$pscovariates
+    pscovariates = paste(pscovariates, collapse = " + ")
     
     load(paste0(outputdir, "confounders.Rdata"))
     confounders = confounders$confounders
+    confounders = paste(confounders, collapse = " + ")
     
 # Preparatory data manipulation ----
     raw[, exit_year := factor(exit_year)]
@@ -263,7 +268,6 @@
 
     # model ----
       modappdx1.formula <- paste0("wage ~ ", 
-                             #"exit*time + ", 
                              "exit*splines::bs(as.integer(time), df = 3) + ", 
                              confounders, " + ",
                              "(1 | id_kc_pha) + ", # random intercept for persons
@@ -274,7 +278,6 @@
     # test if interaction is significant ----
       modappdx1.formula.alt <- paste0("wage ~ ", 
                                "exit + time + ", 
-                               # "exit + splines::bs(as.integer(time), df = 3) + ", 
                                confounders, " + ",
                                "(1 | id_kc_pha) + ", # random intercept for persons
                                "(1 + exit | hh_id_kc_pha)") # random intercept and slope for households
@@ -311,17 +314,12 @@
         # modappdx1.preds[]
 
     # plot ----
-        # commented out errorbars because don't trust standard error calculation from prediction_summary()
         plotappdx1 <- ggplot() +
           geom_line(data = modappdx1.preds[exit_category != "Counterfactual"], aes(x = time, y = wage, color = exit_category), size = 1) +
           geom_line(data = modappdx1.preds[exit_category == "Counterfactual"], aes(x = time, y = wage, color = exit_category), linetype="dashed", size = 1) +
           geom_point(data = modappdx1.preds[exit_category != "Counterfactual"], 
                      aes(x = time, y = wage, color = exit_category), 
                      size = 2.5) +
-          # geom_errorbar(data = modappdx1.preds[exit_category != "Counterfactual"], 
-          #               aes(x = time, ymax = upper, ymin = lower, color = exit_category), 
-          #               size = 1, 
-          #               width = .05) + 
           labs(
             x = "", 
             y = "Predicted quarterly wages") +
@@ -417,10 +415,6 @@
         geom_point(data = modappdx2.preds[exit_category != "Counterfactual"], 
                    aes(x = time, y = wage, color = exit_category), 
                    size = 2.5) +
-        # geom_errorbar(data = modappdx2.preds[exit_category != "Counterfactual"], 
-        #               aes(x = time, ymax = upper, ymin = lower, color = exit_category), 
-        #               size = 1, 
-        #               width = .05) + 
         labs(
            x = "", 
            y = "Predicted quarterly wages") +

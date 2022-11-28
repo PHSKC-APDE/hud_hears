@@ -51,8 +51,8 @@
         ggsave(paste0(outputdir, '/', plot.name, ".png"),
                plot = plot.object, 
                dpi=600, 
-               width = 11, 
-               height = 8.5, 
+               width = 6, 
+               height = 4, 
                units = "in") 
       }
 
@@ -101,7 +101,7 @@
         
 # Create plots ----        
   # Plot quarterly wages pre-post ----
-      plot.new()      
+      #plot.new()      
       set.seed(98104) # because jitter is 'random'
       plot1 <- ggplot() +
         geom_point(data = dt1[!is.na(time)] ,  aes(x = time, y = wage, color = exit_category), 
@@ -113,14 +113,14 @@
                       stat = 'identity', 
                       aes(x = time, ymax = upper, ymin = lower), 
                       size = 0.5, 
-                      width = .03) +      
+                      width = 0) +      
         geom_point(data = dt1.stats[exit_category == 'Negative'],  
                    aes(x = time, y = mean), 
                    size = 1) +
         geom_errorbar(data = dt1.stats[exit_category == 'Negative'],  
                       stat = 'identity', aes(x = time, ymax = upper, ymin = lower), 
                       size = 0.5, 
-                      width = .03) +
+                      width = 0) +
         labs(x = "", 
              y = "", 
              caption = "The black points and error bars are the mean and 95% confidence interval, respectively.") +

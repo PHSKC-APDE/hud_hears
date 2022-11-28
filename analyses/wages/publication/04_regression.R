@@ -85,8 +85,8 @@
         ggsave(paste0(outputdir, '/', plot.name, ".png"),
                plot = plot.object, 
                dpi=600, 
-               width = 11, 
-               height = 8.5, 
+               width = 6, 
+               height = 4, 
                units = "in") 
       }
        
@@ -341,9 +341,9 @@
                              values=c('Positive' = '#2c7fb8', 
                                       'Counterfactual' = '#e41a1c', 
                                       'Negative' = '#2ca25f')) + 
-          scale_y_continuous(limits = c(3000, 9000), breaks=c(seq(4000, 8000, 2000)), labels=scales::dollar_format()) 
+          scale_y_continuous(limits = c(4500, 8500), breaks=c(seq(4500, 8500, 2000)), labels=scales::dollar_format()) 
         
-        # dev.new(width = 7,  height = 4, unit = "in", noRStudioGD = TRUE)
+        # dev.new(width = 6,  height = 4, unit = "in", noRStudioGD = TRUE)
         plot(plotappdx1)
         
     # Save plots ----
@@ -439,8 +439,8 @@
                            values=c('Positive' = '#2c7fb8', 
                                     'Counterfactual' = '#e41a1c', 
                                     'Negative' = '#2ca25f')) +
-       scale_y_continuous(limits = c(3000, 9000), breaks=c(seq(4000, 8000, 2000)), labels=scales::dollar_format()) 
-
+        scale_y_continuous(limits = c(4500, 8500), breaks=c(seq(4500, 8500, 2000)), labels=scales::dollar_format()) 
+      
       plot(plotappdx2)
       
     # Save plot ----
@@ -560,14 +560,15 @@
         labs(
           x = "", 
           y = "Predicted quarterly wages") +
-        scale_x_continuous(labels=c("1 year prior", "Exit", "1 year post"), breaks=c(-4, 0, 4))
+        scale_x_continuous(labels=c("Qtr -4", "Exit", "Qtr 4"), breaks=c(-4, 0, 4), limits = c(-4, 4))
       
       plot1 <- formatplots(plot1) + 
         scale_color_manual("Exit type", 
                            values=c('Positive' = '#2c7fb8', 
                                     'Counterfactual' = '#e41a1c', 
                                     'Negative' = '#2ca25f')) +
-        facet_wrap(~program, nrow = 2, strip.position = "top") 
+        facet_wrap(~program, nrow = 2, strip.position = "top") +
+        theme(panel.spacing = unit(15, "pt"))
       
       plot(plot1)
       
@@ -643,7 +644,7 @@
                                  "(1 + exit | hh_id_kc_pha)") # random intercept and slope for households
           mod2 <- lmerTest::lmer(mod2.formula, data = setDF(copy(dt2)),
                                  control = lmerControl(optimizer = "Nelder_Mead")) # changed optimizer because failed to converge 
-          mod2.tidy <- model.clean(mod2, myformat = 'dollar')
+          mod2.tidy <- model.clean(mod2, myformat = 'percent')
           addWorksheet(wb, paste0('ami_model')) 
           writeDataTable(wb, sheet = paste0('ami_model'), mod2.tidy, rowNames = F, colNames = T)  
           
@@ -727,7 +728,7 @@
           setorder(mod2.preds, `Exit Type`, Quarter)
 
           addWorksheet(wb, paste0('ami_predictions')) 
-          writeDataTable(wb, sheet = paste0('ami_predictions'), mod1.tidy.preds, rowNames = F, colNames = T)  
+          writeDataTable(wb, sheet = paste0('ami_predictions'), mod2.tidy.preds, rowNames = F, colNames = T)  
           
     # Export regression output ----
     saveWorkbook(wb, file = paste0(outputdir, "Tables_regression.xlsx"), overwrite = T)
@@ -754,8 +755,9 @@
                                     'Counterfactual' = '#e41a1c', 
                                     'Negative' = '#2ca25f')) +
         scale_y_continuous(labels=scales::label_percent(scale = 1)) +
-        scale_x_continuous(labels=c("1 year prior", "Exit", "1 year post"), breaks=c(-4, 0, 4)) +
-        facet_wrap(~program, nrow = 2, strip.position = "top") 
+        scale_x_continuous(labels=c("Qtr -4", "Exit", "Qtr 4"), breaks=c(-4, 0, 4)) +
+        facet_wrap(~program, nrow = 2, strip.position = "top")  +
+        theme(panel.spacing = unit(15, "pt"))
       
       plot(plot2)
       

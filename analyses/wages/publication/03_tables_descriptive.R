@@ -32,7 +32,7 @@
                                  "SELECT * FROM [hudhears].[wage_analytic_table]"))
 
 # Preparatory data manipulation ----
-    raw <- rbind(copy(raw), copy(raw)[, prog_type_use := "All Programs"])[!is.na(prog_type_use)]
+    raw <- rbind(copy(raw), copy(raw)[, prog_type_use := "All Programs"])
     raw[, prog_type_use := factor(prog_type_use, 
                                   levels = c("All Programs", "TBV", "PBV", "PH"), 
                                   labels = c("All Programs", "Tenant-Based Vouchers", "Project-Based Vouchers", "Public Housing"))]
@@ -150,7 +150,7 @@
     for(tempx in sort(unique(raw$prog_type_use))){
       message('Processing ', tempx)
       if(tempx == "All Programs"){
-        raw.subset <- raw[prog_type_use != tempx]} else{
+        raw.subset <- raw[prog_type_use != tempx | is.na(prog_type_use)]} else{
           raw.subset <- raw[prog_type_use == tempx]
         }
       raw.subset[, prog_type_use := as.character(prog_type_use)]

@@ -576,8 +576,8 @@ exit_any_mcaid_race_hh <- demog_pct_sum(covariate_nodeath_hh, full_demog = T,
                                      level = "hh", demog = "race", id_type, full_cov_7_prior)
 
 # Time in housing
-exit_any_mcaid_los_hh <- demog_num_sum(covariate_nodeath_hh, full_demog = T, demog = "los",
-                                       id_type, full_cov_7_prior)
+exit_any_mcaid_los_hh <- demog_num_sum(covariate_nodeath_hh, full_demog = T, 
+                                       level = "hh", demog = "los", id_type, full_cov_7_prior)
 
 # Size and composition
 exit_any_mcaid_demogs_hh <- hh_demogs_sum(covariate_nodeath_hh, full_demog = T, 
@@ -1008,13 +1008,13 @@ rm(exit_mcaid_7after_age_hh, exit_mcaid_7after_gender_hh, exit_mcaid_7after_race
 ### HH demogs (prior) ----
 # Time in housing (this is based on HH data)
 exit_mcaid_7prior_hh_los <- demog_num_sum(covariate_exits_hh, full_demog = T, 
-                                          demog = "los", full_cov_7_prior)
+                                          level = "hh", demog = "los", full_cov_7_prior)
 # Size and composition
 exit_mcaid_7prior_hh_demogs <- hh_demogs_sum(covariate_exits_hh, full_demog = T, 
                                              level = "hh", full_cov_7_prior)
 # Program type
 exit_mcaid_7prior_hh_prog <- demog_pct_sum(covariate_exits_hh, full_demog = T, 
-                                           level = "hh", demog = "program", full_cov_7_prior)
+                                           level = "hh", demog = "program_type", full_cov_7_prior)
 # Voucher type
 exit_mcaid_7prior_hh_vouch <- demog_pct_sum(covariate_exits_hh, full_demog = T, 
                                             level = "hh", demog = "voucher", full_cov_7_prior)
@@ -1031,13 +1031,13 @@ rm(exit_mcaid_7prior_hh_los, exit_mcaid_7prior_hh_demogs,
 ### HH demogs (after) ----
 # Time in housing (this is based on HH data)
 exit_mcaid_7after_hh_los <- demog_num_sum(covariate_exits_hh, full_demog = T, 
-                                          demog = "los", full_cov_7_after)
+                                          level = "hh", demog = "los", full_cov_7_after)
 # Size and composition
 exit_mcaid_7after_hh_demogs <- hh_demogs_sum(covariate_exits_hh, full_demog = T, 
                                              level = "hh", full_cov_7_after)
 # Program type
 exit_mcaid_7after_hh_prog <- demog_pct_sum(covariate_exits_hh, full_demog = T, 
-                                           level = "hh", demog = "program", full_cov_7_after)
+                                           level = "hh", demog = "program_type", full_cov_7_after)
 # Voucher type
 exit_mcaid_7after_hh_vouch <- demog_pct_sum(covariate_exits_hh, full_demog = T, 
                                             level = "hh", demog = "voucher", full_cov_7_after)
@@ -1353,12 +1353,13 @@ table_1a_demogs <- bind_rows(exit_any_ind_ind, exit_any_hh_ind,
               select(category, group, Neutral, Positive, Negative),
             by = c("category", "group")) %>%
   filter(category != "Voucher type") %>%
-  filter(!group %in% c("n", "Range (years)", "Child (aged <18)")) %>% 
+  filter(!group %in% c("n", "Range (years)", "Child (aged <18)", "Unknown")) %>% 
   filter(str_detect(group, "Did not experience", negate = T)) %>%
   filter(str_detect(group, "well-child", negate = T)) %>%
   rename("Remained" = "id_control", "Exited" = "id_exit") %>%
   mutate(category = str_replace_all(category, "HoH time", "Time"),
-         group = str_replace_all(group, " time in housing \\(years\\)", " time (years)"))
+         group = str_replace_all(group, " time in housing \\(years\\)", " time (years)")) %>%
+  select(-Remained)
 
 table_1a_demogs <- table_sorter(table_1a_demogs)
 
@@ -1369,8 +1370,7 @@ table_1a_demogs <- table_1a_demogs %>%
   tab_footnote(footnote = "PBV = Project-based voucher, PH = Public housing, TBV = Tenant-based voucher", 
                locations = cells_row_groups(groups = "Program type")) %>%
   tab_footnote(footnote = md(glue("Health event data available for those aged <62 enrolled in Medicaid (",
-                                  "Remained N={n_mcaid_exit[[1]]}, ",
-                                  "Exited N={n_mcaid_exit[[2]]}, ",
+                                  "All exits N={n_mcaid_exit[[2]]}, ",
                                   "Negative N={n_mcaid_type[[1]]}, ",
                                   "Neutral N={n_mcaid_type[[2]]}, ",
                                   "Positive N={n_mcaid_type[[3]]}",
@@ -1385,8 +1385,7 @@ table_1a_demogs <- table_1a_demogs %>%
                                           "2+ chronic conditions"))) %>%
   cols_label(category = md("Category"),
              group = md("Group"),
-             Remained = md(paste0("Remained (N=", number(n_remain_exit[1], big.mark = ","), ")")),
-             Exited = md(paste0("Exited (N=", number(n_remain_exit[2], big.mark = ","), ")")),
+             Exited = md(paste0("All exits (N=", number(n_remain_exit[2], big.mark = ","), ")")),
              Negative = md(paste0("Negative exit (N=", number(n_exit_type[1], big.mark = ","), ")")),
              Neutral = md(paste0("Neutral exit (N=", number(n_exit_type[2], big.mark = ","), ")")),
              Positive = md(paste0("Positive exit (N=", number(n_exit_type[3], big.mark = ","), ")")))
@@ -1394,7 +1393,7 @@ table_1a_demogs <- table_1a_demogs %>%
 table_1a_demogs <- table_formatter(table_1a_demogs)
 
 # Save output
-gtsave(table_1a_demogs, filename = "demog_manuscript_table1.png",
+gtsave(table_1a_demogs, filename = "demog_manuscript_table1a.png",
        path = file.path(here::here(), "analyses/exit_factors"))
 
 

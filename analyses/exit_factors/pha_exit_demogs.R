@@ -237,7 +237,7 @@ consort_maker <- function(df = consort_df, mcaid_prior = F,
   ### Set up columns ----
   # Column 1: main boxes and side box placeholders (blank text)
   if (household == T) {
-    a1 <- glue("a1 [label = 'Head of household exits total: {format(exits_tot, big.mark = ',', trim = T)}'];")
+    a1 <- glue("a1 [label = 'Head-of-household exits total: {format(exits_tot, big.mark = ',', trim = T)}'];")
     
   } else {
     a1 <- glue("a1 [label = 'Exits total: {format(exits_tot, big.mark = ',', trim = T)}'];")
@@ -255,7 +255,7 @@ consort_maker <- function(df = consort_df, mcaid_prior = F,
   }
   
   # Column 2: side boxes
-  b1 <- glue("b1 [label = 'Exits outside study period \n",
+  b1 <- glue("b1 [label = 'Exits outside study period: \n",
              "KCHA (<2016, >2018): {format(consort_period_excl_kcha, big.mark = ',', trim = T)} \n",
              "SHA (<2012, >2018): {format(consort_period_excl_sha, big.mark = ',', trim = T)}'];")
   b2 <- glue("b2 [label = 'False exits (n = {format(exits_false, big.mark = ',', trim = T)})'];")
@@ -284,12 +284,12 @@ consort_maker <- function(df = consort_df, mcaid_prior = F,
     b6 <- glue("b6 [label = '<7 months full Medicaid coverage \n", 
                "prior to exit \n", 
                "(n = {format(mcaid_7_prior, big.mark = ',', trim = T)}) \n",
-               "Aged 62+ (n = {format(mcaid_age_62, big.mark = ',', trim = T)}) '];")
+               "or aged 62+ (n = {format(mcaid_age_62, big.mark = ',', trim = T)}) '];")
   } else if (mcaid_prior == F & mcaid_after == T) {
     b6 <- glue("b6 [label = '<7 months full Medicaid \n", 
                "coverage after exit \n", 
                "(n = {format(mcaid_7_after, big.mark = ',', trim = T)}) \n",
-               "Aged 62+ (n = {format(mcaid_age_62, big.mark = ',', trim = T)}) '];")
+               "or aged 62+ (n = {format(mcaid_age_62, big.mark = ',', trim = T)}) '];")
   } else {
     b6 <- ""
   }

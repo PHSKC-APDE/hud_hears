@@ -48,12 +48,13 @@
                width = 11, 
                height = 8.5, 
                units = "in") 
-        ggsave(paste0(outputdir, '/', plot.name, ".png"),
+        ggsave(paste0(outputdir, '/', plot.name, ".tiff"),
                plot = plot.object, 
-               dpi=600, 
+               dpi=1200, 
                width = 6, 
                height = 4, 
-               units = "in") 
+               units = "in", 
+               compression = "lzw") 
       }
 
 # Load data ----

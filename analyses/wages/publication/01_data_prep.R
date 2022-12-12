@@ -297,6 +297,21 @@
         
         wage_address <- wage_address[, .(id_hudhears, qtr_date, qtr_date2, wage, hrs, geo_id10_county, geo_id10_tract)] # order and keep columns of interest
         
+            # fill address forward and backward 
+            # nafill only works with numeric and want to avoid DT[, myvar  := myvar[1], by= .(ID , cumsum(!is.na(myvar)) ) ] 
+            # so convert to numeric before using nafill
+            wage_address[, c("geo_id10_tract", "geo_id10_county") := lapply(.SD, as.numeric), .SDcols = c("geo_id10_tract", "geo_id10_county")]
+            # use nafill
+            wage_address[, geo_id10_tract  := nafill(geo_id10_tract, type = 'locf'), by = "id_hudhears" ] # fill forward / downward
+            wage_address[, geo_id10_tract  := nafill(geo_id10_tract, type = 'nocb'), by = "id_hudhears" ] # fill geoid backward / upward
+            wage_address[, geo_id10_county  := nafill(geo_id10_county, type = 'locf'), by = "id_hudhears" ] # fill forward / downward
+            wage_address[, geo_id10_county  := nafill(geo_id10_county, type = 'nocb'), by = "id_hudhears" ] # fill geoid backward / upward
+            # convert geographies back to properly formatted character values
+            wage_address[!is.na(geo_id10_tract), temp_geo_id10_tract := sprintf("%06g", geo_id10_tract)]
+            wage_address[!is.na(geo_id10_county), temp_geo_id10_county := sprintf("%03g", geo_id10_county)]
+            wage_address[, c("geo_id10_tract", "geo_id10_county") := NULL]
+            setnames(wage_address, c("temp_geo_id10_tract", "temp_geo_id10_county"), c("geo_id10_tract", "geo_id10_county"))
+        
         # speed up merge below by limiting wage data to id_esds that are in the remaining pool of PHA clients
         wage_address <- wage_address[id_hudhears %in% unique(combo$id_hudhears)]
         
@@ -522,14 +537,15 @@
              plot = consort.complete, 
              dpi=600, 
              width = 6.5, 
-             height = 9, 
+             height = 7.2, 
              units = "in") 
-      ggplot2::ggsave(paste0(outputdir, "/figure_0_consort_diagram.png"),
+      ggplot2::ggsave(paste0(outputdir, "/figure_0_consort_diagram.tiff"),
              plot = consort.complete, 
-             dpi=600, 
+             dpi=1200, 
              width = 6.5, 
-             height = 9, 
-             units = "in") 
+             height = 7.2, 
+             units = "in", 
+             compression = "lzw") 
       
     # save consort data in CSV ----
       flowdata <- sort(ls(pattern = 'consort[0-9]'))

@@ -63,15 +63,23 @@ df.table <- df
 df.table$hh_disability <- factor(df.table$hh_disability, 
                                  levels = c(0,1), 
                                  labels = c("No","Yes"))
+
 # single_caregiver: 0 -> no; 1-> yes
 df.table$single_caregiver <- factor(df.table$single_caregiver,
                                     levels = c(0,1),
                                     labels = c("No","Yes"))
+
 # event (relabel to censored): 0 -> yes; 1-> no
 # Use with caution! 0 in event means is censored; 1 in event means not censored
 df.table$event <- factor(df.table$event,
                          levels = c(0,1),
                          labels = c("Yes","No"))
+
+# recent_homeless: 0 -> no; 1-> yes
+df.table$recent_homeless <- factor(df.table$recent_homeless,
+                         levels = c(0,1),
+                         labels = c("No","Yes"))
+
 
 # Label variables to include info and units
 label(df.table$gender_me) <- "Gender"
@@ -86,6 +94,7 @@ label(df.table$single_caregiver) <- "Single caregiver in household"
 label(df.table$tt_homeless) <- "Time to homeless (day)"
 label(df.table$event) <- "Censored"
 label(df.table$kc_opp_index_score) <- "Opportunity index score"
+label(df.table$recent_homeless) <- "Recent homelessness"
 
 ## -----------------------------------------------------------------------
 ## 2. Make table 1 ----
@@ -95,27 +104,46 @@ label(df.table$kc_opp_index_score) <- "Opportunity index score"
 #
 # 1) For censored individuals
 table1(~gender_me+race_eth_me+age_at_exit+housing_time_at_exit+agency+
-               prog_type_use+hh_size+hh_disability+single_caregiver+
+               prog_type_use+hh_size+hh_disability+single_caregiver+recent_homeless+
                exit_category, 
        data=(df.table %>% subset(event=="Yes")))
 
 # 2) For individuals who have homelessness events
 table1(~gender_me+race_eth_me+age_at_exit+housing_time_at_exit+agency+
-         prog_type_use+hh_size+hh_disability+single_caregiver+
+         prog_type_use+hh_size+hh_disability+single_caregiver+recent_homeless+
          exit_category, 
        data=(df.table %>% subset(event=="No")))
 
 # 3) For the overall population
 table1(~tt_homeless+event+gender_me+race_eth_me+age_at_exit+housing_time_at_exit+
-         agency+prog_type_use+hh_size+hh_disability+single_caregiver +
+         agency+prog_type_use+hh_size+hh_disability+single_caregiver+recent_homeless+
          exit_category, 
        data=df.table)
 
 # By cat
 table1(~tt_homeless+event+gender_me+race_eth_me+age_at_exit+housing_time_at_exit+
-         agency+prog_type_use+hh_size+hh_disability+single_caregiver |
+         agency+prog_type_use+hh_size+hh_disability+single_caregiver+recent_homeless |
          exit_category, 
        data=df.table)
+
+# By cat but exclude missing
+table1(~tt_homeless+event+gender_me+race_eth_me+age_at_exit+housing_time_at_exit+
+         agency+prog_type_use+hh_size+hh_disability+single_caregiver+recent_homeless |
+         exit_category, 
+       data=df.table[df.table$full_demog == T, ])
+
+
+# By cat and PHA but exclude missing
+table1(~tt_homeless+event+gender_me+race_eth_me+age_at_exit+housing_time_at_exit+
+         agency+prog_type_use+hh_size+hh_disability+single_caregiver+recent_homeless |
+         exit_category, 
+       data=df.table[df.table$full_demog == T & df.table$agency == "KCHA", ])
+
+table1(~tt_homeless+event+gender_me+race_eth_me+age_at_exit+housing_time_at_exit+
+         agency+prog_type_use+hh_size+hh_disability+single_caregiver+recent_homeless |
+         exit_category, 
+       data=df.table[df.table$full_demog == T & df.table$agency == "SHA", ])
+
 
 
 ### Part 2: Missingness pattern

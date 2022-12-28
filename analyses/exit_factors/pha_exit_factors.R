@@ -1247,7 +1247,7 @@ table_regression <- function(tbl, type = c("any_exit", "exit_type"), p_value = F
                                 group == "kc_opp_index_score" ~ "Neighborhood opportunity"),
            group = case_when(group == "hh_size" ~ "Household size",
                              group == "single_caregiver" ~ "Single caregiver",
-                             group == "hh_disability" ~ "HoH disability",
+                             group == "hh_disability" ~ "Head of household disability",
                              group == "kc_opp_index_score" ~ "Neighborhood opportunity",
                              group == "recent_homeless_grp" ~ "Experienced recent homelessness",
                              group == "crisis_any_prior" ~ paste0("Experienced 1+ behavioral health crisis event in year prior to exit ",
@@ -1527,15 +1527,20 @@ table_3a_exit_regression <- table_regression(select(anyexit_mcaid_output, group,
 # Turn into gt table
 table_3a_exit_regression <- table_3a_exit_regression %>%
   gt(groupname_col = "category", rowname_col = "group") %>%
-  tab_footnote(footnote = paste0("Health event data available for those aged <62 enrolled in Medicaid ",
-                                 "(N = ", number(model_mcaid_n[[1]], big.mark = ','), " for controls, ", 
-                                 number(model_mcaid_n[[2]], big.mark = ','), " for exits)")) %>%
   tab_footnote(footnote = "* = p<0.05, ** = p<0.01, *** = p<0.001",
                locations = cells_column_labels(columns = "OR")) %>%
   tab_footnote(footnote = "AI/AN = American Indian/Alaskan Native, NH/PI = Native Hawaiian/Pacific Islander", 
                locations = cells_row_groups(groups = "Race/ethnicity")) %>%
   tab_footnote(footnote = "PBV = Project-based voucher, PH = Public housing, TBV = Tenant-based voucher", 
                locations = cells_row_groups(groups = "Program type")) %>%
+  tab_footnote(footnote = paste0("Health event data available for those aged <62 enrolled in Medicaid ",
+                                 "(N = ", number(model_mcaid_n[[1]], big.mark = ','), " for controls, ", 
+                                 number(model_mcaid_n[[2]], big.mark = ','), " for exits)"),
+               locations = cells_stub(rows = group %in%
+                                        c("Experienced 1+ behavioral health crisis event in year prior to exit (incl. ED visits)",
+                                          "Experienced 1+ ED visit in year prior to exit",
+                                          "Experienced 1+ hospitalization in year prior to exit",
+                                          "2+ chronic conditions"))) %>%
   sub_missing() %>%
   cols_label(category = md("Category"),
              group = md("Group"),
@@ -1580,7 +1585,7 @@ table_4_exit_regression <- table_4_exit_regression %>%
                                  "(N = ", number(sum(n_type_all_exits_mcaid$n[1]), big.mark = ","), "/",
                                  number(sum(n_type_all_exits_mcaid$n[2]), big.mark = ","), "/",
                                  number(sum(n_type_all_exits_mcaid$n[3]), big.mark = ","), 
-                                 " for neutral/negative/positive exits"),
+                                 " for neutral/negative/positive exits)"),
                locations = cells_stub(rows = group %in%
                                         c("Experienced 1+ behavioral health crisis event in year prior to exit (incl. ED visits)",
                                           "Experienced 1+ ED visit in year prior to exit",

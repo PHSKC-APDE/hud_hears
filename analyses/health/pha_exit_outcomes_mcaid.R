@@ -134,26 +134,26 @@ exit_nodeath <- exit_control %>% filter(exit == 1)
 exit_any_age <- age_sum(exit_control, full_demog = T, id_type)
 
 # Gender
-exit_any_gender <- demog_pct_sum(exit_control, full_demog = T, level = "ind", 
+exit_any_gender <- demog_pct_sum(exit_control, full_demog = T, suppress = T, level = "ind", 
                                   demog = "gender", id_type)
 
 # Race/eth
-exit_any_race <- demog_pct_sum(exit_control, full_demog = T, level = "ind", 
+exit_any_race <- demog_pct_sum(exit_control, full_demog = T, suppress = T, level = "ind", 
                                 demog = "race", id_type)
 
 # Time in housing (this is based on HH data)
-exit_any_hh_los <- demog_num_sum(exit_control, full_demog = T, demog = "los", id_type)
+exit_any_hh_los <- demog_num_sum(exit_control, full_demog = T, level = "hh", demog = "los", id_type)
 
 # HH size and composition
 exit_any_hh_demogs <- hh_demogs_sum(exit_control, full_demog = T, level = "hh", id_type)
 
 # Program type
-exit_any_hh_prog <- demog_pct_sum(exit_control, full_demog = T, level = "hh", demog = "program_type", id_type)
+exit_any_hh_prog <- demog_pct_sum(exit_control, full_demog = T, suppress = T, level = "hh", demog = "program_type", id_type)
 
 # Medicaid outcomes
-exit_any_mcaid_7_prior <- mcaid_outcomes_sum(exit_control, full_demog = T, 
+exit_any_mcaid_7_prior <- mcaid_outcomes_sum(exit_control, full_demog = T, suppress = T, 
                                               time = "prior", cov_time = "7_mth", show_num = T, id_type)
-exit_any_mcaid_7_after <- mcaid_outcomes_sum(exit_control, full_demog = T, 
+exit_any_mcaid_7_after <- mcaid_outcomes_sum(exit_control, full_demog = T, suppress = T, 
                                               time = "after", cov_time = "7_mth", show_num = T, id_type)
 
 # Combine for R markdown
@@ -171,26 +171,26 @@ rm(exit_any_age, exit_any_gender, exit_any_race, exit_any_hh_los,
 exit_type_age <- age_sum(exit_nodeath, full_demog = T, exit_category)
 
 # Gender
-exit_type_gender <- demog_pct_sum(exit_nodeath, full_demog = T, level = "ind", 
+exit_type_gender <- demog_pct_sum(exit_nodeath, full_demog = T, suppress = T, level = "ind", 
                                   demog = "gender", exit_category)
 
 # Race/eth
-exit_type_race <- demog_pct_sum(exit_nodeath, full_demog = T, level = "ind", 
+exit_type_race <- demog_pct_sum(exit_nodeath, full_demog = T, suppress = T, level = "ind", 
                                 demog = "race", exit_category)
 
 # Time in housing (this is based on HH data)
-exit_type_hh_los <- demog_num_sum(exit_nodeath, full_demog = T, demog = "los", exit_category)
+exit_type_hh_los <- demog_num_sum(exit_nodeath, full_demog = T, level = "hh", demog = "los", exit_category)
 
 # HH size and composition
 exit_type_hh_demogs <- hh_demogs_sum(exit_nodeath, full_demog = T, level = "hh", exit_category)
 
 # Program type
-exit_type_hh_prog <- demog_pct_sum(exit_nodeath, full_demog = T, level = "hh", demog = "program_type", exit_category)
+exit_type_hh_prog <- demog_pct_sum(exit_nodeath, full_demog = T, suppress = T, level = "hh", demog = "program_type", exit_category)
 
 # Medicaid outcomes
-exit_type_mcaid_7_prior <- mcaid_outcomes_sum(exit_nodeath, full_demog = T, 
+exit_type_mcaid_7_prior <- mcaid_outcomes_sum(exit_nodeath, full_demog = T, suppress = T, 
                                              time = "prior", cov_time = "7_mth", show_num = T, exit_category)
-exit_type_mcaid_7_after <- mcaid_outcomes_sum(exit_nodeath, full_demog = T, 
+exit_type_mcaid_7_after <- mcaid_outcomes_sum(exit_nodeath, full_demog = T, suppress = T, 
                                               time = "after", cov_time = "7_mth", show_num = T, exit_category)
 
 
@@ -944,7 +944,7 @@ table_formatter <- function(tbl) {
 }
 
 
-table_regression <- function(tbl, type = c("any_exit", "exit_type")) {
+table_regression <- function(tbl, type = c("any_exit", "exit_type"), p_value = F) {
   # Do some basic setup
   output <- tbl %>%
     rename(group = term) %>%
@@ -1011,7 +1011,7 @@ table_regression <- function(tbl, type = c("any_exit", "exit_type")) {
                                                 "exit_categoryPositive", "exit_category_negPositive") ~ 1L,
                                    group %in% c("crisis_any_prior", "los3-5.99", 
                                                 "single_caregiver", "age_grp45-64",
-                                                "exit_categoryNeutral", "exit_category_negNeutral") ~ 2L,
+                                                "age_grp45-<62", "exit_categoryNeutral", "exit_category_negNeutral") ~ 2L,
                                    group %in% c("crisis_ed_any_prior", "los6-9.99", "hh_disability",
                                                 "exit_categoryNegative") ~ 3L,
                                    group %in% c("ed_cnt_prior", "ed_any_prior", "los10+") ~ 4L,
@@ -1022,7 +1022,7 @@ table_regression <- function(tbl, type = c("any_exit", "exit_type")) {
     select(-ends_with("order")) %>%
     mutate(group = case_when(group == "hh_size" ~ "Household size",
                             group == "single_caregiver" ~ "Single caregiver",
-                            group == "hh_disability" ~ "HoH disability",
+                            group == "hh_disability" ~ "Head of household disability",
                             group == "kc_opp_index_score" ~ "Neighborhood opportunity",
                             group == "recent_homeless_grp" ~ "Experienced recent homelessness",
                             group == "crisis_any_prior" ~ 
@@ -1039,35 +1039,76 @@ table_regression <- function(tbl, type = c("any_exit", "exit_type")) {
                             group == "age_at_exit" ~ "Age at exit (years)",
                             TRUE ~ str_remove(group, "age_grp|gender_me|los|major_prog|prog_type_use|race_eth_me|exit_category_neg|exit_category")))
   
+  
   # Turn into gt table
+  if (p_value == F) {
+    output <- output %>%
+      mutate(estimate_ed = case_when(p.value_ed =="<0.05" ~ paste0(estimate_ed, "*"),
+                                     p.value_ed =="<0.01" ~ paste0(estimate_ed, "**"),
+                                     p.value_ed =="<0.001" ~ paste0(estimate_ed, "***"),
+                                     TRUE ~ as.character(estimate_ed)),
+             estimate_h = case_when(p.value_h =="<0.05" ~ paste0(estimate_h, "*"),
+                                     p.value_h =="<0.01" ~ paste0(estimate_h, "**"),
+                                     p.value_h =="<0.001" ~ paste0(estimate_h, "***"),
+                                     TRUE ~ as.character(estimate_h)),
+             estimate_wc_w = case_when(p.value_wc_w =="<0.05" ~ paste0(estimate_wc_w, "*"),
+                                     p.value_wc_w =="<0.01" ~ paste0(estimate_wc_w, "**"),
+                                     p.value_wc_w =="<0.001" ~ paste0(estimate_wc_w, "***"),
+                                     TRUE ~ as.character(estimate_wc_w)),
+             estimate_wc_wo = case_when(p.value_wc_wo =="<0.05" ~ paste0(estimate_wc_wo, "*"),
+                                     p.value_wc_wo =="<0.01" ~ paste0(estimate_wc_wo, "**"),
+                                     p.value_wc_wo =="<0.001" ~ paste0(estimate_wc_wo, "***"),
+                                     TRUE ~ as.character(estimate_wc_wo))) %>%
+      select(-p.value_ed, -p.value_h, -p.value_wc_w, -p.value_wc_wo) %>%
+      gt(groupname_col = "category", rowname_col = "group") %>%
+      tab_spanner(label = md("ED visits"), columns = ends_with("_ed")) %>%
+      tab_spanner(label = md("Hospitalizations"), columns = ends_with("_h")) %>%
+      tab_spanner(label = md("Well-child checks <br>(with previous visit)"), 
+                  columns = ends_with("_wc_w")) %>%
+      tab_spanner(label = md("Well-child checks <br>(without previous visit)"), 
+                  columns = ends_with("wc_wo")) %>%
+      tab_footnote(footnote = "* = p<0.05, ** = p<0.01, *** = p<0.001",
+                   locations = cells_column_labels(columns = starts_with("estimate"))) %>%
+      cols_label(category = md("Category"),
+                 group = md("Group"),
+                 estimate_ed = md("Odds ratio"),
+                 ci_ed = md("95% CI"),
+                 estimate_h = md("Odds ratio"),
+                 ci_h = md("95% CI"),
+                 estimate_wc_w = md("Odds ratio"),
+                 ci_wc_w = md("95% CI"),
+                 estimate_wc_wo = md("Odds ratio"),
+                 ci_wc_wo = md("95% CI"))
+  } else {
+    output <- output %>%
+      gt(groupname_col = "category", rowname_col = "group") %>%
+      tab_spanner(label = md("ED visits"), columns = ends_with("_ed")) %>%
+      tab_spanner(label = md("Hospitalizations"), columns = ends_with("_h")) %>%
+      tab_spanner(label = md("Well-child checks <br>(with previous visit)"), 
+                  columns = ends_with("_wc_w")) %>%
+      tab_spanner(label = md("Well-child checks <br>(without previous visit)"), 
+                  columns = ends_with("wc_wo")) %>%
+      cols_label(category = md("Category"),
+                 group = md("Group"),
+                 estimate_ed = md("Odds ratio"),
+                 ci_ed = md("95% CI"),
+                 p.value_ed = md("p-value"),
+                 estimate_h = md("Odds ratio"),
+                 ci_h = md("95% CI"),
+                 p.value_h = md("p-value"),
+                 estimate_wc_w = md("Odds ratio"),
+                 ci_wc_w = md("95% CI"),
+                 p.value_wc_w = md("p-value"),
+                 estimate_wc_wo = md("Odds ratio"),
+                 ci_wc_wo = md("95% CI"),
+                 p.value_wc_wo = md("p-value"))
+  }
+  
   output <- output %>%
-    gt(groupname_col = "category", rowname_col = "group") %>%
-    tab_spanner(label = md("ED visits"), columns = ends_with("_ed")) %>%
-    tab_spanner(label = md("Hospitalizations"), columns = ends_with("_h")) %>%
-    tab_spanner(label = md("Well-child checks <br>(with previous visit)"), 
-                columns = ends_with("_wc_w")) %>%
-    tab_spanner(label = md("Well-child checks <br>(without previous visit)"), 
-                columns = ends_with("wc_wo")) %>%
-    cols_label(category = md("Category"),
-               group = md("Group"),
-               estimate_ed = md("Odds ratio"),
-               ci_ed = md("95% CI"),
-               p.value_ed = md("p-value"),
-               estimate_h = md("Odds ratio"),
-               ci_h = md("95% CI"),
-               p.value_h = md("p-value"),
-               estimate_wc_w = md("Odds ratio"),
-               ci_wc_w = md("95% CI"),
-               p.value_wc_w = md("p-value"),
-               estimate_wc_wo = md("Odds ratio"),
-               ci_wc_wo = md("95% CI"),
-               p.value_wc_wo = md("p-value")) %>%
     tab_footnote(footnote = "Too few with multiple gender to include in model for well-child checks", 
                  locations = cells_row_groups(groups = "Gender")) %>%
     tab_footnote(footnote = "AI/AN = American Indian/Alaskan Native, NH/PI = Native Hawaiian/Pacific Islander", 
                  locations = cells_row_groups(groups = "Race/ethnicity")) %>%
-    tab_footnote(footnote = "HoH = Head of household", 
-                 locations = cells_stub(rows = str_detect(group, "HoH"))) %>%
     tab_footnote(footnote = "PBV = Project-based voucher, PH = Public housing, TBV = Tenant-based voucher", 
                  locations = cells_row_groups(groups = "Program type")) %>%
     sub_missing()
@@ -1142,20 +1183,26 @@ table_1_demogs <- table_formatter(table_1_demogs)
 # Save output
 gtsave(table_1_demogs, filename = "health_manuscript_table1.png",
        path = file.path(here::here(), "analyses/health"))
+gtsave(table_1_demogs, filename = "health_manuscript_table1.html",
+       path = file.path(here::here(), "analyses/health"))
 
 
 ## Supplemental tables: regression output ----
 # Exit type regression
-table_2_regression_type <- table_regression(model_outcomes, type = "exit_type")
+table_2_regression_type <- table_regression(model_outcomes, type = "exit_type", p_value = F)
 table_2_regression_type <- table_formatter(table_2_regression_type)
 
 gtsave(table_2_regression_type, filename = "health_manuscript_table_supp1.png",
        path = file.path(here::here(), "analyses/health"))
+gtsave(table_2_regression_type, filename = "health_manuscript_table_supp1.html",
+       path = file.path(here::here(), "analyses/health"))
 
 
-# Any exit regression
-table_3_regression_any <- table_regression(model_outcomes_any, type = "any_exit")
+## Any exit regression ----
+table_3_regression_any <- table_regression(model_outcomes_any, type = "any_exit", p_value = F)
 table_3_regression_any <- table_formatter(table_3_regression_any)
 
 gtsave(table_3_regression_any, filename = "health_manuscript_table_supp2.png",
+       path = file.path(here::here(), "analyses/health"))
+gtsave(table_3_regression_any, filename = "health_manuscript_table_supp2.html",
        path = file.path(here::here(), "analyses/health"))

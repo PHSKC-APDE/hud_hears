@@ -18,7 +18,7 @@ options(dplyr.summarise.inform = FALSE)
 
 if (!require("pacman")) {install.packages("pacman")}
 pacman::p_load(tidyverse, odbc, glue, data.table, ggplot2, viridis, hrbrthemes,
-               knitr, kableExtra, rmarkdown, DiagrammeR, scales)
+               knitr, kableExtra, rmarkdown, DiagrammeR, scales, gridExtra)
 
 # Connect to HHSAW
 db_hhsaw <- DBI::dbConnect(odbc::odbc(),
@@ -765,15 +765,17 @@ any_exit_hh <- bind_rows(lapply(c(2012:2020), exit_count, hh = T)) %>%
 # Ind level
 exit_year_bar <- any_exit %>%
   ggplot(aes(fill = as.character(exited), y = n_supp, x = exit_year)) +
-  geom_bar(position = "fill", stat="identity", colour = "black") +
-  geom_text(position = position_fill(vjust = 0.5), size = 2, show.legend = F,
-            aes(group = exited, label = paste0(pct_supp, "%"),
-                color = exited)) +
+  geom_bar(position = "fill", stat = "identity", colour = "black") +
+  geom_label(position = position_fill(vjust = 0.5), 
+                  show.legend = F,
+                  size = 2.5,
+                  aes(group = exited, label = paste0(pct_supp, "%"), color = exited)) +
   scale_color_manual(values = c("white", "black")) +
-  geom_text(aes(x = exit_year, y = 1.02, label = year_tot_label), vjust = 0, size = 2) +
+  geom_text(aes(x = exit_year, y = 1.02, label = year_tot_label), vjust = 0, size = 2.5) +
   scale_fill_viridis(discrete = T) +
   scale_y_continuous(labels = scales::percent) +
   theme_ipsum(axis_text_size = 10, grid = F, base_family = "Calibri") +
+  theme(legend.position = "bottom") +
   labs(x = "Year",
        y = "Percent of people",
        caption = "NB. KCHA exit data is incomplete prior to October 2015.",
@@ -790,20 +792,22 @@ ggsave(filename = file.path(here::here(), "analyses/exit_factors/exits_by_year_i
 any_exit_hh %>%
   ggplot(aes(fill = as.character(exited), y = n_supp, x = exit_year)) +
   geom_bar(position = "fill", stat="identity", colour = "black") +
-  geom_text(position = position_fill(vjust = 0.5), size = 3, show.legend = F,
-            aes(group = exited, label = paste0(pct_supp, "%"),
-                color = exited)) +
+  geom_label(position = position_fill(vjust = 0.5), 
+             show.legend = F,
+             size = 3,
+             aes(group = exited, label = paste0(pct_supp, "%"), color = exited)) +
   scale_color_manual(values = c("white", "black")) +
   geom_text(aes(x = exit_year, y = 1.02, label = year_tot_label), vjust = 0, size = 3) +
   scale_fill_viridis(discrete = T) +
   scale_y_continuous(labels = scales::percent) +
   theme_ipsum(axis_text_size = 10, grid = F, base_family = "Calibri") +
+  theme(legend.position = "bottom") +
   labs(title = "Proportion of households exiting by year",
        x = "Year",
        y = "Percent of households",
        caption = "NB. KCHA exit data is incomplete prior to October 2015",
        fill = "Exit vs. not") +
-  facet_grid(~ agency)
+  facet_wrap(~ agency, nrow = 2)
 
 
 ## Exit types ----
@@ -872,14 +876,15 @@ exit_type_bar <- exit_year %>%
   filter(!is.na(exit_category)) %>%
   ggplot(aes(fill = exit_category, y = n_supp, x = exit_year)) +
   geom_bar(position = "fill", stat="identity", colour = "black") +
-  geom_text(position = position_fill(vjust = 0.5), size = 2.5, show.legend = F,
+  geom_label(position = position_fill(vjust = 0.5), size = 2.5, show.legend = F,
             aes(group = exit_category, label = paste0(pct_supp, "%"),
                 color = exit_category)) +
   scale_color_manual(values = label_col) +
-  geom_text(aes(x = exit_year, y = 1.02, label = year_tot_label), vjust = 0, size = 2.5) +
+  geom_text(aes(x = exit_year, y = 1.02, label = year_tot_label), vjust = 0, size = 3) +
   scale_fill_viridis(discrete = T) +
   scale_y_continuous(labels = scales::percent) +
   theme_ipsum(axis_text_size = 10, grid = F, base_family = "Calibri") +
+  theme(legend.position = "bottom") +
   labs(x = "Year",
        y = "Percent of exits",
        #title = "Proportion of exit types by year",
@@ -889,21 +894,22 @@ exit_type_bar <- exit_year %>%
 
 ggsave(filename = file.path(here::here(), "analyses/exit_factors/exits_by_type_ind.png"),
        device = "png", plot = exit_type_bar,
-       width = 6.5, height = 6, units = "in")
+       width = 7, height = 9, units = "in")
 
 
 exit_type_no_dth_bar <- exit_year_nodeath %>%
   filter(!is.na(exit_category)) %>%
   ggplot(aes(fill = exit_category, y = n_supp, x = exit_year)) +
   geom_bar(position = "fill", stat="identity", colour = "black") +
-  geom_text(position = position_fill(vjust = 0.5), size = 2.5, show.legend = F,
+  geom_label(position = position_fill(vjust = 0.5), size = 2.5, show.legend = F,
             aes(group = exit_category, label = paste0(pct_supp, "%"),
                 color = exit_category)) +
   scale_color_manual(values = label_col) +
-  geom_text(aes(x = exit_year, y = 1.02, label = year_tot_label), vjust = 0, size = 2.5) +
+  geom_text(aes(x = exit_year, y = 1.02, label = year_tot_label), vjust = 0, size = 3) +
   scale_fill_viridis(discrete = T) +
   scale_y_continuous(labels = scales::percent) +
   theme_ipsum(axis_text_size = 10, grid = F, base_family = "Calibri") +
+  theme(legend.position = "bottom") +
   labs(x = "Year",
        y = "Percent of exits",
        #title = "Proportion of exit types by year (excluding deaths)",
@@ -913,10 +919,43 @@ exit_type_no_dth_bar <- exit_year_nodeath %>%
 
 ggsave(filename = file.path(here::here(), "analyses/exit_factors/exits_by_type_no_dth_ind.png"),
        device = "png", plot = exit_type_no_dth_bar,
-       width = 6.5, height = 6, units = "in")
+       width = 7, height = 9, units = "in")
+
+# Make combined version to fit on one page
+grid.arrange(exit_type_bar, exit_type_no_dth_bar,
+             nrow = 2)
 
 
-## Set up key values for markdown outpuyt ----
+exit_type_combined_bar <- 
+  bind_rows(exit_year %>% mutate(type = "All exits"),
+            exit_year_nodeath %>% mutate(type = "Excluding deaths")) %>%
+  filter(!is.na(exit_category)) %>%
+  ggplot(aes(fill = exit_category, y = n_supp, x = exit_year)) +
+  geom_bar(position = "fill", stat="identity", colour = "black") +
+  geom_label(position = position_fill(vjust = 0.5), size = 2.5, show.legend = F,
+             aes(group = exit_category, label = paste0(pct_supp, "%"),
+                 color = exit_category)) +
+  scale_color_manual(values = label_col) +
+  geom_text(aes(x = exit_year, y = 1.02, label = year_tot_label), vjust = 0, size = 3) +
+  scale_fill_viridis(discrete = T) +
+  scale_y_continuous(labels = scales::percent) +
+  theme_ipsum(axis_text_size = 10, grid = F, base_family = "Calibri") +
+  theme(legend.position = "bottom") +
+  labs(x = "Year",
+       y = "Percent of exits",
+       #title = "Proportion of exit types by year (excluding deaths)",
+       caption = "NB. KCHA exit data is incomplete prior to October 2015",
+       fill = "Exit category") +
+  facet_wrap(vars(agency, type), strip.position = "right",
+             ncol = 1)
+
+ggsave(filename = file.path(here::here(), "analyses/exit_factors/exits_by_type_comb_ind.png"),
+       device = "png", plot = exit_type_combined_bar,
+       width = 8, height = 12, units = "in")
+
+
+
+## Set up key values for markdown output ----
 kcha_max_pos <- exit_year %>% 
   filter(agency == "KCHA" & exit_category == "Positive") %>%
   filter(pct == max(pct))

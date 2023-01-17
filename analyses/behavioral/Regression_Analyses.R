@@ -254,7 +254,7 @@ table_formatter <- function(tbl) {
 }
 
 
-table_regression <- function(tbl, type = c("all", "mcaid")) {
+table_regression <- function(tbl, type = c("all", "mcaid"), p_value = F) {
   # Do some basic setup
   output <- tbl %>%
     rename(group = term) %>%
@@ -266,6 +266,14 @@ table_regression <- function(tbl, type = c("all", "mcaid")) {
            ci = paste0(number(conf.low, accuracy = 0.01), "–", 
                        number(conf.high, accuracy = 0.01))) %>%
     select(group, estimate, ci, p.value)
+  
+  if (p_value == F) {
+    output <- output %>%
+      mutate(estimate = case_when(p.value =="<0.05" ~ paste0(estimate, "*"),
+                                  p.value =="<0.01" ~ paste0(estimate, "**"),
+                                  p.value =="<0.001" ~ paste0(estimate, "***"),
+                                  TRUE ~ as.character(estimate)))
+  }
   
   if (type == "all") {
     output <- output %>%
@@ -280,6 +288,10 @@ table_regression <- function(tbl, type = c("all", "mcaid")) {
       rename(estimate_mcaid = estimate,
              ci_mcaid = ci,
              p_mcaid = p.value)
+  }
+  
+  if (p_value == F) {
+    output <- output %>% select(-starts_with("p_"))
   }
   
   output
@@ -298,16 +310,18 @@ descriptive <- table_formatter(descriptive)
 # Save output
 gtsave(descriptive, filename = "bh_manuscript_table1.png",
        path = file.path(here::here(), "analyses/behavioral"))
+gtsave(descriptive, filename = "bh_manuscript_table1.html",
+       path = file.path(here::here(), "analyses/behavioral"))
 
 
 
 # TABLE 2: REGRESSION OUTPUT ----
 # Do some basic setup
 any_model <- broom::tidy(any_adj, conf.int = TRUE, exponentiate = T) %>% as.data.frame()
-any_model <- table_regression(any_model, type = "all")
+any_model <- table_regression(any_model, type = "all", p_value = F)
 
 mcaid_model <- broom::tidy(mcaid_adj, conf.int = TRUE, exponentiate = T) %>% as.data.frame()
-mcaid_model <- table_regression(mcaid_model, type = "mcaid")
+mcaid_model <- table_regression(mcaid_model, type = "mcaid", p_value = F)
 
 
 table2 <- left_join(any_model, mcaid_model, by = "group") %>%
@@ -349,7 +363,7 @@ table2 <- bind_rows(table2, ref_rows) %>%
   mutate(group = case_when(group == "housing_time_at_exit" ~ "Years in housing",
                            group == "hh_size" ~ "Household size",
                            group == "single_caregiver" ~ "Single caregiver",
-                           group == "hh_disability" ~ "HoH disability",
+                           group == "hh_disability" ~ "Head of household disability",
                            group == "age_at_exit" ~ "Age at exit (years)",
                            str_detect(group, "before") ~ "Prior crisis events",
                            TRUE ~ str_remove(group, "age_grp|gender_me|los|prog_type_use|race_eth_me|exit_category")))
@@ -363,14 +377,12 @@ table2 <- table2 %>%
              group = md("Group"),
              estimate_all = md("Odds ratio"),
              ci_all = md("95% CI"),
-             p_all = md("p-value"),
              estimate_mcaid = md("Odds ratio"),
-             ci_mcaid = md("95% CI"),
-             p_mcaid = md("p-value")) %>%
+             ci_mcaid = md("95% CI")) %>%
+  tab_footnote(footnote = "* = p<0.05, ** = p<0.01, *** = p<0.001",
+               locations = cells_column_labels(columns = starts_with("estimate"))) %>%
   tab_footnote(footnote = "AI/AN = American Indian/Alaskan Native, NH/PI = Native Hawaiian/Pacific Islander", 
                locations = cells_row_groups(groups = "Race/ethnicity")) %>%
-  tab_footnote(footnote = "HoH = Head of household", 
-               locations = cells_stub(rows = str_detect(group, "HoH"))) %>%
   tab_footnote(footnote = "PBV = Project-based voucher, PH = Public housing, TBV = Tenant-based voucher", 
                locations = cells_row_groups(groups = "Program type")) %>%
   sub_missing()
@@ -380,4 +392,6 @@ table_2 <- table_formatter(table2)
 
 # Save output
 gtsave(table_2, filename = "bh_manuscript_table2.png",
+       path = file.path(here::here(), "analyses/behavioral"))
+gtsave(table_2, filename = "bh_manuscript_table2.html",
        path = file.path(here::here(), "analyses/behavioral"))

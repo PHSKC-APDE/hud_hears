@@ -1,4 +1,4 @@
-## Script name: 04_exit_reason_sensitivity.R
+## Script name: 04_exit_reason_sensitivity.R ----
 ##
 ## Purpose of script: Run leave-one-out sensitivity analysis on exit reasons and produce resulting forest plots of hazard ratios
 ##                      - to determine the impact of specific exit reasons on the hazard ratios of experiencing homelessness
@@ -43,9 +43,39 @@ db_hhsaw <- DBI::dbConnect(odbc::odbc(),
                            TrustServerCertificate = "yes",
                            Authentication = "ActiveDirectoryPassword")
 
-# Select table that contains study data and re-level exit category with reference as "Neutral"
+# Select & tidy table that contains study data and re-level exit category with reference as "Neutral" ----
 study_data<- setDT(DBI::dbGetQuery(conn = db_hhsaw, "SELECT * FROM [hudhears].[capstone_data_3]"))
 study_data$exit_category<- relevel(factor(study_data$exit_category), ref="Neutral")
+
+# format exit reasons according to HUD editor comments
+study_data[, exit_reason_clean := stringr::str_to_title(exit_reason_clean)]
+study_data[, exit_reason_clean := gsub("Pb/Mr", "PB/MR", exit_reason_clean)]
+study_data[, exit_reason_clean := gsub("Hqs", "HQS", exit_reason_clean)]
+study_data[, exit_reason_clean := gsub("Hcv", "HCV", exit_reason_clean)]
+study_data[, exit_reason_clean := gsub("Hsg", "Housing", exit_reason_clean)]
+study_data[, exit_reason_clean := gsub("Kcha", "KCHA", exit_reason_clean)]
+study_data[, exit_reason_clean := gsub("Sha", "SHA", exit_reason_clean)]
+study_data[, exit_reason_clean := gsub("PB/MR Moved Out", "PB/MR Moved Out,", exit_reason_clean)]
+study_data[, exit_reason_clean := gsub("Non-Time Limited", "Non-Time-Limited,", exit_reason_clean)]
+study_data[, exit_reason_clean := gsub("Moved - Needed A Higher", "Moved—Needed A Higher", exit_reason_clean)]
+study_data[, exit_reason_clean := gsub("^Expired - ", "Expired—", exit_reason_clean)]
+study_data[, exit_reason_clean := gsub("^Ineligible - ", "Ineligible—", exit_reason_clean)]
+study_data[, exit_reason_clean := gsub("^Eviction - ", "Eviction—", exit_reason_clean)]
+study_data[, exit_reason_clean := gsub("^Fraud - ", "Fraud—", exit_reason_clean)]
+study_data[, exit_reason_clean := gsub("^Absence - ", "Absence—", exit_reason_clean)]
+study_data[, exit_reason_clean := gsub("^Noncompliance - ", "Noncompliance—", exit_reason_clean)]
+study_data[, exit_reason_clean := gsub("^Moved - ", "Moved—", exit_reason_clean)]
+study_data[, exit_reason_clean := gsub("^Graduated - ", "Graduated—", exit_reason_clean)]
+study_data[, exit_reason_clean := gsub(" - Criminal$", "—Criminal", exit_reason_clean)]
+study_data[, exit_reason_clean := gsub(" - Non-Criminal$", "—Non-Criminal", exit_reason_clean)]
+study_data[, exit_reason_clean := gsub("Moved In W/Family/Friends", "Moved In W/Family or Friends", exit_reason_clean)]
+study_data[, exit_reason_clean := gsub("Family,Friends", "Family or Friends", exit_reason_clean)]
+study_data[, exit_reason_clean := gsub("S8", "Section 8", exit_reason_clean)]
+study_data[, exit_reason_clean := gsub("Hospital/Assisted Living", " Hospital or Assisted Living", exit_reason_clean)]
+study_data[, exit_reason_clean := gsub("Re-Examination", "Reexamination", exit_reason_clean)]
+study_data[, exit_reason_clean := gsub("Judgement", "Judgment", exit_reason_clean)]
+study_data[, exit_reason_clean := gsub("\\(Non-Criminal\\)", "(noncriminal)", exit_reason_clean)]
+
 
 # Remove anyone with missing variables
 study_data <- study_data %>% filter(full_demog == T)
@@ -199,18 +229,24 @@ count_threshold <- 100
 
 ## ii) format data frame for forest plot ----
 forest_plot_data<- bind_rows(
-  # header row
-  tibble(exit_reason_omitted= "Exit Reason Omitted", 
-         number_omitted= "Number Omitted",
-         exit_category= "Exit Category",
-         summary=TRUE),
   # LOO data with only rows of exit reasons with count >= threshold
   # Also filter 'Expired - ported out' for now because it has two categories (this will be fixed)
-  loo_output %>% filter(as.numeric(number_omitted)>=count_threshold & exit_reason_omitted != "Expired - Ported Out"), 
+  loo_output %>% 
+    filter(as.numeric(number_omitted)>=count_threshold & exit_reason_omitted != "Expired—Ported Out"),
   # empty row
   tibble(exit_reason_omitted=NA), 
   # results from full model
   full_data_output)
+
+setDT(forest_plot_data)
+forest_plot_data[, number_omitted := format(as.numeric(number_omitted), big.mark = ',')]
+forest_plot_data <- forest_plot_data[!number_omitted %like% 'NA']
+forest_plot_data <- rbind(data.table(exit_reason_omitted= "Exit Reason Omitted",
+                                     number_omitted= "Number Omitted",
+                                     exit_category= "Exit Category", 
+                                     summary = TRUE), 
+                          forest_plot_data, 
+                          fill = T)
 
 
 ## GEE models ----
@@ -257,7 +293,7 @@ forest_plot_data %>% filter((exit_category %in% c("Neutral", "Positive", "Exit C
                          mean= HR_pos,
                          lower= HR_pos_lower,
                          upper= HR_pos_upper,
-                         title= "Positive vs. Neutral Exit",
+                         title= "Positive Versus Neutral Exit",
                          xlab="Hazard Ratio of Experiencing Homelessness",
                          zero= forest_plot_data %>% filter(exit_reason_omitted=="Full Data") %>% pull(HR_pos),
                          grid= c(forest_plot_data %>% filter(exit_reason_omitted=="Full Data") %>% pull(HR_pos_lower),
@@ -313,7 +349,7 @@ forest_plot_data %>% filter((exit_category %in% c("Neutral", "Negative", "Exit C
                          mean= HR_neg,
                          lower= HR_neg_lower,
                          upper= HR_neg_upper,
-                         title= "Negative vs. Neutral Exit",
+                         title= "Negative Versus Neutral Exit",
                          xlab="Hazard Ratio of Experiencing Homelessness",
                          zero= forest_plot_data %>% filter(exit_reason_omitted=="Full Data") %>% pull(HR_neg),
                          grid= c(forest_plot_data %>% filter(exit_reason_omitted=="Full Data") %>% pull(HR_neg_lower),

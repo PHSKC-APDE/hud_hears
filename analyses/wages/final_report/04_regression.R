@@ -36,21 +36,27 @@
 # Set up ----
     rm(list=ls())
     options(scipen = 999)
-    pacman::p_load(lubridate, rads, data.table, DBI, odbc, ggplot2, lme4, marginaleffects, openxlsx)
+    pacman::p_load(lubridate, rads, data.table, DBI, odbc, ggplot2, lme4, marginaleffects, openxlsx, Microsoft365R)
 
-    # output folder
-    outputdir <- "C:/Users/dcolombara/King County/DPH Health And Housing - Documents/HUD HEARS Study/wage_analysis/output/final_report/"
-    
     # easy SQL connections
     devtools::source_url("https://raw.githubusercontent.com/PHSKC-APDE/apde/main/R/create_db_connection.R") 
  
+    # SharePoint connection
+    site <- get_team("DPH Health And Housing")
+    drv <- site$get_drive("Documents")
+    
 # Custom functions ----
     # standard ggplot formatting ----
       formatplots <- function(myplot){
         myplot <- myplot +
-          scale_color_manual("Exit type", 
-                             values=c('Positive' = '#2c7fb8', 
-                                      'Negative' = '#2ca25f')) +
+          scale_shape_manual("Exit Type", 
+                             values = c('Positive' = 15,
+                                        'Counterfactual' = 17, 
+                                        'Negative' = 16)) +
+          scale_color_manual("Exit Type",
+                             values=c('Positive' = '#2c7fb8',
+                                      'Counterfactual' = '#2ca25f',
+                                      'Negative' = '#E60000')) +
           scale_y_continuous(labels=scales::dollar_format())+
           theme(panel.grid.major = element_line(color = "white"), 
                 panel.background = element_rect(fill = "white"), 
@@ -69,23 +75,31 @@
     
     # save plots with proper dimensions ----
       saveplots <- function(plot.object = NULL, plot.name = NULL){
-        ggsave(paste0(outputdir, '/', plot.name, ".pdf"),
+        tempy <- tempfile(fileext = ".pdf")
+        ggsave(tempy,
+               plot = plot.object, 
+               dpi=600, 
+               width = 6, 
+               height = 4, 
+               units = "in")
+        drv$upload_file(src = tempy, 
+                        dest = paste0("/HUD HEARS Study/wage_analysis/output/final_report/", plot.name, ".pdf"))   
+        
+        tempy <- tempfile(fileext = ".png")
+        ggsave(tempy,
                plot = plot.object, 
                dpi=600, 
                width = 6, 
                height = 4, 
                units = "in") 
-        ggsave(paste0(outputdir, '/', plot.name, ".png"),
-               plot = plot.object, 
-               dpi=600, 
-               width = 6, 
-               height = 4, 
-               units = "in") 
+        drv$upload_file(src = tempy, 
+                        dest = paste0("/HUD HEARS Study/wage_analysis/output/final_report/", plot.name, ".png"))
       }
        
     # calculate mean values of predictions for my dataset using random draws ----
       prediction_summary <- function(predDT, ndraw = 1000){
-        myest <- copy(predDT)[, c("lower", "upper") := NULL]
+        myest <- copy(predDT)
+        if("lower" %in% names(predDT)){myest[, c("lower", "upper") := NULL]}
         
         # create summary table of each combination of time and exit_category
         mysets <- unique(myest[, .(time, exit_category, wage = NA_real_, se = NA_real_)])
@@ -99,7 +113,7 @@
           set.seed(98104)
           mydraws <- c() # empty vector to store draws
           for(ii in 1:nrow(mysubset)){
-            mydraws <- c(mydraws, rnorm(ndraw, mysubset[ii]$predicted, mysubset[ii]$std.error))
+            mydraws <- c(mydraws, rnorm(ndraw, mysubset[ii]$estimate, mysubset[ii]$std.error))
           }
           
           # calculate summary (mean and se) from the draws
@@ -207,14 +221,22 @@
                                  "SELECT * FROM [hudhears].[wage_analytic_table]"))
     
     # get confounder vars
-    load(paste0(outputdir, "confounders.Rdata"))
+    tempy <- tempfile(fileext = '.Rdata')
+    drv$download_file(src = "/HUD HEARS Study/wage_analysis/output/final_report/confounders.Rdata", 
+                      dest = tempy, 
+                      overwrite = TRUE)
+    load(tempy)
     confounders <- confounders$confounders
     if(length(confounders) > 1){ 
       confounders <- paste(confounders, collapse = " + ")
       }
     
     # get pscovariates
-    load(paste0(outputdir, "pscovariates.Rdata"))
+    tempy <- tempfile(fileext = '.Rdata')
+    drv$download_file(src = "/HUD HEARS Study/wage_analysis/output/final_report/pscovariates.Rdata", 
+                      dest = tempy, 
+                      overwrite = TRUE)
+    load(tempy)
     pscovariates <- pscovariates$pscovariates
     if(length(pscovariates) > 1){ 
       pscovariates <- paste(pscovariates, collapse = " + ")
@@ -305,10 +327,10 @@
           labs(
             x = "", 
             y = "Predicted quarterly wages") +
-          scale_x_continuous(labels=c("1 year prior", "Exit", "1 year post"), breaks=c(-4, 0, 4))
+          scale_x_continuous(labels=c("1 Year Before", "Exit", "1 Year Post"), breaks=c(-4, 0, 4))
         
         plotappdx1 <- formatplots(plotappdx1) + 
-          scale_color_manual("Exit type", 
+          scale_color_manual("Exit Type", 
                              values=c('Positive' = '#2c7fb8', 
                                       'Counterfactual' = '#e41a1c', 
                                       'Negative' = '#2ca25f')) + 
@@ -405,10 +427,10 @@
         labs(
            x = "", 
            y = "Predicted quarterly wages") +
-        scale_x_continuous(labels=c("1 year prior", "Exit"), breaks=c(-4, 0)) 
+        scale_x_continuous(labels=c("1 Year Before", "Exit"), breaks=c(-4, 0)) 
       
       plotappdx2 <- formatplots(plotappdx2) + 
-        scale_color_manual("Exit type", 
+        scale_color_manual("Exit Type", 
                            values=c('Positive' = '#2c7fb8', 
                                     'Counterfactual' = '#e41a1c', 
                                     'Negative' = '#2ca25f')) +
@@ -488,10 +510,10 @@
           # caption = caption.text, 
           x = "", 
           y = "Predicted quarterly wages") +
-        scale_x_continuous(labels=c("1 year prior", "Exit", "1 year post"), breaks=c(-1, 0, 1))
+        scale_x_continuous(labels=c("1 Year Before", "Exit", "1 Year Post"), breaks=c(-1, 0, 1))
       
       plotappdx4 <- formatplots(plotappdx4) + 
-        scale_color_manual("Exit type", 
+        scale_color_manual("Exit Type", 
                            values=c('Positive' = '#2c7fb8', 
                                     'Counterfactual' = '#e41a1c', 
                                     'Negative' = '#2ca25f')) +
@@ -524,10 +546,10 @@
              caption = caption.text, 
              x = "", 
              y = "Predicted quarterly wages") +
-        scale_x_continuous(labels=c("1 year prior", "Exit", "1 year post"), breaks=c(-1, 0, 1))
+        scale_x_continuous(labels=c("1 Year Before", "Exit", "1 Year Post"), breaks=c(-1, 0, 1))
       
       plot.resid.4 <- formatplots(plot.resid.4) + 
-        scale_color_manual("Exit type", 
+        scale_color_manual("Exit Type", 
                            values=c('Positive' = '#2c7fb8', 
                                     'Negative' = '#2ca25f')) 
       message("No pattern with residuals, so evidence of autocorrelation, and no need for including lag dependent variables")
@@ -600,27 +622,15 @@
     # Plot data four quarters before and after exit ----
       # Main (predicted wages) ----
       plot1 <- ggplot() +
-        # commented out errorbars because don't trust standard error calculation from prediction_summary()
-        geom_line(data = mod1.preds[exit_category != "Counterfactual"], aes(x = time, y = wage, color = exit_category), size = 1) +
-        geom_line(data = mod1.preds[exit_category == "Counterfactual"], aes(x = time, y = wage, color = exit_category), linetype="dashed", size = 1) +
-        geom_point(data = mod1.preds[exit_category != "Counterfactual"], 
-                   aes(x = time, y = wage, color = exit_category), 
-                   size = 2.5) +
-        # geom_errorbar(data = mod1.preds[exit_category != "Counterfactual"], 
-        #               aes(x = time, ymax = upper, ymin = lower, color = exit_category), 
-        #               size = 1, 
-        #               width = .05) + 
+        geom_point(data = mod1.preds[], aes(x = time, y = wage, color = exit_category, shape = exit_category), size = 2.5) +
+        geom_line(data = mod1.preds[], aes(x = time, y = wage, color = exit_category), size = 1) +
         labs(
           x = "", 
-          y = "Predicted quarterly wages") +
-        scale_x_continuous(labels=c("1 year prior", "Exit", "1 year post"), breaks=c(-4, 0, 4))
+          y = "Predicted Quarterly Wages") +
+        scale_x_continuous(labels=c("1 Year Before", "Exit", "1 Year Post"), breaks=c(-4, 0, 4))
       
-      plot1 <- formatplots(plot1) + 
-        scale_color_manual("Exit type", 
-                           values=c('Positive' = '#2c7fb8', 
-                                    'Counterfactual' = '#e41a1c', 
-                                    'Negative' = '#2ca25f')) 
-      
+      plot1 <- formatplots(plot1)
+
       # dev.new(width = 6,  height = 4, unit = "in", noRStudioGD = TRUE)
       plot(plot1)
       
@@ -633,10 +643,10 @@
         labs(
           x = "", 
           y = "Predicted increase in quarterly wages") +
-        scale_x_continuous(labels=c("1 year prior", "Exit", "1 year post"), breaks=c(-4, 0, 4))
+        scale_x_continuous(labels=c("1 Year Before", "Exit", "1 Year Post"), breaks=c(-4, 0, 4))
       
       plot1.change.dollars <- formatplots(plot1.change.dollars) + 
-        scale_color_manual("Exit type", 
+        scale_color_manual("Exit Type", 
                            values=c('Positive' = '#2c7fb8', 
                                     'Negative' = '#2ca25f')) +
         coord_cartesian(ylim = c(0, 500)) 
@@ -654,10 +664,10 @@
         labs(
           x = "", 
           y = "Predicted increase in quarterly wages") +
-        scale_x_continuous(labels=c("1 year prior", "Exit", "1 year post"), breaks=c(-4, 0, 4))
+        scale_x_continuous(labels=c("1 Year Before", "Exit", "1 Year Post"), breaks=c(-4, 0, 4))
       
       plot1.change.percent <- formatplots(plot1.change.percent) + 
-        scale_color_manual("Exit type", 
+        scale_color_manual("Exit Type", 
                            values=c('Positive' = '#2c7fb8', 
                                     'Negative' = '#2ca25f')) +
         scale_y_continuous(labels=scales::percent_format()) + 
@@ -686,30 +696,25 @@
       mod1.resid <- copy(dt1)[, fitted := fitted(mod1)][time %in% -4:4]
       mod1.resid[, residual := wage - fitted]
       mod1.resid[, time := as.numeric(as.character(time))]
-      mod1.resid[exit_category == "Negative", time := time - .05]
-      mod1.resid[exit_category == "Positive", time := time + .05]
+      mod1.resid[exit_category == "Negative", time := time + .12]
+      mod1.resid[exit_category == "Positive", time := time - .12]
       set.seed(98104) # because jitter is 'random'
       
       plot.resid.mod1 <- ggplot() +
         geom_point(data = mod1.resid[exit_category != "Counterfactual"], 
-                   aes(x = time, y = residual, color = exit_category), 
+                   aes(x = time, y = residual, color = exit_category, shape = exit_category), 
                    size = 2.5, 
-                   position=position_jitterdodge(dodge.width=0.65, jitter.height=0, jitter.width=0.15), alpha=0.7) +
+                   position=position_jitterdodge(dodge.width=0.65, jitter.height=0, jitter.width=0.25), alpha=0.7) +
         labs(
-          # title = paste0("Quarterly wage history by exit type and time"), 
-          # subtitle = "Model 5: residuals", 
-          # caption = caption.text, 
           x = "", 
-          y = "Wage residuals") +
-        scale_x_continuous(labels=c("1 year prior", "Exit", "1 year post"), breaks=c(-4, 0, 4))
+          y = "Wage Residuals") +
+        scale_x_continuous(labels=c("1 Year Before", "Exit", "1 Year Post"), breaks=c(-4, 0, 4))
       
-      plot.resid.mod1 <- formatplots(plot.resid.mod1) + 
-        scale_color_manual("Exit type", 
-                           values=c('Positive' = '#2c7fb8', 
-                                    'Negative' = '#2ca25f')) 
+      plot.resid.mod1 <- formatplots(plot.resid.mod1) 
+      plot(plot.resid.mod1)
+      
       message("No pattern with residuals, so evidence of autocorrelation, and no need for including lag dependent variables")
-      plot.resid.mod1
-      
+
     # Tidy predictions for saving ----
       roundvars <- c("wage", "lower", "upper", "se", "change.dollars")
       mod1.preds[, (roundvars) := rads::round2(.SD, 0), .SDcols = roundvars]
@@ -738,10 +743,10 @@
       setorder(mod1.preds, `Exit Type`, Quarter)
       
     # Save plots ----
-      saveplots(plot.object = plot1, plot.name = 'figure_2_pre_post_by_qtr')      
+      saveplots(plot.object = plot1, plot.name = 'figure_9-2_pre_post_by_qtr')      
       saveplots(plot.object = plot1.change.percent, plot.name = 'figure_2_pre_post_by_qtr_change_percent')      
       saveplots(plot.object = plot1.change.dollars, plot.name = 'figure_2_pre_post_by_qtr_change_dollar')      
-      saveplots(plot.object = plot.resid.mod1, plot.name = 'appendix_figure_3_residuals')      
+      saveplots(plot.object = plot.resid.mod1, plot.name = 'figure_I-1_residuals')      
       saveplots(plot.object = OvE.mod1, plot.name = 'appendix_figure_3_trends_Obs_v_Exp')      
 
 # Model 2: Secondary analysis with %AMI as outcome ----
@@ -810,23 +815,15 @@
         
     # Plot data four quarters before and after exit ----
       plot2 <- ggplot() +
-        # commented out errorbars because don't trust standard error calculation from prediction_summary()
-        geom_line(data = mod2.preds[exit_category != "Counterfactual"], aes(x = time, y = percent_ami, color = exit_category), size = 1) +
-        geom_line(data = mod2.preds[exit_category == "Counterfactual"], aes(x = time, y = percent_ami, color = exit_category), linetype="dashed", size = 1) +
-        geom_point(data = mod2.preds[exit_category != "Counterfactual"], 
-                   aes(x = time, y = percent_ami, color = exit_category), 
-                   size = 2.5) +
+          geom_point(data = mod2.preds[], aes(x = time, y = percent_ami, color = exit_category, shape = exit_category), size = 2.5) +
+          geom_line(data = mod2.preds[], aes(x = time, y = percent_ami, color = exit_category), size = 1) +
         labs(
           x = "", 
-          y = "Predicted percent AMI") 
+          y = "Predicted Percentage of AMI") +
+          scale_x_continuous(labels=c("1 Year Before", "Exit", "1 Year Post"), breaks=c(-4, 0, 4))
       
       plot2 <- formatplots(plot2) + 
-        scale_color_manual("Exit type", 
-                           values=c('Positive' = '#2c7fb8', 
-                                    'Counterfactual' = '#e41a1c', 
-                                    'Negative' = '#2ca25f')) +
-        scale_y_continuous(labels=scales::label_percent(scale = 1)) +
-        scale_x_continuous(labels=c("1 year prior", "Exit", "1 year post"), breaks=c(-4, 0, 4))
+        scale_y_continuous(labels=scales::label_percent(scale = 1)) 
       
       # dev.new(width = 6,  height = 4, unit = "in", noRStudioGD = TRUE)
       plot(plot2)
@@ -865,10 +862,10 @@
           # caption = caption.text, 
           x = "", 
           y = "Percent AMI residuals") +
-        scale_x_continuous(labels=c("1 year prior", "Exit", "1 year post"), breaks=c(-4, 0, 4))
+        scale_x_continuous(labels=c("1 Year Before", "Exit", "1 Year Post"), breaks=c(-4, 0, 4))
       
       plot.resid.mod2 <- formatplots(plot.resid.mod2) + 
-        scale_color_manual("Exit type", 
+        scale_color_manual("Exit Type", 
                            values=c('Positive' = '#2c7fb8', 
                                     'Negative' = '#2ca25f')) +
         scale_y_continuous(labels=scales::label_percent(scale = 1))
@@ -897,7 +894,7 @@
       setorder(mod2.preds, `Exit Type`, Quarter)
       
     # Save plots ----
-      saveplots(plot.object = plot2, plot.name = 'figure_3_pre_post_by_qtr')      
+      saveplots(plot.object = plot2, plot.name = 'figure_I-2_AMI_pre_post_by_qtr')      
       saveplots(plot.object = plot.resid.mod2, plot.name = 'appendix_figure_5_residuals')      
       saveplots(plot.object = OvE.mod2, plot.name = 'appendix_figure_6_trends_Obs_v_Exp')      
       
@@ -922,8 +919,12 @@
       writeDataTable(wb, sheet = 'appendix_Table_6_preds', mod2.preds, 
                      rowNames = F, colNames = T)   
       
-      saveWorkbook(wb, file = paste0(outputdir, "Tables_regresssion.xlsx"), 
-                   overwrite = T)
+      tempy <- tempfile(fileext = ".xlsx")
       
+      saveWorkbook(wb, file = tempy, overwrite = T)
+      
+      drv$upload_file(src = tempy, 
+                      dest = paste0("/HUD HEARS Study/wage_analysis/output/final_report/Tables_regresssion.xlsx")) 
+
 
 # The end ----

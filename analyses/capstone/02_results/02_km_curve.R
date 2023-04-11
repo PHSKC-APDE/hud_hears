@@ -49,6 +49,8 @@ km_exit_type <- ggsurvplot(fit_exit_type, data=tth_data,
                           xlab = "Time from Public Housing Exit (Days)",
                           ylab = "Probability Remaining Housed",
                           title = "Kaplan-Meier Estimates of Time from Exit to Homelessness",
+                          linetype = "strata",
+                          palette = "Dark2",
                           break.time.by = 50,
                           xlim = c(0,max(tth_data$tt_homeless)),
                           ylim = c(0.7,1),
@@ -57,7 +59,9 @@ km_exit_type <- ggsurvplot(fit_exit_type, data=tth_data,
                           legend.title = "Exit Type",
                           legend.labs = na.omit(unique(tth_data$exit_category)),
                           risk.table = TRUE, # risk table added
+                          risk.table.title = "Number at Risk",
                           cumevents = TRUE, # cumulative events table added
+                          cumevents.title = "Cumulative Number of Events",
                           tables.col = "strata",
                           #tables.height=0.3,
                           censor.size=4,
@@ -69,8 +73,12 @@ km_exit_type$table <- km_exit_type$table +
 km_exit_type$cumevents <- km_exit_type$cumevents + 
   labs(x = "")
 
+# Add commas to numbers
+km_exit_type$table$layers[[1]]$data$llabels <- scales::comma(km_exit_type$table$layers[[1]]$data$llabels)
+km_exit_type$cumevents$layers[[1]]$data$cum.n.event <- scales::comma(km_exit_type$cumevents$layers[[1]]$data$cum.n.event)
+
 # plot object
-png(file = paste0(output_path, "KM_curve.png"), width = 600, height = 800)
+png(file = paste0(output_path, "KM_curve_report.png"), width = 600, height = 800)
 km_exit_type
 dev.off()
 

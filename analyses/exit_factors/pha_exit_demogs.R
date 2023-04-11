@@ -245,7 +245,7 @@ consort_maker <- function(df = consort_df, mcaid_prior = F,
   a2 <- glue("a2 [label = 'Exits in study period: {format(exits_period, big.mark = ',', trim = T)}'];")
   a3 <- glue("a3 [label = 'True exits: {format(exits_true, big.mark = ',', trim = T)}'];")
   a4 <- glue("a4 [label = 'One exit per person: {format(exits_per_person, big.mark = ',', trim = T)}'];")
-  a5 <- glue("a5 [label = 'Non-death exits: {format(exits_death, big.mark = ',', trim = T)}'];")
+  a5 <- glue("a5 [label = 'Nondeath exits: {format(exits_death, big.mark = ',', trim = T)}'];")
   a6 <- glue("a6 [label = 'Complete demographics (primary analysis): \n{format(exits_demogs, big.mark = ',', trim = T)}'];")
   if (mcaid_prior == T | mcaid_after == T) {
     a7 <- glue("a7 [label = 'Non-dual, full Medicaid coverage (secondary analysis): \n{format(exits_mcaid, big.mark = ',', trim = T)}'];") 
@@ -342,7 +342,7 @@ consort_maker <- function(df = consort_df, mcaid_prior = F,
     {a1} {a2} {a3} {a4} {a5} {a6} {a7}
     
     # set up side nodes
-    node [shape=box, fontsize = 10, fontname = 'Helvetica', width = 2];
+    node [shape=box, fontsize = 12, fontname = 'Helvetica', width = 2];
     {b1} {b2} {b3} {b4} {b5} {b6}
     
     # create filler nodes without box around 
@@ -401,7 +401,7 @@ mcaid_graph %>% DiagrammeRsvg::export_svg() %>% charToRaw() %>% rsvg::rsvg() %>%
 mcaid_prior_graph %>% DiagrammeRsvg::export_svg() %>% charToRaw() %>% rsvg::rsvg() %>%
   png::writePNG(file.path(here::here(), "analyses/consort_diag_mcaid_prior.png"))
 nonmcaid_graph %>% DiagrammeRsvg::export_svg() %>% charToRaw() %>% rsvg::rsvg() %>%
-  png::writePNG(file.path(here::here(), "analyses/consort_diag_nonmcaid.png"))
+  png::writePNG(file.path(here::here(), "analyses/consort_diag_nonmcaid_report.png"))
 
 mcaid_graph_hh %>% DiagrammeRsvg::export_svg() %>% charToRaw() %>% rsvg::rsvg() %>%
   png::writePNG(file.path(here::here(), "analyses/consort_diag_mcaid_hh.png"))
@@ -775,14 +775,15 @@ exit_year_bar <- any_exit %>%
   scale_fill_viridis(discrete = T) +
   scale_y_continuous(labels = scales::percent) +
   theme_ipsum(axis_text_size = 10, grid = F, base_family = "Calibri") +
-  theme(legend.position = "bottom") +
   labs(x = "Year",
-       y = "Percent of people",
-       caption = "NB. KCHA exit data is incomplete prior to October 2015.",
-       fill = "Exit vs. not") +
+       y = "Percentage of Housing Assistance Recipients",
+       #caption = "NB. KCHA exit data is incomplete prior to October 2015.",
+       fill = "") +
+  theme(legend.position = "bottom",
+        axis.title.y = element_text(hjust = 0.5, angle = 90)) +
   facet_wrap(~ agency, nrow = 2)
 
-ggsave(filename = file.path(here::here(), "analyses/exit_factors/exits_by_year_ind.png"),
+ggsave(filename = file.path(here::here(), "analyses/exit_factors/exits_by_year_ind_report.png"),
        device = "png", plot = exit_year_bar,
        width = 6.5, height = 6, units = "in")
 
@@ -884,15 +885,16 @@ exit_type_bar <- exit_year %>%
   scale_fill_viridis(discrete = T) +
   scale_y_continuous(labels = scales::percent) +
   theme_ipsum(axis_text_size = 10, grid = F, base_family = "Calibri") +
-  theme(legend.position = "bottom") +
+  theme(legend.position = "bottom",
+        axis.title.y = element_text(hjust = 0.5, angle = 90)) +
   labs(x = "Year",
-       y = "Percent of exits",
+       y = "Percent of Exits",
        #title = "Proportion of exit types by year",
-       caption = "NB. KCHA exit data is incomplete prior to October 2015",
-       fill = "Exit category") +
+       #caption = "NB. KCHA exit data is incomplete prior to October 2015",
+       fill = "Exit Category") +
   facet_wrap(~agency, nrow = 2)
 
-ggsave(filename = file.path(here::here(), "analyses/exit_factors/exits_by_type_ind.png"),
+ggsave(filename = file.path(here::here(), "analyses/exit_factors/exits_by_type_ind_report.png"),
        device = "png", plot = exit_type_bar,
        width = 7, height = 9, units = "in")
 
@@ -902,22 +904,23 @@ exit_type_no_dth_bar <- exit_year_nodeath %>%
   ggplot(aes(fill = exit_category, y = n_supp, x = exit_year)) +
   geom_bar(position = "fill", stat="identity", colour = "black") +
   geom_label(position = position_fill(vjust = 0.5), size = 2.5, show.legend = F,
-            aes(group = exit_category, label = paste0(pct_supp, "%"),
+            aes(group = exit_category, label = paste0(formatC(pct_supp, format = "f", digits = 1), "%"),
                 color = exit_category)) +
   scale_color_manual(values = label_col) +
   geom_text(aes(x = exit_year, y = 1.02, label = year_tot_label), vjust = 0, size = 3) +
   scale_fill_viridis(discrete = T) +
   scale_y_continuous(labels = scales::percent) +
   theme_ipsum(axis_text_size = 10, grid = F, base_family = "Calibri") +
-  theme(legend.position = "bottom") +
+  theme(legend.position = "bottom",
+        axis.title.y = element_text(hjust = 0.5, angle = 90)) +
   labs(x = "Year",
-       y = "Percent of exits",
+       y = "Percent of Exits",
        #title = "Proportion of exit types by year (excluding deaths)",
-       caption = "NB. KCHA exit data is incomplete prior to October 2015",
-       fill = "Exit category") +
+       #caption = "NB. KCHA exit data is incomplete prior to October 2015",
+       fill = "Exit Category") +
   facet_wrap(~agency, nrow = 2)
 
-ggsave(filename = file.path(here::here(), "analyses/exit_factors/exits_by_type_no_dth_ind.png"),
+ggsave(filename = file.path(here::here(), "analyses/exit_factors/exits_by_type_no_dth_ind_report.png"),
        device = "png", plot = exit_type_no_dth_bar,
        width = 7, height = 9, units = "in")
 

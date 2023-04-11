@@ -533,15 +533,15 @@
       myplot <- plot(consort.complete)
       
     # save consort diagram ----
-      ggplot2::ggsave(paste0(outputdir, "/figure_0_consort_diagram.pdf"),
+      ggplot2::ggsave(paste0(outputdir, "/appendix_fig_1_flow_diagram.pdf"),
              plot = consort.complete, 
              dpi=600, 
              width = 6.5, 
              height = 7.2, 
              units = "in") 
-      ggplot2::ggsave(paste0(outputdir, "/figure_0_consort_diagram.tiff"),
+      ggplot2::ggsave(paste0(outputdir, "/appendix_fig_1_flow_diagram.tiff"),
              plot = consort.complete, 
-             dpi=1200, 
+             dpi=600, 
              width = 6.5, 
              height = 7.2, 
              units = "in", 

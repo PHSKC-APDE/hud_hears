@@ -9,15 +9,16 @@
 # Set up ----
     rm(list=ls())
     options(scipen = 999)
-    pacman::p_load(lubridate, rads, data.table, DBI, odbc, ggplot2, lme4, margins)
+    pacman::p_load(lubridate, rads, data.table, DBI, odbc, ggplot2, lme4, margins, Microsoft365R)
     # library(lmerTest)  # commented out because want to be sure lmer function is called from lme4 by default
 
-    # output folder
-    outputdir <- "C:/Users/dcolombara/King County/DPH Health And Housing - Documents/HUD HEARS Study/wage_analysis/output/final_report/"
-    
     # easy SQL connections
     devtools::source_url("https://raw.githubusercontent.com/PHSKC-APDE/apde/main/R/create_db_connection.R") 
     
+    # SharePoint connection
+    site <- get_team("DPH Health And Housing")
+    drv <- site$get_drive("Documents")
+
 # Create functions ----
     # std.error() ... standard error function from https://github.com/plotrix/plotrix/blob/master/R/std.error.R ----
       std.error<-function(x,na.rm) {
@@ -42,18 +43,26 @@
     
     # saveplots() ... create function to save plots with proper dimensions ----
       saveplots <- function(plot.object = NULL, plot.name = NULL){
-        ggsave(paste0(outputdir, '/', plot.name, ".pdf"),
+        
+        tempy <- tempfile(fileext = ".pdf")
+        ggsave(tempy,
+               plot = plot.object, 
+               dpi=600, 
+               width = 6, 
+               height = 4, 
+               units = "in")
+        drv$upload_file(src = tempy, 
+                        dest = paste0("/HUD HEARS Study/wage_analysis/output/final_report/", plot.name, ".pdf"))   
+        
+        tempy <- tempfile(fileext = ".png")
+        ggsave(tempy,
                plot = plot.object, 
                dpi=600, 
                width = 6, 
                height = 4, 
                units = "in") 
-        ggsave(paste0(outputdir, '/', plot.name, ".png"),
-               plot = plot.object, 
-               dpi=600, 
-               width = 6, 
-               height = 4, 
-               units = "in") 
+        drv$upload_file(src = tempy, 
+                        dest = paste0("/HUD HEARS Study/wage_analysis/output/final_report/", plot.name, ".png"))   
       }
 
 # Load data ----
@@ -120,7 +129,7 @@
       
       set.seed(98104) # because jitter is 'random'
       plot1 <- ggplot() +
-        geom_point(data = dt1[!is.na(time)],  aes(x = time, y = wage, color = exit_category), 
+        geom_point(data = dt1[!is.na(time)],  aes(x = time, y = wage, color = exit_category, shape = exit_category), 
                    position=position_jitterdodge(dodge.width=0.65, jitter.height=0, jitter.width=0.15), alpha=0.7) +
         geom_point(data = dt1.stats[exit_category == 'Positive'],  
                    aes(x = time, y = mean), 
@@ -128,22 +137,24 @@
         geom_errorbar(data = dt1.stats[exit_category == 'Positive'],  
                       stat = 'identity', 
                       aes(x = time, ymax = upper, ymin = lower), 
-                      size = 0.5, 
-                      width = .03) +      
+                      linewidth = 0.5, 
+                      width = .0) +      
         geom_point(data = dt1.stats[exit_category == 'Negative'],  
                    aes(x = time, y = mean), 
                    size = 1) +
         geom_errorbar(data = dt1.stats[exit_category == 'Negative'],  
                       stat = 'identity', aes(x = time, ymax = upper, ymin = lower), 
-                      size = 0.5, 
-                      width = .03) +
+                      linewidth = 0.5, 
+                      width = .0) +
         labs(x = "", 
              y = "", 
-             caption = "The black points and error bars are the mean and 95% confidence interval, respectively.") +
-        scale_color_manual("Exit type", 
-                           values=c('Positive' = '#2c7fb8', 'Negative' = '#2ca25f')) +
+             # caption = "The black points and error bars are the mean and 95% confidence interval, respectively."
+             ) +
+        scale_color_manual("Exit Type", 
+                           values=c('Positive' = '#2c7fb8', 'Negative' = '#E60000')) +
+        scale_shape_manual("Exit Type", values = c('Positive' = 15, 'Negative' = 16)) + 
         scale_y_continuous(labels=scales::dollar_format())+
-        scale_x_continuous(labels=c("1 year prior", "Exit", "1 year post"), breaks=c(-1, 0, 1)) +
+        scale_x_continuous(labels=c("1 Year Before", "Exit", "1 Year Post"), breaks=c(-1, 0, 1)) +
         theme(panel.grid.major = element_line(color = "white"), 
               panel.background = element_rect(fill = "white"), 
               panel.border = element_rect(colour = "black", fill=NA, size=.5),  
@@ -202,7 +213,7 @@
       
 # Save plots ----      
   # Save quarterly wages pre-post ----    
-      saveplots(plot.object = plot1, plot.name = 'figure_1_quarterly_wages_by_exit_type')
+      saveplots(plot.object = plot1, plot.name = '/figure_9-1_observed_quarterly_wages_by_exit_type')
       
   # Save quarterly wages secular trend ----
       saveplots(plot.object = plot2, plot.name = 'figure_0_secular_trend_wages_quarterly')

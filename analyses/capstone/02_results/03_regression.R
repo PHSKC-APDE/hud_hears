@@ -1,4 +1,4 @@
-## Script name: 03_regression.R
+## Script name: 03_regression.R ----
 ##
 ## Purpose of script: 
 ##    Step 1) Perform primary analysis, which involves: 
@@ -24,7 +24,7 @@
 
 # BRING IN PACKAGES ----
 if (!require("pacman")) {install.packages("pacman")}
-pacman::p_load(tidyverse, multgee, survival, data.table)
+pacman::p_load(tidyverse, multgee, survival, data.table, flexsurv, frailtyHL)
 
 # set working directory (for output of plots- to utilize more easily)
 capstone_path <- file.path(here::here(), "analyses/capstone/02_results")
@@ -78,12 +78,52 @@ tth_data <- tth_data %>%
 
 tth_data$exit_category <- relevel(factor(tth_data$exit_category), ref = "Neutral")
 
+# first, the generic model that works, but that the reviewers did not love
 tth_mod <- coxph(formula = Surv(tt_homeless, event) ~ exit_category,
                  data = tth_data,
                  weights = iptw,
                  cluster = hh_id_kc_pha)
 
-summary(tth_mod)
+## Alternate specifications
+  tth_data[tth_data$tt_homeless == 0]$tt_homeless <- 1 # change 0 > 1 for lognormal
+  
+  tth_data.simple <- tth_data[, c("tt_homeless", "event", "exit_category", "iptw")]
+  
+  AFT.LogNormal <- flexsurvreg(formula = Surv(tt_homeless, event) ~ exit_category,
+                               data = tth_data.simple,
+                               weights = iptw,
+                               dist = "lnorm")
+  AFT.GenGamma <- flexsurvreg(formula = Surv(tt_homeless, event) ~ exit_category,
+                              data = tth_data.simple,
+                              weights = iptw,
+                              dist = "gengamma")
+  AFT.Gamma <- flexsurvreg(formula = Surv(tt_homeless, event) ~ exit_category,
+                           data = tth_data.simple,
+                           weights = iptw,
+                           dist = "gamma")
+  
+  save(list = c('AFT.Gamma', 'AFT.GenGamma', 'AFT.LogNormal'), file = paste0("C:/temp/tth_4_Niki_", gsub("-", "", Sys.Date()), ".rdata"))
+
+## frailty (random effects) model
+  data_subset <- tth_data[hh_id_kc_pha %in% unique(tth_data$hh_id_kc_pha)[1:1000]]
+  data_surv <- as.data.frame(data_subset)
+  weights <- as.vector(data_subset$iptw)
+  clusters <- as.vector(data_subset$hh_id_kc_pha)
+  
+  jm.lognormal <- jointmodeling(Model = Surv(tt_homeless, event) ~ exit_category,
+                                RespDist = "AFT", Link = "log",
+                                LinPred = Surv(tt_homeless, event) ~ exit_category + (1|clusters),
+                                RandDist = "Normal",
+                                Offset = NULL)
+  lognormal.fit <- mlmfit(jm1 = jm.lognormal, data = data_surv, weights = weights)
+  
+  jm.gengamma <- jointmodeling(Model = Surv(tt_homeless, event) ~ exit_category,
+                               RespDist = "AFT", Link = "log",
+                               LinPred = Surv(tt_homeless, event) ~ exit_category + (1|clusters),
+                               RandDist = "Gamma",
+                               Offset = NULL)
+  gengamma.fit <- mlmfit(jm1 = jm.gengamma, data = data_surv, weights = weights)
+  
 
 
 #--------------------------------------------------

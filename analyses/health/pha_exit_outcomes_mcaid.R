@@ -647,9 +647,9 @@ model_outcomes <- bind_rows(broom::tidy(ed_adj_mult, conf.int = TRUE, exponentia
                             broom::tidy(hosp_adj_mult, conf.int = TRUE, exponentiate = T) %>%
                               mutate(outcome = "Hospitalizations"),
                             broom::tidy(wc_strat_wc_adj, conf.int = TRUE, exponentiate = T) %>%
-                              mutate(outcome = "Well-child checks \n(with previous well-child checks)"),
+                              mutate(outcome = "Well-child checkups \n(with previous well-child checkups)"),
                             broom::tidy(wc_strat_no_wc_adj, conf.int = TRUE, exponentiate = T) %>% 
-                              mutate(outcome = "Well-child checks \n(without previous well-child checks)")
+                              mutate(outcome = "Well-child checkups \n(without previous well-child checkups)")
                             )
 
 model_outcomes_graph <- model_outcomes %>%
@@ -771,9 +771,9 @@ model_outcomes_any <- bind_rows(broom::tidy(any_ed_adj_mult, conf.int = TRUE, ex
                             broom::tidy(any_hosp_adj_mult, conf.int = TRUE, exponentiate = T) %>%
                               mutate(outcome = "Hospitalizations"),
                             broom::tidy(any_wc_strat_wc_adj, conf.int = TRUE, exponentiate = T) %>%
-                              mutate(outcome = "Well-child checks \n(with previous well-child checks)"),
+                              mutate(outcome = "Well-child checkups \n(with previous well-child checkups)"),
                             broom::tidy(any_wc_strat_no_wc_adj, conf.int = TRUE, exponentiate = T) %>%
-                              mutate(outcome = "Well-child checks \n(without previous well-child checks)"))
+                              mutate(outcome = "Well-child checkups \n(without previous well-child checkups)"))
 
 model_outcomes_any_graph <- model_outcomes_any %>%
   filter(str_detect(term, "exit_")) %>%
@@ -799,7 +799,7 @@ render(input = file.path(here::here(), "analyses/health/pha_exit_outcomes_mcaid.
 ## Exit type ----
 ggplot(data = model_outcomes_graph) +
   # Point estimates
-  geom_point(aes(x = estimate, y = height, color = outcome), size = 3) +
+  geom_point(aes(x = estimate, y = height, shape = outcome, color = outcome), size = 3) +
   # Add labels under point estimates
   #geom_text_repel(aes(label = estimate)) +
   geom_text(aes(x = estimate, y = height, label = round(estimate, 2)),
@@ -815,10 +815,10 @@ ggplot(data = model_outcomes_graph) +
   
   # Other settings
   scale_y_continuous(breaks = c(0, 0.95, 1.45, 1.6),
-                     labels = c("", "Neutral exit\n(vs. negative)", 
-                                "Positive exit\n(vs. negative)", "")) +
+                     labels = c("", "Neutral Exit\n(vs. Negative)", 
+                                "Positive Exit\n(vs. Negative)", "")) +
   scale_x_continuous(breaks = c(0, 0.5, 1, 2, 3)) +
-  labs(x = "Odds ratio", color = "Outcome") +
+  labs(x = "Adjusted Odds Ratio", color = "Outcome", shape = "Outcome") +
   scale_color_brewer(type = "qual", palette = "Dark2") + 
   theme_bw() +
   theme(axis.title.y = element_blank(),
@@ -828,7 +828,7 @@ ggplot(data = model_outcomes_graph) +
         axis.line = element_line(),
         legend.text = element_text(margin = margin(t = 4, b = 4)))
 
-ggsave(filename = "health_outcomes_exit_type_plot.png",
+ggsave(filename = "health_outcomes_exit_type_plot_report.png",
        path = file.path(here::here(), "analyses/health"),
        device = "png", width = 20, height = 12, units = "cm"
 )
@@ -837,7 +837,7 @@ ggsave(filename = "health_outcomes_exit_type_plot.png",
 ## Exit vs. remain ----
 ggplot(data = model_outcomes_any_graph) +
   # Point estimates
-  geom_point(aes(x = estimate, y = height, color = outcome), size = 3) +
+  geom_point(aes(x = estimate, y = height, shape = outcome, color = outcome), size = 3) +
   # Add labels under point estimates
   #geom_text_repel(aes(label = estimate)) +
   geom_text(aes(x = estimate, y = height, label = round(estimate, 2)),
@@ -854,11 +854,11 @@ ggplot(data = model_outcomes_any_graph) +
   # Other settings
   scale_y_continuous(breaks = c(0, 0.95, 1.45, 1.95, 2.1),
                      labels = c("", 
-                                "Negative exit\n(vs. remaining)", 
-                                "Neutral exit\n(vs. remaining)", 
-                                "Positive exit\n(vs. remaining)", "")) +
+                                "Negative Exit\n(vs. Remaining)", 
+                                "Neutral Exit\n(vs. Remaining)", 
+                                "Positive Exit\n(vs. Remaining)", "")) +
   scale_x_continuous(breaks = c(0, 0.4, 0.8, 1, 1.2, 1.6)) +
-  labs(x = "Odds ratio", color = "Outcome") +
+  labs(x = "Adjusted Odds Ratio", color = "Outcome", shape = "Outcome") +
   scale_color_brewer(type = "qual", palette = "Dark2") + 
   theme_bw() +
   theme(axis.title.y = element_blank(),
@@ -868,7 +868,7 @@ ggplot(data = model_outcomes_any_graph) +
         axis.line = element_line(),
         legend.text = element_text(margin = margin(t = 4, b = 4)))
 
-ggsave(filename = "health_outcomes_remain_plot.png",
+ggsave(filename = "health_outcomes_remain_plot_report.png",
        path = file.path(here::here(), "analyses/health"),
        device = "png", width = 20, height = 12, units = "cm"
 )

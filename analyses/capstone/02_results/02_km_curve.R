@@ -152,3 +152,25 @@ png(file = paste0(output_path, "KM_curve_pha_facet.png"), width = 600, height = 
 km_exit_type_pha_facet
 dev.off()
 
+
+# 4) KM curves by exit type, faceted by exit type (separate plots) ----
+km_exit_type_pha_facet <- ggsurvplot(fit_exit_type, data = tth_data,
+                                     facet.by = "prog_type_use",
+                                     short.panel.labs = TRUE,
+                                     xlab = "Time from Public Housing Exit (Days)",
+                                     ylab = "Probability Remaining Housed",
+                                     title = "Kaplan-Meier Estimates of Time from Exit to Homelessness",
+                                     break.time.by = 50,
+                                     xlim = c(0,max(tth_data$tt_homeless)),
+                                     ylim = c(0.7,1),
+                                     break.y.by= 0.05,
+                                     conf.int = TRUE,
+                                     legend.title = "Exit Type",
+                                     legend.labs = na.omit(unique(tth_data$exit_category)),
+                                     censor.size = 4,
+                                     gg_theme = theme_bw())
+
+png(file = paste0(output_path, "KM_curve_progam_facet.png"), width = 1000, height = 500)
+km_exit_type_pha_facet
+dev.off()
+

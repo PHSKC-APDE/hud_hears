@@ -627,6 +627,20 @@ exit_timevar_all %>%
   head(10)
   
 
+# Top 10 exits for housing type
+exit_timevar %>%
+  filter(!is.na(act_date)) %>%
+  filter((agency == "KCHA" & act_date >= "2016-01-01" & act_date <= "2018-12-31") | 
+           (agency == "SHA" & act_date >= "2012-01-01" & act_date <= "2018-12-31")) %>%
+  filter(true_exit == 1 & !is.na(prog_type_use)) %>%
+  distinct(hh_id_kc_pha, act_date, exit_reason_clean, exit_category, prog_type_use) %>%
+  count(prog_type_use, exit_reason_clean, exit_category) %>%
+  group_by(prog_type_use) %>%
+  slice_max(order_by = n, n = 10) %>%
+  as.data.frame()
+
+
+
 ## Look at 'Voucher Expired' exits to see if they should be included -----
 expired <- exit_timevar_all %>%
   filter(!is.na(act_date) & 

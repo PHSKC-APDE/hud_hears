@@ -131,7 +131,7 @@ exit_nodeath <- exit_control %>% filter(exit == 1)
 # Functions are found in the pha_exit_factors.R code
 ## Demogs for exit vs not ----
 # Age
-exit_any_age <- age_sum(exit_control, full_demog = T, id_type)
+exit_any_age <- age_sum(exit_control, full_demog = T, sd = T, id_type)
 
 # Gender
 exit_any_gender <- demog_pct_sum(exit_control, full_demog = T, suppress = T, level = "ind", 
@@ -142,19 +142,21 @@ exit_any_race <- demog_pct_sum(exit_control, full_demog = T, suppress = T, level
                                 demog = "race", id_type)
 
 # Time in housing (this is based on HH data)
-exit_any_hh_los <- demog_num_sum(exit_control, full_demog = T, level = "hh", demog = "los", id_type)
+exit_any_hh_los <- demog_num_sum(exit_control, full_demog = T, level = "hh", demog = "los", sd = T, id_type)
 
 # HH size and composition
-exit_any_hh_demogs <- hh_demogs_sum(exit_control, full_demog = T, level = "hh", id_type)
+exit_any_hh_demogs <- hh_demogs_sum(exit_control, full_demog = T, level = "hh", sd = T, id_type)
 
 # Program type
 exit_any_hh_prog <- demog_pct_sum(exit_control, full_demog = T, suppress = T, level = "hh", demog = "program_type", id_type)
 
 # Medicaid outcomes
 exit_any_mcaid_7_prior <- mcaid_outcomes_sum(exit_control, full_demog = T, suppress = T, 
-                                              time = "prior", cov_time = "7_mth", show_num = T, id_type)
+                                              time_examine =  "prior", time_limit = "both", 
+                                             cov_time = "7_mth", show_num = T, sd = T, id_type)
 exit_any_mcaid_7_after <- mcaid_outcomes_sum(exit_control, full_demog = T, suppress = T, 
-                                              time = "after", cov_time = "7_mth", show_num = T, id_type)
+                                             time_examine =  "after", time_limit = "both", 
+                                             cov_time = "7_mth", show_num = T, sd = T, id_type)
 
 # Combine for R markdown
 exit_any_demogs <- bind_rows(exit_any_age, exit_any_gender, exit_any_race, exit_any_hh_los,
@@ -168,7 +170,7 @@ rm(exit_any_age, exit_any_gender, exit_any_race, exit_any_hh_los,
 
 ## Demogs by exit ----
 # Age
-exit_type_age <- age_sum(exit_nodeath, full_demog = T, exit_category)
+exit_type_age <- age_sum(exit_nodeath, full_demog = T, sd = T, exit_category)
 
 # Gender
 exit_type_gender <- demog_pct_sum(exit_nodeath, full_demog = T, suppress = T, level = "ind", 
@@ -179,19 +181,21 @@ exit_type_race <- demog_pct_sum(exit_nodeath, full_demog = T, suppress = T, leve
                                 demog = "race", exit_category)
 
 # Time in housing (this is based on HH data)
-exit_type_hh_los <- demog_num_sum(exit_nodeath, full_demog = T, level = "hh", demog = "los", exit_category)
+exit_type_hh_los <- demog_num_sum(exit_nodeath, full_demog = T, level = "hh", demog = "los", sd = T, exit_category)
 
 # HH size and composition
-exit_type_hh_demogs <- hh_demogs_sum(exit_nodeath, full_demog = T, level = "hh", exit_category)
+exit_type_hh_demogs <- hh_demogs_sum(exit_nodeath, full_demog = T, level = "hh", sd = T, exit_category)
 
 # Program type
 exit_type_hh_prog <- demog_pct_sum(exit_nodeath, full_demog = T, suppress = T, level = "hh", demog = "program_type", exit_category)
 
 # Medicaid outcomes
 exit_type_mcaid_7_prior <- mcaid_outcomes_sum(exit_nodeath, full_demog = T, suppress = T, 
-                                             time = "prior", cov_time = "7_mth", show_num = T, exit_category)
+                                              time_examine =  "prior", time_limit = "both", 
+                                              cov_time = "7_mth", show_num = T, sd = T, exit_category)
 exit_type_mcaid_7_after <- mcaid_outcomes_sum(exit_nodeath, full_demog = T, suppress = T, 
-                                              time = "after", cov_time = "7_mth", show_num = T, exit_category)
+                                              time_examine =  "after", time_limit = "both", 
+                                              cov_time = "7_mth", show_num = T, sd = T, exit_category)
 
 
 # Combine for R markdown
@@ -787,6 +791,85 @@ model_outcomes_any_graph <- model_outcomes_any %>%
 
 
 
+# REGRESSION MODEL: EXIT VS NOT BY PROGRAM TYPE ----
+progs <- sort(unique(any_exit_mcaid$prog_type_use))
+
+## ED visits ----
+# Multiple categories model
+any_ed_prog_type <- map(progs, function(x) { 
+  data_use <- filter(any_exit_mcaid, prog_type_use == x)
+  geepack::geeglm(ed_any_after ~ exit_category + gender_me + race_eth_me + 
+                                     age_grp + los + hh_size + single_caregiver + 
+                                     hh_disability + ed_cnt_prior + ccw_flag, 
+                                   data = data_use, 
+                                   id = id_hh,
+                                   family = "binomial")
+  })
+
+
+## Hospitalizations visits ----
+# Multiple categories model
+any_hosp_prog_type <- map(progs, function(x) { 
+  data_use <- filter(any_exit_mcaid, prog_type_use == x)
+  geepack::geeglm(hosp_any_after ~ exit_category + gender_me + race_eth_me + 
+                    age_grp + los + hh_size + single_caregiver + 
+                    hh_disability + hosp_cnt_prior + ccw_flag, 
+                  data = data_use, 
+                  id = id_hh,
+                  family = "binomial")
+})
+
+## Well-child visits ----
+any_wc_prog_type <- map(progs, function(x) { 
+  data_use <- filter(any_exit_mcaid_wc[any_exit_mcaid_wc$wc_cnt_prior >= 1, ], prog_type_use == x)
+  geepack::geeglm(wc_any_after ~ exit_category + gender_me + race_eth_me + age_at_exit + 
+                    los + hh_size + single_caregiver + hh_disability, 
+                  data = data_use, 
+                  id = id_hh,
+                  family = "binomial")
+})
+
+
+### Stratified: no prior visits ----
+any_no_wc_prog_type <- map(progs, function(x) { 
+  data_use <- filter(any_exit_mcaid_wc[any_exit_mcaid_wc$wc_cnt_prior < 1, ], prog_type_use == x)
+  geepack::geeglm(wc_any_after ~ exit_category + gender_me + race_eth_me + age_at_exit + 
+                    los + hh_size + single_caregiver + hh_disability, 
+                  data = data_use, 
+                  id = id_hh,
+                  family = "binomial")
+})
+
+
+## Combine results ----
+# Make it easier to see all outcomes in one place
+model_outcomes_prog <- map(1:3, function(x) {
+  bind_rows(broom::tidy(any_ed_prog_type[[x]], conf.int = TRUE, exponentiate = T) %>%
+              mutate(outcome = "ED visits"),
+            broom::tidy(any_hosp_prog_type[[x]], conf.int = TRUE, exponentiate = T) %>%
+              mutate(outcome = "Hospitalizations"),
+            broom::tidy(any_wc_prog_type[[x]], conf.int = TRUE, exponentiate = T) %>%
+              mutate(outcome = "Well-child checkups \n(with previous well-child checkups)"),
+            broom::tidy(any_no_wc_prog_type[[x]], conf.int = TRUE, exponentiate = T) %>%
+              mutate(outcome = "Well-child checkups \n(without previous well-child checkups)"))
+})
+
+model_outcomes_prog[[1]][["prog_type"]] <- "PBV"
+model_outcomes_prog[[2]][["prog_type"]] <- "PH"
+model_outcomes_prog[[3]][["prog_type"]] <- "TBV"
+
+
+model_outcomes_prog_graph <- model_outcomes_prog %>%
+  bind_rows() %>%
+  filter(str_detect(term, "exit_")) %>%
+  mutate(term = case_when(str_detect(term, "Negative") ~ "Negative vs. remaining",
+                          str_detect(term, "Neutral") ~ "Neutral vs. remaining",
+                          str_detect(term, "Positive") ~ "Positive vs. remaining"),
+         height = rep(c(1.1, 1.6, 2.1, 
+                        1, 1.5, 2, 
+                        0.9, 1.4, 1.9, 
+                        0.8, 1.3, 1.8), 3))
+
 
 # RUN MARKDOWN FILE ----
 render(input = file.path(here::here(), "analyses/health/pha_exit_outcomes_mcaid.Rmd"), 
@@ -873,6 +956,46 @@ ggsave(filename = "health_outcomes_remain_plot_report.png",
        device = "png", width = 20, height = 12, units = "cm"
 )
 
+
+## Exit vs. remain by program type ----
+ggplot(data = model_outcomes_prog_graph) +
+  # Point estimates
+  geom_point(aes(x = estimate, y = height, shape = outcome, color = outcome), size = 3) +
+  # Add labels under point estimates
+  #geom_text_repel(aes(label = estimate)) +
+  geom_text(aes(x = estimate, y = height, label = round(estimate, 2)),
+            nudge_y = -0.03, size = 2.5, color = "gray33") +
+  
+  # Confidence intervals
+  geom_errorbarh(height = 0.02, 
+                 aes(y = height, xmin = conf.low, xmax = conf.high, color = outcome), 
+                 size = 1, alpha = 0.5) +
+  
+  # Hazard ratio = 1 line
+  geom_vline(xintercept = 1, color = "black", size = 0.7, alpha = 0.5, linetype = "longdash") +
+  
+  # Other settings
+  scale_y_continuous(breaks = c(0, 0.95, 1.45, 1.95, 2.1),
+                     labels = c("", 
+                                "Negative Exit\n(vs. Remaining)", 
+                                "Neutral Exit\n(vs. Remaining)", 
+                                "Positive Exit\n(vs. Remaining)", "")) +
+  scale_x_continuous(breaks = seq(0, 5, by = 0.5)) +
+  labs(x = "Adjusted Odds Ratio", color = "Outcome", shape = "Outcome") +
+  scale_color_brewer(type = "qual", palette = "Dark2") + 
+  theme_bw() +
+  theme(axis.title.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        panel.grid = element_blank(),
+        panel.border = element_blank(),
+        axis.line = element_line(),
+        legend.text = element_text(margin = margin(t = 4, b = 4)),
+        legend.position = "bottom") +
+  facet_wrap(~ prog_type, nrow = 1)
+
+ggsave(filename = "health_outcomes_prog_type_plot.png",
+       path = file.path(here::here(), "analyses/health"),
+       device = "png", width = 20, height = 12, units = "cm")
 
 
 # MAKE TABLES FOR MANUSCRIPT ----

@@ -52,6 +52,10 @@
     # easy SQL connections
       devtools::source_url("https://raw.githubusercontent.com/PHSKC-APDE/apde/main/R/create_db_connection.R") 
       
+    # connect to SharePoint
+      site <- get_team("DPH Health And Housing")
+      drv <- site$get_drive("Documents")
+      
 # Load data ----
     # open DB connection to HHSAW ----
         hhsaw20 = create_db_connection( # this is dev
@@ -150,7 +154,7 @@
         
         consort.dt[, exit_reasons := "Missing or neutral deaths"]
         consort.dt[is.na(outside_period) & is.na(false_exit) & is.na(multiple_exits) &
-             exit_category %in% c("Positive", "Negative"),
+             exit_category %in% c("Positive", "Negative", 'Neutral') & (exit_reason_clean != "Deceased"),
            exit_reasons := NA]
         consort04_side_exit_reasons <- nrow(consort.dt[is.na(outside_period) & is.na(false_exit) & is.na(multiple_exits) & !is.na(exit_reasons)])
         consort05_exit_reasons <- nrow(consort.dt[is.na(outside_period) & is.na(false_exit) & is.na(multiple_exits) & is.na(exit_reasons)])
@@ -240,7 +244,7 @@
         exits <- exits[exit_reason_clean != "Deceased"]
         
       # keep only positive and negative exits (for simpler binary comparison & because moving in with family / friends will confuse analysis)
-        exits <- exits[exit_category != "Neutral"]
+        # exits <- exits[exit_category != "Neutral"] # now will process neutral exits as a separate group because of reviewer comment
         
         exits <- unique(exits)
         
@@ -547,7 +551,7 @@
     setorder(combo, hh_id_kc_pha, id_kc_pha, qtr)
     combo <- combo[, .(hh_id_kc_pha, id_kc_pha, 
                       exit, exit_category, exit_date, exit_year = year(exit_date), exit_qtr, qtr, qtr_date,
-                      wage, hrs, wage_hourly, ami, percent_ami, 
+                      wage, hrs, wage_hourly, ami, percent_ami, hhwage, hhhours, hhwage_hourly, living_wage, 
                       race_eth_me, gender_me, race_gender, age_at_exit, hh_size, hh_disability, n_disability, 
                       single_caregiver, housing_time_at_exit, 
                       agency, prog_type, major_prog, subsidy_type, exit_reason_clean)]
@@ -574,8 +578,8 @@
         add_side_box(txt = paste0("False exits: ", consort02_side_false_exit))   |>
         add_box(txt = paste0("True exits: ", consort03_false_exit))   |>
 
-        add_side_box(txt = paste0("Neutral or missing exit reasons: ", consort04_side_exit_reasons))   |>
-        add_box(txt = paste0("Positive or negative exits reasons: ", consort05_exit_reasons))   |>
+        add_side_box(txt = paste0("Deceased or missing exit reasons: ", consort04_side_exit_reasons))   |>
+        add_box(txt = paste0("Positive, negative or neutral exits reasons: ", consort05_exit_reasons))   |>
       
         add_side_box(txt = paste0("Not working age: ", consort05.5_side_age))   |>
         add_box(txt = paste0("Working age: ", consort05.5_age))   |>
@@ -598,8 +602,6 @@
                       height = 7.2, 
                       units = "in") 
       
-      site <- get_team("DPH Health And Housing")
-      drv <- site$get_drive("Documents")
       drv$upload_file(src = tempy, 
                       dest = "HUD HEARS Study/wage_analysis/output/hpd_revision_1/appendix_fig_1_flow_diagram.pdf")  
       

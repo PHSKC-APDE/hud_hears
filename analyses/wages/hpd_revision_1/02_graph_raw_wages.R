@@ -79,10 +79,10 @@
     
 # Preparatory data manipulation ----
     # set up exit flag(s) ----
-    raw[, exit_category := factor(exit_category, levels = c("Positive", "Negative"))] # to force specific order in graph  
+    raw[, exit_category := factor(exit_category, levels = c("Positive", "Neutral", "Negative"))] # to force specific order in graph  
     raw[, exit := as.integer(exit)] # convert logical 0|1 to binary integer
     
-    # for plots of positive and negative at 1 year prior, at exit, and 1 year post ----
+    # for plots of positive, neutral, & negative at 1 year prior, at exit, and 1 year post ----
     dt1 <- rbind(copy(raw), copy(raw)[, prog_type_use := "All Programs"])[!is.na(prog_type_use)]
         dt1[, prog_type_use := factor(prog_type_use, 
                                       levels = c("All Programs", "TBV", "PBV", "PH"), 
@@ -106,15 +106,15 @@
         dt1 <- dt1[, .(time, exit_category, wage, mean, se, upper, lower, wage_hourly, mean.hourly, se.hourly, upper.hourly, lower.hourly, prog_type_use)]
         
         dt1.stats <- unique(dt1[!is.na(time), .(time, exit_category, mean, se, upper, lower, wage_hourly, mean.hourly, se.hourly, upper.hourly, lower.hourly, prog_type_use)])
-        dt1.stats[exit_category == "Negative", time := time + 0.17] # adding an offset for visualization purposes
-        dt1.stats[exit_category == "Positive", time := time - 0.17] # adding an offset for visualization purposes
+        dt1.stats[exit_category == "Negative", time := time + 0.215] # adding an offset for visualization purposes
+        dt1.stats[exit_category == "Positive", time := time - 0.215] # adding an offset for visualization purposes
         
 # Create plots ----        
   # Plot quarterly wages pre-post ----
       #plot.new()      
       set.seed(98104) # because jitter is 'random'
       plot1 <- ggplot() +
-        geom_point(data = dt1[!is.na(time)] ,  aes(x = time, y = wage, color = exit_category), 
+        geom_point(data = dt1[!is.na(time)] ,  aes(x = time, y = wage, color = exit_category, shape = exit_category), 
                    position=position_jitterdodge(dodge.width=0.65, jitter.height=0, jitter.width=0.15), alpha=0.7) +
         geom_point(data = dt1.stats[exit_category == 'Positive'],  
                    aes(x = time, y = mean), 
@@ -124,6 +124,13 @@
                       aes(x = time, ymax = upper, ymin = lower), 
                       linewidth = 0.5, 
                       width = 0) +      
+        geom_point(data = dt1.stats[exit_category == 'Neutral'],  
+                   aes(x = time, y = mean), 
+                   size = 1) +
+        geom_errorbar(data = dt1.stats[exit_category == 'Neutral'],  
+                      stat = 'identity', aes(x = time, ymax = upper, ymin = lower), 
+                      linewidth = 0.5, 
+                      width = 0) +
         geom_point(data = dt1.stats[exit_category == 'Negative'],  
                    aes(x = time, y = mean), 
                    size = 1) +
@@ -134,8 +141,14 @@
         labs(x = "", 
              y = "", 
              caption = "The black points and error bars are the mean and 95% confidence interval, respectively.") +
-        scale_color_manual("Exit type", 
-                           values=c('Positive' = '#2c7fb8', 'Negative' = '#2ca25f')) +
+        scale_shape_manual("Exit Type", 
+                           values = c('Positive' = 15,
+                                      'Neutral' = 17, 
+                                      'Negative' = 16)) +
+        scale_color_manual("Exit Type",
+                           values=c('Positive' = '#2c7fb8',
+                                    'Neutral' = '#2ca25f',
+                                    'Negative' = '#E60000')) +
         scale_y_continuous(labels=scales::dollar_format())+
         scale_x_continuous(labels=c("1 year prior", "Exit", "1 year post"), breaks=c(-1, 0, 1)) +
         theme(panel.grid.major = element_line(color = "white"), 

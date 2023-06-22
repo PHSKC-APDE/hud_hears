@@ -543,8 +543,9 @@
           
           
 # Tidy exit definitions for analysis ----
-    combo[, exit_category := factor(exit_category, levels = c("Positive", "Negative"))] # to force specific order in graph  
-    combo[exit_category == "Negative", exit := 0]
+    combo[, exit_category := factor(exit_category, levels = c("Positive", "Neutral", "Negative"))] # to force specific order in graph  
+    combo[exit_category == "Negative", exit := -1]
+    combo[exit_category == 'Neutral', exit := 0]
     combo[exit_category == "Positive", exit := 1]
           
 # Select/order columns in final dataset ----

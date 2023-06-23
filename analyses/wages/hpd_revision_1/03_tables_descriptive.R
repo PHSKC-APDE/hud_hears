@@ -41,7 +41,7 @@
     raw[, season := factor(quarter(exit_date), levels = 1:4, labels = c("Winter", "Spring", "Summer", "Fall"))]
     raw[, exit_year := as.factor(exit_year)]
 
-# Table 0: ID counts of positive negative exits by program type ----
+# Table 0: ID counts of positive, neutral, negative exits by program type ----
     table0 <- data.table()
     for(tempx in sort(unique(raw$prog_type_use))){
       table0 <- rbind(
@@ -50,11 +50,13 @@
                    program = tempx,
                    total = uniqueN(raw[prog_type_use == tempx]$id_kc_pha), 
                    positive = uniqueN(raw[exit_category == "Positive" & prog_type_use == tempx]$id_kc_pha),
+                   neutral = uniqueN(raw[exit_category == "Neutral" & prog_type_use == tempx]$id_kc_pha),
                    negative = uniqueN(raw[exit_category == "Negative" & prog_type_use == tempx]$id_kc_pha)), 
         data.table(category = "Households", 
                    program = tempx,
                    total = uniqueN(raw[prog_type_use == tempx]$hh_id_kc_pha), 
                    positive = uniqueN(raw[exit_category == "Positive" & prog_type_use == tempx]$hh_id_kc_pha),
+                   neutral = uniqueN(raw[exit_category == "Neutral" & prog_type_use == tempx]$hh_id_kc_pha),
                    negative = uniqueN(raw[exit_category == "Negative" & prog_type_use == tempx]$hh_id_kc_pha)))
     }
     
@@ -74,23 +76,30 @@
                    total = uniqueN(raw[qtr == 0 & !is.na(living_wage) & prog_type_use == tempx]$hh_id_kc_pha), 
                    living_wage = uniqueN(raw[qtr == 0 & !is.na(living_wage) & living_wage == "At or above" & prog_type_use == tempx]$hh_id_kc_pha),
                    positive = uniqueN(raw[exit_category == "Positive" & qtr == 0 & !is.na(living_wage) & prog_type_use == tempx]$hh_id_kc_pha), 
-                   pos_living_wage = uniqueN(raw[exit_category == "Positive" & qtr == 0 & !is.na(living_wage) & living_wage == "At or above" & prog_type_use == tempx]$hh_id_kc_pha), 
+                   pos_lw = uniqueN(raw[exit_category == "Positive" & qtr == 0 & !is.na(living_wage) & living_wage == "At or above" & prog_type_use == tempx]$hh_id_kc_pha), 
+                   neutral = uniqueN(raw[exit_category == "Neutral" & qtr == 0 & !is.na(living_wage) & prog_type_use == tempx]$hh_id_kc_pha), 
+                   neut_lw = uniqueN(raw[exit_category == "Neutral" & qtr == 0 & !is.na(living_wage) & living_wage == "At or above" & prog_type_use == tempx]$hh_id_kc_pha), 
                    negative = uniqueN(raw[exit_category == "Negative" & qtr == 0 & !is.na(living_wage) & prog_type_use == tempx]$hh_id_kc_pha), 
-                   neg_living_wage = uniqueN(raw[exit_category == "Negative" & qtr == 0 & !is.na(living_wage) & living_wage == "At or above" & prog_type_use == tempx]$hh_id_kc_pha)), 
+                   neg_lw = uniqueN(raw[exit_category == "Negative" & qtr == 0 & !is.na(living_wage) & living_wage == "At or above" & prog_type_use == tempx]$hh_id_kc_pha)), 
         data.table(category = "Households 1 year post exit", 
                    program = tempx,
                    total = uniqueN(raw[qtr == 4 & !is.na(living_wage) & prog_type_use == tempx]$hh_id_kc_pha), 
                    living_wage = uniqueN(raw[qtr == 4 & !is.na(living_wage) & living_wage == "At or above" & prog_type_use == tempx]$hh_id_kc_pha),
                    positive = uniqueN(raw[exit_category == "Positive" & qtr == 4 & !is.na(living_wage) & prog_type_use == tempx]$hh_id_kc_pha), 
-                   pos_living_wage = uniqueN(raw[exit_category == "Positive" & qtr == 4 & !is.na(living_wage) & living_wage == "At or above" & prog_type_use == tempx]$hh_id_kc_pha), 
+                   pos_lw = uniqueN(raw[exit_category == "Positive" & qtr == 4 & !is.na(living_wage) & living_wage == "At or above" & prog_type_use == tempx]$hh_id_kc_pha), 
+                   neutral = uniqueN(raw[exit_category == "Neutral" & qtr == 4 & !is.na(living_wage) & prog_type_use == tempx]$hh_id_kc_pha), 
+                   neut_lw = uniqueN(raw[exit_category == "Neutral" & qtr == 4 & !is.na(living_wage) & living_wage == "At or above" & prog_type_use == tempx]$hh_id_kc_pha), 
                    negative = uniqueN(raw[exit_category == "Negative" & qtr == 4 & !is.na(living_wage) & prog_type_use == tempx]$hh_id_kc_pha), 
-                   neg_living_wage = uniqueN(raw[exit_category == "Negative" & qtr == 4 & !is.na(living_wage) & living_wage == "At or above" & prog_type_use == tempx]$hh_id_kc_pha)))
+                   neg_lw = uniqueN(raw[exit_category == "Negative" & qtr == 4 & !is.na(living_wage) & living_wage == "At or above" & prog_type_use == tempx]$hh_id_kc_pha)))
     }
     
-    table0_lw[, living_wage_per := round2(100*living_wage/total, 1)]
-    table0_lw[, pos_living_wage_per := round2(100*pos_living_wage/positive, 1)]
-    table0_lw[, neg_living_wage_per := round2(100*neg_living_wage/negative, 1)]
+    table0_lw[, total_lw_per := round2(100*living_wage/total, 1)]
+    table0_lw[, pos_lw_per := round2(100*pos_lw/positive, 1)]
+    table0_lw[, neut_lw_per := round2(100*neut_lw/neutral, 1)]
+    table0_lw[, neg_lw_per := round2(100*neg_lw/negative, 1)]
     setorder(table0_lw, -category)
+    table0_lw <- table0_lw[, .(category, program, total, positive, neutral, negative, 
+                               pos_lw, neut_lw, neg_lw, pos_lw_per, neut_lw_per, neg_lw_per)]
 
     # write to Excel worksheets in memory
     addWorksheet(wb, 'Table_0_livingwage')
@@ -136,22 +145,40 @@
                                   by = 'time', 
                                   all = T)
         table1_qtr_diff <- merge(table1_qtr_diff,
+                                 dt1[!is.na(time) & exit_category == "Neutral", 
+                                     .(neut.mean = mean(wage), neut.sd = sd(wage)), 
+                                     time], # neutral exits
+                                 by = 'time', 
+                                 all = T)
+        table1_qtr_diff <- merge(table1_qtr_diff,
                                   dt1[!is.na(time) & exit_category == "Negative", 
                                       .(neg.mean = mean(wage), neg.sd = sd(wage)), 
                                       time], # negative exits
                                   by = 'time', 
                                   all = T)
-        table1_qtr_diff[, difference := pos.mean - neg.mean]
-        table1_qtr_diff[, difference.sd := sqrt((pos.sd^2) + (neg.sd^2))]
+        table1_qtr_diff[, diff_posneut := pos.mean - neut.mean]
+        table1_qtr_diff[, diff_posneut.sd := sqrt((pos.sd^2) + (neut.sd^2))]
+        table1_qtr_diff[, diff_posneg := pos.mean - neg.mean]
+        table1_qtr_diff[, diff_posneg.sd := sqrt((pos.sd^2) + (neg.sd^2))]
+        table1_qtr_diff[, diff_neutneg := neut.mean - neg.mean]
+        table1_qtr_diff[, diff_neutneg.sd := sqrt((neut.sd^2) + (neg.sd^2))]
         
       # Perform t-test ----
         for(ii in c(-1, 0, 1)){
           table1_qtr_diff[time == ii, 
-                         t_test_pvalue := t.test(x = dt1[!is.na(time) & exit_category == "Positive" & time == ii,]$wage,
+                         t_test_posneg := t.test(x = dt1[!is.na(time) & exit_category == "Positive" & time == ii,]$wage,
                                                  y = dt1[!is.na(time) & exit_category == "Negative" & time == ii,]$wage)$p.value]
+          table1_qtr_diff[time == ii, 
+                          t_test_posneut := t.test(x = dt1[!is.na(time) & exit_category == "Positive" & time == ii,]$wage,
+                                                  y = dt1[!is.na(time) & exit_category == "Neutral" & time == ii,]$wage)$p.value]
+          table1_qtr_diff[time == ii, 
+                          t_test_neutneg := t.test(x = dt1[!is.na(time) & exit_category == "Neutral" & time == ii,]$wage,
+                                                  y = dt1[!is.na(time) & exit_category == "Negative" & time == ii,]$wage)$p.value]
           }
     # Tidy table ----
-      table1_qtr_diff[t_test_pvalue < 0.05, significant := "*"]
+      table1_qtr_diff[t_test_posneg < 0.05, sig_posneg := "*"]
+      table1_qtr_diff[t_test_posneut < 0.05, sig_posneut := "*"]
+      table1_qtr_diff[t_test_neutneg < 0.05, sig_neutneg := "*"]
       table1_qtr_diff <- table1_qtr_diff[, .(Program = tempx,
                                              `Wage type` = 'quarterly', 
                                              `Time period` = factor(time, 
@@ -159,10 +186,20 @@
                                                                     labels = c("1 year prior", "Exit", "1 year post")), 
                                              `Any exit` = paste0(prettyNum(round2(tot.mean), big.mark = ','), " (", prettyNum(round2(tot.sd), big.mark = ','), ")"), 
                                              Positive = paste0(prettyNum(round2(pos.mean), big.mark = ','), " (", prettyNum(round2(pos.sd), big.mark = ','), ")"), 
+                                             Neutral = paste0(prettyNum(round2(neut.mean), big.mark = ','), " (", prettyNum(round2(neut.sd), big.mark = ','), ")"), 
                                              Negative = paste0(prettyNum(round2(neg.mean), big.mark = ','), " (", prettyNum(round2(neg.sd), big.mark = ','), ")"),
-                                             Difference = paste0(prettyNum(round2(difference), big.mark = ','), " (", prettyNum(round2(difference.sd), big.mark = ','), ")"),
-                                             Significant = significant, 
-                                             `p-value` = ifelse(t_test_pvalue < 0.001, "<0.001", rads::round2(t_test_pvalue, 3)))]
+                                             
+                                             Diff.pos_neut = paste0(prettyNum(round2(diff_posneut), big.mark = ','), " (", prettyNum(round2(diff_posneut.sd), big.mark = ','), ")"),
+                                             Sig.pos_neut = sig_posneut, 
+                                             `p-value.pos_neut` = ifelse(t_test_posneut < 0.001, "<0.001", rads::round2(t_test_posneut, 3)),
+                                             
+                                             Diff.pos_neg = paste0(prettyNum(round2(diff_posneg), big.mark = ','), " (", prettyNum(round2(diff_posneg.sd), big.mark = ','), ")"),
+                                             Sig.pos_neg = sig_posneg, 
+                                             `p-value.pos_neg` = ifelse(t_test_posneg < 0.001, "<0.001", rads::round2(t_test_posneg, 3)),
+                                             
+                                             Diff.neut_neg = paste0(prettyNum(round2(diff_neutneg), big.mark = ','), " (", prettyNum(round2(diff_neutneg.sd), big.mark = ','), ")"),
+                                             Sig.neut_neg = sig_neutneg, 
+                                             `p-value.neut_neg` = ifelse(t_test_neutneg < 0.001, "<0.001", rads::round2(t_test_neutneg, 3)))]
     table1 <- rbind(table1, table1_qtr_diff)
     rm(table1_qtr_diff)
     
@@ -172,8 +209,11 @@
       table1_simple <- copy(table1)
       table1_simple[, `Any exit` := gsub(" .*", "", `Any exit`)]
       table1_simple[, `Positive` := gsub(" .*", "", `Positive`)]
+      table1_simple[, `Neutral` := gsub(" .*", "", `Neutral`)]
       table1_simple[, `Negative` := gsub(" .*", "", `Negative`)]
-      table1_simple[, Difference := prettyNum(as.integer(gsub(",", "", Positive)) - as.integer(gsub(",", "", Negative)), big.mark = ',')]
+      table1_simple[, Diff.pos_neut := prettyNum(as.integer(gsub(",", "", Positive)) - as.integer(gsub(",", "", Neutral)), big.mark = ',')]
+      table1_simple[, Diff.pos_neg := prettyNum(as.integer(gsub(",", "", Positive)) - as.integer(gsub(",", "", Negative)), big.mark = ',')]
+      table1_simple[, Diff.neut_neg := prettyNum(as.integer(gsub(",", "", Neutral)) - as.integer(gsub(",", "", Negative)), big.mark = ',')]
       
       table1 <- rbind(table1, table1_simple)
       rm(table1_simple)
@@ -209,6 +249,7 @@
           raw.subset <- raw[prog_type_use == tempx]
         }
       raw.subset[, prog_type_use := as.character(prog_type_use)]
+      raw.subset[, exit_category := factor(exit_category, levels = c('Positive', 'Neutral', 'Negative'))]
       # create table ----
         table2 <- as.data.table(summary(
           arsenal::tableby(exit_category ~ 
@@ -232,13 +273,37 @@
                            data = raw.subset[qtr == 0], 
                            control = my_controls)
           ))
-        
+          
+          # strip attributes
+              attr(table2, 'align') <- NULL
+              attr(table2, 'ylabel') <- NULL
+              #attr(table2, '.internal.selfref') <- NULL
+              attr(table2, 'control.list') <- NULL
+              table2 <- setDT(copy(as.data.frame(table2)))
+
       # save vector of vars associated with exposure (exit type) ----
         setnames(table2, "", "col1")
         table2[, pnumeric := as.numeric(gsub("<", "", `p value`))]
         exposure.associated <- gsub("\\*\\*", "", table2[pnumeric < 0.05]$col1)
         table2[, pnumeric := NULL]
         
+      # Format big numbers ---- 
+        for(ii in 2:5){
+          orig.colname <- names(table2)[ii]
+          table2[, tempy := unlist(gsub("\\(|\\)", "", get(orig.colname)))] # drop parenthesis
+          table2[, c('tempy1', 'tempy2') := tstrsplit(tempy, split = ' ', fixed=TRUE)]
+          table2[, tempy1 := as.integer(tempy1)]
+          table2[tempy1 > 999, tempy1.big := format(tempy1, big.mark = ',')]
+          table2[, tempy2 := suppressWarnings(as.integer(tempy2))]
+          table2[tempy2 > 999, tempy2.big := format(tempy2, big.mark = ',')]
+          table2[!is.na(tempy1.big) & is.na(tempy2.big) & grepl(" ", tempy), tempy2.big := gsub("^.* ", "", tempy)] # to keep 2nd half as is when only first part is a big number
+          table2[, tempybig := gsub(" \\(NA\\)", "", paste0(tempy1.big, " (", tempy2.big, ")"))]
+          # table2[, tempybig := fcase(grepl(",", tempy1.big) & grepl(",", tempy2.big), paste0(tempy1.big, " (", tempy2.big, ")"), 
+          #                            grepl(",", tempy1.big) & grepl(",", tempy2.big)==F, tempy1.big)]
+          table2[!is.na(tempybig) & tempybig != 'NA', paste0(orig.colname) := tempybig]
+          table2[, grep('tempy', names(table2)) := NULL]
+        }        
+
       # tidy table ----
         table2[, col1 := gsub("wage", "Wages", col1)]
         table2[, col1 := gsub("Wages_hourly", "Wages hourly", col1)]
@@ -261,30 +326,26 @@
         table2[, variable := variable[1], by= .(cumsum(!is.na(variable)) ) ] # fill downward
         
         # when binary true/false, collapse it down to one row
+        tf.vars <- table2[col1 == 'TRUE']$variable # identify true / false variables
         table2 <- table2[col1 != "FALSE"]
         table2[col1 == "TRUE", col1 := variable]
-        tf.vars <- table2[col1 == variable, dup := 1:.N, variable][dup == 2]$col1
-        for(tf in tf.vars){
+        for(tf in tf.vars){ # collapse the header and the TRUE row down to one row
+          table2[col1 == tf, dup := 1:.N, col1]
           table2[dup == 2 & col1 == tf, "p value" := table2[dup==1 & col1 == tf]$`p value`]
           table2 <- table2[!(dup == 1 & col1 == tf)]
+          table2[, dup := NULL]
         }
     
-        # drop missing if all missing are zero
-        table2 <- table2[!(col1 == "Missing" & get(names(table2)[2]) == 0 & get(names(table2)[3]) == 0 & get(names(table2)[4]) == 0)]
+        table2 <- table2[!(col1 == "Missing" & get(names(table2)[2]) == 0 & get(names(table2)[3]) == 0 & get(names(table2)[4]) == 0)] # drop if missing always zero
         
-        table2[col1 != variable, col1 := paste0("   ", col1)]
+        table2[col1 != variable, col1 := paste0("   ", col1)] # add indent for categories within a variable
         
-        table2 <- table2[, 1:5]
+        #table2 <- table2[!(grepl("Median", col1) & !variable %in% c("Wages", "Hours", "Wages hourly"))] # drop Median for wage data
+        
+        table2 <- table2[, 1:6]
         
         setnames(table2, c("p value"), c("P-value"))
-        
-        # only keep median for wage and hours
-        table2[, category := table2[['col1']]]
-        table2[grepl("^ ", category), category := NA] # wipe out sub-values
-        table2[, category := category[1], by= .(cumsum(!is.na(category)) ) ] # fill forward / downward
-        table2 <- table2[!(grepl("Median", col1) & !category %in% c("Wages", "Hours", "Wages hourly"))]
-        table2[, c("category") := NULL]
-        
+
       # save with distinct object name ----
         assign(paste0("table2_", tempx), table2)
         

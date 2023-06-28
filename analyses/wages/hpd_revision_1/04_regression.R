@@ -302,21 +302,21 @@
   # Step 3: Fit the mixed model, using the IPTW as a weight, and get predictions ----
       message('Using IPTW as a weight, vs as a covariate, is more robust to misspecification.')
       # The B-spline has zero knots because a 3rd degree polynomial (cubic spline) ... df - degrees = knots
-      wage_model <- lmerTest::lmer(formula = "wage ~ 
-                                              exit_category*splines::bs(time, df = 3, Boundary.knots = c(-4, 4)) + 
-                                              prog_type_use +
-                                              (1 | id_kc_pha) + 
-                                              (1 + exit | hh_id_kc_pha)", 
+      wage_model <- lmerTest::lmer(formula = wage ~ 
+                                             exit_category*splines::bs(time, df = 3, Boundary.knots = c(-4, 4)) + 
+                                             prog_type_use +
+                                             (1 | id_kc_pha) + 
+                                             (1 + exit | hh_id_kc_pha), 
                                    data = model.data, 
                                    weights = iptw
                                    )
       
       # test if p-value for interaction term is < 0.05
-        wage_model.alt <- lmerTest::lmer(formula = "wage ~ 
-                                                    exit_category + splines::bs(time, df = 3, Boundary.knots = c(-4, 4)) + 
-                                                    prog_type_use +
-                                                    (1 | id_kc_pha) + 
-                                                    (1 + exit | hh_id_kc_pha)", 
+        wage_model.alt <- lmerTest::lmer(formula = wage ~ 
+                                                   exit_category + splines::bs(time, df = 3, Boundary.knots = c(-4, 4)) + 
+                                                   prog_type_use +
+                                                   (1 | id_kc_pha) + 
+                                                   (1 + exit | hh_id_kc_pha), 
                                          data = model.data, 
                                          weights = iptw)
         
@@ -400,11 +400,11 @@
                                  exit_category == 'Positive', 1/Positive)]
       
   # Step 3: Fit the mixed model, using the IPTW as a weight, and get predictions ----
-      ami_model <- lmerTest::lmer(formula = "percent_ami ~ 
-                                             exit_category*splines::bs(time, df = 3, Boundary.knots = c(-4, 4)) + 
-                                             prog_type_use +
-                                             (1 | id_kc_pha) + 
-                                             (1 + exit | hh_id_kc_pha)", 
+      ami_model <- lmerTest::lmer(formula = percent_ami ~ 
+                                            exit_category*splines::bs(time, df = 3, Boundary.knots = c(-4, 4)) + 
+                                            prog_type_use +
+                                            (1 | id_kc_pha) + 
+                                            (1 + exit | hh_id_kc_pha), 
                                   data = model.data, 
                                   weights = iptw
       )
@@ -484,11 +484,11 @@
                                  exit_category == 'Positive', 1/Positive)]
       
   # Step 3: Fit the mixed model, using the IPTW as a weight, and get predictions ----
-      sensitivity_model <- lmerTest::lmer(formula = "wage ~ 
-                                                     exit_category*splines::bs(time, df = 3, Boundary.knots = c(-4, 4)) + 
-                                                     prog_type_use +
-                                                     (1 | id_kc_pha) + 
-                                                     (1 + exit | hh_id_kc_pha)", 
+      sensitivity_model <- lmerTest::lmer(formula = wage ~ 
+                                                    exit_category*splines::bs(time, df = 3, Boundary.knots = c(-4, 4)) + 
+                                                    prog_type_use +
+                                                    (1 | id_kc_pha) + 
+                                                    (1 + exit | hh_id_kc_pha), 
                                           data = model.data, 
                                           weights = iptw)
       

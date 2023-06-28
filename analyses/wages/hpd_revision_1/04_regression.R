@@ -88,10 +88,15 @@
         mymod.tidy[term == 'Positive', term := "Positive exit"]
         mymod.tidy[term == 'Neutral', term := "Neutral exit"]
         mymod.tidy[, term := gsub("as.integer\\(time\\)", "time", term)]
-        mymod.tidy[, term := gsub("splines::bs", "spline", term)]
+        mymod.tidy[grepl('spline', term), term := paste0(gsub("splines::bs\\(time, df = 3, Boundary.knots = c\\(-4, 4\\)\\)", "Time cubic spline (basis function ", term), ")")]
+        mymod.tidy[, term := gsub("Neutral:", "Neutral exit * ", term)]
+        mymod.tidy[, term := gsub("Positive:", "Positive exit * ", term)]
         mymod.tidy[, estimate := gsub("\\$-", "-\\$", estimate)]
         mymod.tidy[, estimate := gsub(" \\(\\$NA\\, \\$NA\\)", "", estimate)]
         mymod.tidy[, estimate := gsub("\\$NaN", NA, estimate)]
+        
+        mymod.tidy[group == 'id_kc_pha', group := 'Person ID']
+        mymod.tidy[group == 'hh_id_kc_pha', group := 'Household ID']
         
         # add referent for exit_category ----
         split.row <- which(mymod.tidy[,3] == "Neutral exit")
@@ -258,7 +263,7 @@
     raw$race_eth_me <- relevel(raw$race_eth_me, ref = 'Black')
     raw[, prog_type_use := factor(prog_type_use, levels = c("TBV", "PBV", "PH"))]
 
-#### Doubly robust regression with IPTW: wages as outcome of interest ----
+#### Two stage regression with IPTW: wages as outcome of interest ----
 
   # Step 0: Identify covariates of interest and subset data to when all are present ----
       covariates <- c('age_at_exit', 'gender_me', 'race_eth_me', 'exit_year', 'season', 
@@ -296,14 +301,28 @@
   
   # Step 3: Fit the mixed model, using the IPTW as a weight, and get predictions ----
       message('Using IPTW as a weight, vs as a covariate, is more robust to misspecification.')
+      # The B-spline has zero knots because a 3rd degree polynomial (cubic spline) ... df - degrees = knots
       wage_model <- lmerTest::lmer(formula = "wage ~ 
-                                   exit_category*splines::bs(time, df = 3) + 
-                                   prog_type_use +
-                                   (1 | id_kc_pha) + 
-                                   (1 + exit | hh_id_kc_pha)", 
+                                              exit_category*splines::bs(time, df = 3, Boundary.knots = c(-4, 4)) + 
+                                              prog_type_use +
+                                              (1 | id_kc_pha) + 
+                                              (1 + exit | hh_id_kc_pha)", 
                                    data = model.data, 
                                    weights = iptw
                                    )
+      
+      # test if p-value for interaction term is < 0.05
+        wage_model.alt <- lmerTest::lmer(formula = "wage ~ 
+                                                    exit_category + splines::bs(time, df = 3, Boundary.knots = c(-4, 4)) + 
+                                                    prog_type_use +
+                                                    (1 | id_kc_pha) + 
+                                                    (1 + exit | hh_id_kc_pha)", 
+                                         data = model.data, 
+                                         weights = iptw)
+        
+        wage_model.test = anova(wage_model, wage_model.alt, test = 'LRT') # compare the two models
+        if(wage_model.test[["Pr(>Chisq)"]][2] < 0.05){message("Keep interaction")}else{message('Drop interaction')}
+      
       
       wage_model.tidy <- model.clean(wage_model, myformat = 'dollar')
       addWorksheet(wb, 'Table_X_wage_model') 
@@ -341,7 +360,7 @@
       saveplots(plot.object = wage_model.plot, 
                 plot.name = 'modeled_wages')
       
-#### Doubly robust regression with IPTW: % AMI as outcome of interest----
+#### Two regression with IPTW: % AMI as outcome of interest----
   # Step 0: Identify covariates of interest and subset data to when all are present ----
       covariates <- c('age_at_exit', 'gender_me', 'race_eth_me', 'exit_year', 'season', 
                       'housing_time_at_exit', 'hh_disability', 'single_caregiver', 'agency', 
@@ -381,12 +400,11 @@
                                  exit_category == 'Positive', 1/Positive)]
       
   # Step 3: Fit the mixed model, using the IPTW as a weight, and get predictions ----
-      message('Using IPTW as a weight, vs as a covariate, is more robust to misspecification.')
       ami_model <- lmerTest::lmer(formula = "percent_ami ~ 
-                                   exit_category*splines::bs(time, df = 3) + 
-                                   prog_type_use +
-                                   (1 | id_kc_pha) + 
-                                   (1 + exit | hh_id_kc_pha)", 
+                                             exit_category*splines::bs(time, df = 3, Boundary.knots = c(-4, 4)) + 
+                                             prog_type_use +
+                                             (1 | id_kc_pha) + 
+                                             (1 + exit | hh_id_kc_pha)", 
                                   data = model.data, 
                                   weights = iptw
       )
@@ -427,7 +445,91 @@
       saveplots(plot.object = ami_model.plot, 
                 plot.name = 'modeled_percentage_ami')
       
-    
+#### Sensitivity analysis dropping those with disabilities: two stage regression with IPTW: wages as outcome of interest ----
+      
+  # Step 0: Identify covariates of interest and subset data to when all are present ----
+      covariates <- c('age_at_exit', 'gender_me', 'race_eth_me', 'exit_year', 'season', 
+                      'housing_time_at_exit', 'single_caregiver', 'agency', 
+                      'prog_type_use') # prog_type_use will not be in the propensity score, but will be used in wage model
+      model.data <- copy(raw)
+      model.data[, complete_covariates := 1]
+      for(cv in covariates){
+        model.data[is.na(get(cv)), complete_covariates := 0]
+      }
+      model.data <- model.data[complete_covariates == 1]
+      
+      model.data <- model.data[!is.na(hh_disability) & hh_disability == 0]
+      
+  # Step 1: Get propensity scores using multinomial logistic regression (using GEE with complete data using 'All Programs') ----
+      ps_model <- nomLORgee(formula = exit_category ~ age_at_exit + gender_me + 
+                              race_eth_me + exit_year + season + housing_time_at_exit + 
+                              single_caregiver + agency,
+                            data = setDF(copy(model.data)[qtr == 0]), # just model at the time of exit
+                            id = hh_id_kc_pha, # important because can have >1 person in a single household
+                            LORstr = "independence")
+      
+      ps <- as.data.table(fitted(ps_model)) # get fitted value ... i.e., the probabilities
+      colnames(ps) <- c('Negative', 'Neutral', 'Positive') # fitted value columns are in same order as the factor label for exit_category
+      ps <- cbind("id_kc_pha" = model.data[qtr == 0]$id_kc_pha, ps)
+      head(ps)
+      
+  # Step 2: Calculate the inverse probability treatment weight (IPTW) and assign it to each observation ----
+      model.data <- merge(model.data, 
+                          ps, 
+                          by = 'id_kc_pha', 
+                          all.x = T, 
+                          all.y = T)
+      model.data[, iptw := fcase(exit_category == 'Negative', 1/Negative, 
+                                 exit_category == 'Neutral', 1/Neutral, 
+                                 exit_category == 'Positive', 1/Positive)]
+      
+  # Step 3: Fit the mixed model, using the IPTW as a weight, and get predictions ----
+      sensitivity_model <- lmerTest::lmer(formula = "wage ~ 
+                                                     exit_category*splines::bs(time, df = 3, Boundary.knots = c(-4, 4)) + 
+                                                     prog_type_use +
+                                                     (1 | id_kc_pha) + 
+                                                     (1 + exit | hh_id_kc_pha)", 
+                                          data = model.data, 
+                                          weights = iptw)
+      
+
+      sensitivity_model.tidy <- model.clean(sensitivity_model, myformat = 'dollar')
+      addWorksheet(wb, 'Table_X_sensitivity_model') 
+      writeDataTable(wb, sheet = 'Table_X_sensitivity_model', sensitivity_model.tidy, 
+                     rowNames = F, colNames = T)   
+      
+      
+      sensitivity_model.preds <- as.data.table(marginaleffects::predictions(sensitivity_model, 
+                                                                     newdata = model.data, 
+                                                                     re.form=~0)) # re.form=~0 means include no random effects, so population level estimates
+      
+      sensitivity_model.preds_tidy <- prediction_summary(sensitivity_model.preds, ndraw = 10000)
+      
+  # Step 4: plot ----
+      setDT(model.data)
+      sensitivity_model.plot <- ggplot() +
+        geom_line(data = sensitivity_model.preds_tidy, aes(x = time, y = wage, color = exit_category), linewidth = 1) +
+        geom_point(data = sensitivity_model.preds_tidy, 
+                   aes(x = time, y = wage, color = exit_category, shape = exit_category), 
+                   size = 2.5) +
+        labs(
+          x = "", 
+          y = "Predicted quarterly wages") +
+        scale_x_continuous(labels=c("1 year prior", "Exit", "1 year post"), breaks=c(-4, 0, 4))
+      
+      sensitivity_model.plot <- formatplots(sensitivity_model.plot) + 
+        scale_y_continuous(limits = c(4000, 9000), breaks=c(seq(4000, 9000, 1000)), labels=scales::dollar_format()) +
+        facet_wrap(~program, nrow = 2, strip.position = "top") +
+        theme(panel.spacing = unit(15, "pt"))
+      
+      # dev.new(width = 6,  height = 4, unit = "in", noRStudioGD = TRUE)
+      plot(sensitivity_model.plot)
+      
+      # save the plot
+      saveplots(plot.object = sensitivity_model.plot, 
+                plot.name = 'modeled_sensivity_analysis')
+      
+          
 #### Export Excel file to SharePoint ----
     tempy.xlsx <- tempfile(fileext = ".xlsx") # tempfile in memory to hold Excel file
     saveWorkbook(wb, file = tempy.xlsx, overwrite = T) # write to tempfile

@@ -263,12 +263,14 @@
     raw$race_eth_me <- relevel(raw$race_eth_me, ref = 'Black')
     raw[, prog_type_use := factor(prog_type_use, levels = c("TBV", "PBV", "PH"))]
 
+#### Identify covariates of interest ----
+    covariates <- c('age_at_exit', 'gender_me', 'race_eth_me', 'exit_year', 'season', 'hh_gt_1_worker',
+                    'housing_time_at_exit', 'hh_disability', 'single_caregiver', 'agency', 
+                    'prog_type_use') # prog_type_use will not be in the propensity score, but will be used in wage model    
+    
 #### Two stage regression with IPTW: wages as outcome of interest ----
 
-  # Step 0: Identify covariates of interest and subset data to when all are present ----
-      covariates <- c('age_at_exit', 'gender_me', 'race_eth_me', 'exit_year', 'season', 
-                      'housing_time_at_exit', 'hh_disability', 'single_caregiver', 'agency', 
-                      'prog_type_use') # prog_type_use will not be in the propensity score, but will be used in wage model
+  # Step 0: Subset data to when all are present ----
       model.data <- copy(raw)
       model.data[, complete_covariates := 1]
       for(cv in covariates){
@@ -278,7 +280,7 @@
   
   # Step 1: Get propensity scores using multinomial logistic regression (using GEE with complete data using 'All Programs') ----
       ps_model <- nomLORgee(formula = exit_category ~ age_at_exit + gender_me + 
-                              race_eth_me + exit_year + season + housing_time_at_exit + 
+                              race_eth_me + exit_year + season + hh_gt_1_worker + housing_time_at_exit + 
                               hh_disability + single_caregiver + agency,
                           data = setDF(copy(model.data)[qtr == 0]), # just model at the time of exit
                           id = hh_id_kc_pha, # important because can have >1 person in a single household
@@ -307,7 +309,7 @@
                                              prog_type_use +
                                              (1 | id_kc_pha) + 
                                              (1 + exit | hh_id_kc_pha), 
-                                   data = model.data, 
+                                   data = setDF(copy(model.data)), 
                                    weights = iptw
                                    )
       
@@ -317,7 +319,7 @@
                                                    prog_type_use +
                                                    (1 | id_kc_pha) + 
                                                    (1 + exit | hh_id_kc_pha), 
-                                         data = model.data, 
+                                         data = setDF(copy(model.data)), 
                                          weights = iptw)
         
         wage_model.test = anova(wage_model, wage_model.alt, test = 'LRT') # compare the two models
@@ -325,13 +327,13 @@
       
       
       wage_model.tidy <- model.clean(wage_model, myformat = 'dollar')
-      addWorksheet(wb, 'Table_X_wage_model') 
-      writeDataTable(wb, sheet = 'Table_X_wage_model', wage_model.tidy, 
+      addWorksheet(wb, 'Table_2_regression_wages') 
+      writeDataTable(wb, sheet = 'Table_2_regression_wages', wage_model.tidy, 
                      rowNames = F, colNames = T)   
       
       
       wage_model.preds <- as.data.table(marginaleffects::predictions(wage_model, 
-                                                                    newdata = model.data, 
+                                                                    newdata = setDF(copy(model.data)), 
                                                                     re.form=~0)) # re.form=~0 means include no random effects, so population level estimates
       
       wage_model.preds_tidy <- prediction_summary(wage_model.preds, ndraw = 10000)
@@ -358,35 +360,15 @@
 
       # save the plot
       saveplots(plot.object = wage_model.plot, 
-                plot.name = 'modeled_wages')
+                plot.name = 'figure_2_mean_predicted_wages')
       
 #### Two regression with IPTW: % AMI as outcome of interest----
-  # Step 0: Identify covariates of interest and subset data to when all are present ----
-      covariates <- c('age_at_exit', 'gender_me', 'race_eth_me', 'exit_year', 'season', 
-                      'housing_time_at_exit', 'hh_disability', 'single_caregiver', 'agency', 
-                      'prog_type_use') # prog_type_use will not be in the propensity score, but will be used in wage model
+  # Step 0: Subset data to when all are present ----
       model.data <- copy(raw)
-      model.data[, complete_covariates := 1]
-      for(cv in covariates){
-        model.data[is.na(get(cv)), complete_covariates := 0]
-      }
-      model.data <- model.data[complete_covariates == 1]
-      
-      # drop if do not have AMI for each time point
-      model.data <- model.data[!id_kc_pha %in% unique(model.data[is.na(percent_ami)]$id_kc_pha)]
+      model.data <- model.data[!id_kc_pha %in% unique(model.data[is.na(percent_ami)]$id_kc_pha)] # drop if do not have AMI for each time point
       
   # Step 1: Get propensity scores using multinomial logistic regression (using GEE with complete data using 'All Programs') ----
-      # same model as when calculating wages above, becuase the true outcome of interest is irrelvant in the propensity score model
-      ps_model <- nomLORgee(formula = exit_category ~ age_at_exit + gender_me + 
-                              race_eth_me + exit_year + season + housing_time_at_exit + 
-                              hh_disability + single_caregiver + agency,
-                            data = setDF(copy(model.data)[qtr == 0]), # just model at the time of exit
-                            id = hh_id_kc_pha, # important because can have >1 person in a single household
-                            LORstr = "independence")
-      
-      ps <- as.data.table(fitted(ps_model)) # get fitted value ... i.e., the probabilities
-      colnames(ps) <- c('Negative', 'Neutral', 'Positive') # fitted value columns are in same order as the factor label for exit_category
-      ps <- cbind("id_kc_pha" = model.data[qtr == 0]$id_kc_pha, ps)
+      # same model as when calculating wages above, because the true outcome of interest is irrelevant in the propensity score model
       head(ps)
       
   # Step 2: Calculate the inverse probability treatment weight (IPTW) and assign it to each observation ----
@@ -394,7 +376,7 @@
                           ps, 
                           by = 'id_kc_pha', 
                           all.x = T, 
-                          all.y = T)
+                          all.y = F)
       model.data[, iptw := fcase(exit_category == 'Negative', 1/Negative, 
                                  exit_category == 'Neutral', 1/Neutral, 
                                  exit_category == 'Positive', 1/Positive)]
@@ -405,17 +387,17 @@
                                             prog_type_use +
                                             (1 | id_kc_pha) + 
                                             (1 + exit | hh_id_kc_pha), 
-                                  data = model.data, 
+                                  data = setDF(copy(model.data)), 
                                   weights = iptw
       )
       
       ami_model.tidy <- model.clean(ami_model, myformat = 'percent')
-      addWorksheet(wb, 'Table_X_ami_model') 
-      writeDataTable(wb, sheet = 'Table_X_ami_model', ami_model.tidy, 
+      addWorksheet(wb, 'Table_3_regression_AMI') 
+      writeDataTable(wb, sheet = 'Table_3_regression_AMI', ami_model.tidy, 
                      rowNames = F, colNames = T)   
       
       ami_model.preds <- as.data.table(marginaleffects::predictions(ami_model, 
-                                                                     newdata = model.data, 
+                                                                     newdata = setDF(copy(model.data)), 
                                                                      re.form=~0)) # re.form=~0 means include no random effects, so population level estimates
       
       ami_model.preds_tidy <- prediction_summary(ami_model.preds, ndraw = 10000)
@@ -443,34 +425,16 @@
       
       # save the plot
       saveplots(plot.object = ami_model.plot, 
-                plot.name = 'modeled_percentage_ami')
+                plot.name = 'figure_3_ mean_predicted_AMI')
       
 #### Sensitivity analysis dropping those with disabilities: two stage regression with IPTW: wages as outcome of interest ----
       
-  # Step 0: Identify covariates of interest and subset data to when all are present ----
-      covariates <- c('age_at_exit', 'gender_me', 'race_eth_me', 'exit_year', 'season', 
-                      'housing_time_at_exit', 'single_caregiver', 'agency', 
-                      'prog_type_use') # prog_type_use will not be in the propensity score, but will be used in wage model
+  # Step 0: Subset data to when all are present ----
       model.data <- copy(raw)
-      model.data[, complete_covariates := 1]
-      for(cv in covariates){
-        model.data[is.na(get(cv)), complete_covariates := 0]
-      }
-      model.data <- model.data[complete_covariates == 1]
-      
       model.data <- model.data[!is.na(hh_disability) & hh_disability == 0]
       
   # Step 1: Get propensity scores using multinomial logistic regression (using GEE with complete data using 'All Programs') ----
-      ps_model <- nomLORgee(formula = exit_category ~ age_at_exit + gender_me + 
-                              race_eth_me + exit_year + season + housing_time_at_exit + 
-                              single_caregiver + agency,
-                            data = setDF(copy(model.data)[qtr == 0]), # just model at the time of exit
-                            id = hh_id_kc_pha, # important because can have >1 person in a single household
-                            LORstr = "independence")
-      
-      ps <- as.data.table(fitted(ps_model)) # get fitted value ... i.e., the probabilities
-      colnames(ps) <- c('Negative', 'Neutral', 'Positive') # fitted value columns are in same order as the factor label for exit_category
-      ps <- cbind("id_kc_pha" = model.data[qtr == 0]$id_kc_pha, ps)
+      # same model as when calculating wages above, because the true outcome of interest is irrelevant in the propensity score model
       head(ps)
       
   # Step 2: Calculate the inverse probability treatment weight (IPTW) and assign it to each observation ----
@@ -478,7 +442,7 @@
                           ps, 
                           by = 'id_kc_pha', 
                           all.x = T, 
-                          all.y = T)
+                          all.y = F)
       model.data[, iptw := fcase(exit_category == 'Negative', 1/Negative, 
                                  exit_category == 'Neutral', 1/Neutral, 
                                  exit_category == 'Positive', 1/Positive)]
@@ -489,20 +453,27 @@
                                                     prog_type_use +
                                                     (1 | id_kc_pha) + 
                                                     (1 + exit | hh_id_kc_pha), 
-                                          data = model.data, 
+                                          data = setDF(copy(model.data)), 
                                           weights = iptw)
       
 
       sensitivity_model.tidy <- model.clean(sensitivity_model, myformat = 'dollar')
-      addWorksheet(wb, 'Table_X_sensitivity_model') 
-      writeDataTable(wb, sheet = 'Table_X_sensitivity_model', sensitivity_model.tidy, 
+      addWorksheet(wb, 'Table_X_regression_notdisabled') 
+      writeDataTable(wb, sheet = 'Table_X_regression_notdisabled', sensitivity_model.tidy, 
                      rowNames = F, colNames = T)   
       
+      # The # of fitted values is less than the number of rows in the original data set, so, to be sure I can actually predict, I will use the dataset saved the regression model
+        mynewdata <- as.data.table(sensitivity_model@frame) # get dataset from model
+        setnames(mynewdata, names(mynewdata)[3:10], c('basis1', 'basis2', 'basis3', 'prog_type_use', 'id_kc_pha', 'exit', 'hh_id_kc_pha', 'iptw')) # change to data.table and label columns
+        myspline = cbind(time = -4:4, as.data.table(splines::bs(-4:4, degree = 3, Boundary.knots = c(-4, 4)))) # get key of times and spline bases
+        setnames(myspline, names(myspline)[2:4], c('basis1', 'basis2', 'basis3')) # standardize naming from spline function to match that in regression data
+        mynewdata <- merge(mynewdata, myspline, by = c('basis1', 'basis2', 'basis3'), all = T) # merge on spline data to get the underlying time (-4:4)
+        mynewdata[, c('basis1', 'basis2', 'basis3') := NULL] # drop spline bases
       
       sensitivity_model.preds <- as.data.table(marginaleffects::predictions(sensitivity_model, 
-                                                                     newdata = model.data, 
-                                                                     re.form=~0)) # re.form=~0 means include no random effects, so population level estimates
-      
+                                                                            newdata = mynewdata, # setDF(copy(model.data)), 
+                                                                            re.form=~0)) # re.form=~0 means include no random effects, so population level estimates
+
       sensitivity_model.preds_tidy <- prediction_summary(sensitivity_model.preds, ndraw = 10000)
       
   # Step 4: plot ----

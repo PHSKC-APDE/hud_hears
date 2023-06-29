@@ -1,13 +1,85 @@
-﻿hh_size,multiplier,ami,notes
-1,0.875,74900,from Tyler on 2023-06-26
-2,1,85600,from Tyler on 2023-06-26
-3,1.125,96300,from Tyler on 2023-06-26
-4,1.25,107000,from Tyler on 2023-06-26
-5,1.35,115600,from Tyler on 2023-06-26
-6,1.45,124200,from Tyler on 2023-06-26
-7,1.55,132700,from Tyler on 2023-06-26
-8,1.65,141300,from Tyler on 2023-06-26
-9,1.75,149800,from Tyler on 2023-06-26
-10,1.85,158400,from Tyler on 2023-06-26
-11,1.95,166950,from Tyler on 2023-06-26
-12,2.05,175500,from Tyler on 2023-06-26
+﻿fips2010,hh_size,multiplier,ami,notes
+53033,1,0.875,74900,from Tyler on 2023-06-26
+53033,2,1,85600,from Tyler on 2023-06-26
+53033,3,1.125,96300,from Tyler on 2023-06-26
+53033,4,1.25,107000,from Tyler on 2023-06-26
+53033,5,1.35,115600,from Tyler on 2023-06-26
+53033,6,1.45,124200,from Tyler on 2023-06-26
+53033,7,1.55,132700,from Tyler on 2023-06-26
+53033,8,1.65,141300,from Tyler on 2023-06-26
+53033,9,1.75,149800,from Tyler on 2023-06-26
+53033,10,1.85,158400,from Tyler on 2023-06-26
+53033,11,1.95,166950,from Tyler on 2023-06-26
+53033,12,2.05,175500,from Tyler on 2023-06-26
+53025,1,0.875,45500,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53025,2,1,52000,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53025,3,1.125,58500,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53025,4,1.25,65000,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53025,5,1.35,70200,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53025,6,1.45,75400,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53025,7,1.55,80600,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53025,8,1.65,85800,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53025,9,1.75,91000,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53025,10,1.85,96200,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53025,11,1.95,101400,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53025,12,2.05,106600,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53029,1,0.875,53200,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53029,2,1,60800,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53029,3,1.125,68400,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53029,4,1.25,76000,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53029,5,1.35,82100,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53029,6,1.45,88200,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53029,7,1.55,94250,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53029,8,1.65,100350,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53029,9,1.75,106400,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53029,10,1.85,112500,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53029,11,1.95,118600,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53029,12,2.05,124650,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53045,1,0.875,45500,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53045,2,1,52000,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53045,3,1.125,58500,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53045,4,1.25,65000,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53045,5,1.35,70200,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53045,6,1.45,75400,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53045,7,1.55,80600,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53045,8,1.65,85800,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53045,9,1.75,91000,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53045,10,1.85,96200,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53045,11,1.95,101400,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53045,12,2.05,106600,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53053,1,0.875,52250,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53053,2,1,59700,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53053,3,1.125,67200,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53053,4,1.25,74650,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53053,5,1.35,80600,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53053,6,1.45,86600,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53053,7,1.55,92550,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53053,8,1.65,98550,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53053,9,1.75,104500,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53053,10,1.85,110450,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53053,11,1.95,116450,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53053,12,2.05,122400,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53061,1,0.875,74900,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53061,2,1,85600,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53061,3,1.125,96300,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53061,4,1.25,107000,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53061,5,1.35,115600,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53061,6,1.45,124150,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53061,7,1.55,132700,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53061,8,1.65,141250,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53061,9,1.75,149800,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53061,10,1.85,158400,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53061,11,1.95,166950,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53061,12,2.05,175500,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53077,1,0.875,45500,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53077,2,1,52000,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53077,3,1.125,58500,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53077,4,1.25,65000,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53077,5,1.35,70200,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53077,6,1.45,75400,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53077,7,1.55,80600,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53077,8,1.65,85800,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53077,9,1.75,91000,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53077,10,1.85,96200,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53077,11,1.95,101400,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"
+53077,12,2.05,106600,"downloaded 12 May 2022, https://www.huduser.gov/portal/datasets/il/il22/HUD-IL-NPG-FY22.xlsx"

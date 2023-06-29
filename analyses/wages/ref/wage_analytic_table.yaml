@@ -13,7 +13,10 @@ vars:
     qtr_date: DATE
     wage: INT
     hrs: INT
+    hhwage: INT
+    hhhrs: INT
     wage_hourly: NUMERIC(4,2)
+    hhwage_hourly: NUMERIC(4,2)
     ami: NUMERIC(38,5)
     percent_ami: NUMERIC(38,5)
     race_eth_me: NVARCHAR(18)
@@ -24,6 +27,7 @@ vars:
     hh_disability: BIT
     n_disability: INT
     single_caregiver: BIT
+    hh_gt_1_worker: BIT
     housing_time_at_exit: NUMERIC(38,5)
     agency: NVARCHAR(10)
     prog_type_use: NVARCHAR(3)
@@ -31,3 +35,4 @@ vars:
     major_prog: NVARCHAR(8)
     subsidy_type: NVARCHAR(46)
     exit_reason_clean: NVARCHAR(98)
+    living_wage: BIT

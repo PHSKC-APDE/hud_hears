@@ -266,11 +266,13 @@
                                season +
                                housing_time_at_exit +
                                hh_disability +
+                               hh_gt_1_worker +
                                single_caregiver + 
                                percent_ami +
+                               living_wage +
                                agency +
                              prog_type_use, 
-                           data = raw.subset[qtr == 0], 
+                           data = raw.subset[qtr == 0], # at exit!
                            control = my_controls)
           ))
           
@@ -284,7 +286,6 @@
       # save vector of vars associated with exposure (exit type) ----
         setnames(table2, "", "col1")
         table2[, pnumeric := as.numeric(gsub("<", "", `p value`))]
-        exposure.associated <- gsub("\\*\\*", "", table2[pnumeric < 0.05]$col1)
         table2[, pnumeric := NULL]
         
       # Format big numbers ---- 
@@ -305,17 +306,19 @@
         }        
 
       # tidy table ----
-        table2[, col1 := gsub("wage", "Wages", col1)]
-        table2[, col1 := gsub("Wages_hourly", "Wages hourly", col1)]
-        table2[, col1 := gsub("hrs", "Hours", col1)]
+        table2[, col1 := gsub("\\*wage\\*", "\\*Wages, quarterly\\*", col1)]
+        table2[, col1 := gsub("wage_hourly", "Wages, hourly", col1)]
+        table2[, col1 := gsub("hrs", "Hours, quarterly", col1)]
         table2[, col1 := gsub("percent_ami", "Percent AMI", col1)]
         table2[, col1 := gsub("race_eth_me", "Race/ethnicity", col1)]
         table2[, col1 := gsub("gender_me", "Gender", col1)]
         table2[, col1 := gsub("race_gender", "Race/ethnicity & Gender", col1)]
         table2[, col1 := gsub("age_at_exit", "Age", col1)]
         table2[, col1 := gsub("hh_disability", "Household with disability", col1)]
+        table2[, col1 := gsub("hh_gt_1_worker", "Household ≥ 2 wage earners", col1)]
         table2[, col1 := gsub("single_caregiver", "Single caregiver", col1)]
-        table2[, col1 := gsub("housing_time_at_exit", "Years in public housing", col1)]
+        table2[, col1 := gsub("housing_time_at_exit", "Years of housing assistance", col1)]
+        table2[, col1 := gsub("living_wage", "Living wage", col1)]
         table2[, col1 := gsub("agency", "Agency", col1)]
         table2[, col1 := gsub("prog_type_use", "Program type", col1)]
         table2[, col1 := gsub("season", "Season", col1)]
@@ -325,7 +328,7 @@
         table2[ !is.na(`p value`) & `p value` != "", variable := col1]
         table2[, variable := variable[1], by= .(cumsum(!is.na(variable)) ) ] # fill downward
         
-        # when binary true/false, collapse it down to one row
+        # when binary true/false, collapse it down to one row ----
         tf.vars <- table2[col1 == 'TRUE']$variable # identify true / false variables
         table2 <- table2[col1 != "FALSE"]
         table2[col1 == "TRUE", col1 := variable]
@@ -354,79 +357,6 @@
         writeDataTable(wb, sheet = paste0("Table_2_", gsub(" ", "_", tempx)), table2, 
                        rowNames = F, colNames = T)  
         
-      # Identify confounders ----
-        if(tempx == "All Programs"){
-          # Identify confounders (associated with exposure and outcome) ----
-          # remove wage / ami since they are the outcomes of interest ----
-          exposure.associated <- setdiff(exposure.associated, c('wage', 'percent_ami', "wage_hourly", "hrs", "race_gender"))
-          pscovariates <- copy(exposure.associated) # keep a copy if want to create propensity score
-          
-          # split categorical from continuous ----
-          # identify categorical vars & set aside ----
-          categorical <- exposure.associated[sapply(raw.subset[, ..exposure.associated], class) %in% c("character", "factor", "logical")]
-          exposure.associated <- setdiff(exposure.associated, categorical) # remove definite categorical from pool
-          
-          # partition remaining vars into categorical and continuous ----
-          continuous <- c()
-          for(maybecat in exposure.associated){
-            tempclass <- class(raw.subset[[maybecat]])
-            tempvals <- length(unique(raw.subset[[maybecat]]))
-            if(tempclass == 'integer' & tempvals < 6){ # assume if less than 6 unique integer values, it is actually a factor/nominal var
-              categorical <- c(categorical, maybecat)
-            } else {
-              continuous <- c(continuous, maybecat)
-            }
-          }
-          
-          # test association of categorical vars with the continuous outcome (wages) ----
-          # use Kruskal-Wallace test because does not assume normality as would one-way Anova
-          # null hypothesis is that the mean *ranks* (not the means) for the groups are the same
-          outcome.associated <- c() # empty vector to add on vars associated with the exposure (wages)
-          if(length(categorical) > 0){
-            for(mycat in categorical){
-              temp.kw <- kruskal.test(wage ~ get(mycat), 
-                                      data = raw.subset[qtr==0])
-              if(temp.kw$p.value < 0.05){
-                outcome.associated <- c(outcome.associated, mycat)
-              }
-            }
-          }
-          
-          # test association of continuous vars with the continuous outcome (wages) ----
-          # use Spearman's rank correlation because robust to non-normality (which is what we have here)
-          if(length(continuous) > 0){
-            for(mycon in continuous){
-              temp.spearman <- suppressWarnings(
-                cor.test( ~ wage + get(mycon), 
-                          data = raw.subset[qtr==0], 
-                          method = 'spearman', 
-                          continuity = FALSE, 
-                          conf.level = 0.95) 
-              )
-              if(temp.spearman$p.value < 0.05){
-                outcome.associated <- c(outcome.associated, mycon)
-              }
-            }
-          }
-          
-          # Create final list of confounders (associated with exposure and outcome) ----
-          # since we only checked for association with outcome among those associated with the exposure
-          # the final list of those associated with the outcome is the list of confounders
-          confounders <- copy(outcome.associated)
-          
-          # Save confounders & pscovariates as an object for use in modeling ----
-          # need to have an object (e.g., a table or list) rather than a value for saving
-          confounders <- data.table(confounders = confounders)
-          tempy <- tempfile(fileext = ".Rdata") # tempfile in memory to hold Excel file
-          save(confounders, file = tempy)
-          drv$upload_file(src = tempy, 
-                          dest = "HUD HEARS Study/wage_analysis/output/hpd_revision_1/confounders.Rdata")  
-          pscovariates <- data.table(pscovariates = pscovariates)
-          tempy <- tempfile(fileext = ".Rdata") # tempfile in memory to hold Excel file
-          save(pscovariates, file = tempy)
-          drv$upload_file(src = tempy, 
-                          dest = "HUD HEARS Study/wage_analysis/output/hpd_revision_1/pscovariates.Rdata")  
-        }
     }
     
 # Write Tables 0, 1 & 2 using openxlsx to SharePoint ----

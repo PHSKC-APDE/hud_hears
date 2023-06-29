@@ -176,10 +176,9 @@
       # New data table received from Tyler 2023-06-26 goes up to 12 people, which covers all households in data
       # data is from 2018, but data is minimal and I noted in the paper that inflation is ignored, 
       # so use the 2018 AMI for 2016:2018
-        
       ami <- fread(file.path(here::here(), "analyses/wages/ref/KCHA_2018_Area_Median_Income.csv"))[, c('notes', 'multiplier') := NULL]
       ami <- setDT(tidyr::crossing(data.table(amiyear = c(2015:2018)), ami))
-      
+
     # MIT living wage ----
       living_wage <- fread(paste0(here::here(), '/analyses/wages/ref/MIT_Living_Wage_2023_06_06.csv'))
       living_wage <- living_wage[, .(adults, children, living_wage_2016, living_wage_2017, living_wage_2018)]
@@ -463,15 +462,20 @@
 # Merge on reference data ----
       # merge area median income by year onto combo table ----
           combo[, amiyear := year(qtr_date)]
-          combo <- merge(combo, ami, by = c("amiyear", "hh_size"), all.x = T, all.y = F)
+          combo[, fips2010 := as.integer(geo_countyfp10)]
+          combo[fips2010 == 33, fips2010 := 53033] 
+          combo <- merge(combo, ami, by = c("amiyear", "hh_size", 'fips2010'), all.x = T, all.y = F)
           combo[, c("amiyear") := NULL]
           combo[, hhwage := sum(wage),  by = c("hh_id_kc_pha", "qtr")] # calculate quarterly wage for whole household
-          combo[, hhhours := sum(hrs),  by = c("hh_id_kc_pha", "qtr")] # calculate quarterly hours for whole household
-          combo[, hhwage_hourly := rads::round2(hhwage / hhhours, 2)]
+          combo[, hhhrs := sum(hrs),  by = c("hh_id_kc_pha", "qtr")] # calculate quarterly hours for whole household
+          combo[, hhwage_hourly := rads::round2(hhwage / hhhrs, 2)]
           combo[, percent_ami := rads::round2(100*4*hhwage / ami, 1)] # multiply by four because wage is quarterly but AMI is annual
-          message("There is a substantial increase in missing AMI vs missing wages. Confirmed that
-                  this is due solely to large household sizes, because all combinations of 
-                  amiyear and fips2010 are present in both both the combo[] and ami[] datasets.")
+          
+          # only keep percent_ami if always present across time
+          message("Have a LOT of missing percent AMI because of missing address information 4 quarters after exit")
+          ids.missing.percent_ami <- unique(combo[qtr %in% -4:4 & is.na(percent_ami)]$id_kc_pha)    
+          combo[id_kc_pha %in% ids.missing.percent_ami, percent_ami := NA]
+          combo[!is.na(percent_ami), .N, qtr]
           
       # merge on MIT Living wage data ----
           # identify the number of workers per household
@@ -480,6 +484,8 @@
                          by = 'hh_id_kc_pha', 
                          all.x = T, 
                          all.y = F)      
+          combo[, hh_gt_1_worker := 0]
+          combo[workers > 1 & qtr %in% -4:4, hh_gt_1_worker := 1]
           
           # create categories for merging with MIT Living wage
           combo[, mitlw_category := fcase(adults == 1 & kids == 0, 'cat01', 
@@ -503,14 +509,14 @@
                          all.y = F)
           
           # identify whether or not have a living wage (according to MIT metric) at quarters 0 (exit) & 4 (1 year post exit)
-          combo[!is.na(mitlw_category) & qtr %in% c(0, 4), living_wage := 'Below']
-          combo[!is.na(mitlw_category) & qtr %in% c(0, 4) & year(qtr_date) == 2016 & hhwage_hourly >= living_wage_2016, living_wage := 'At or above']
-          combo[!is.na(mitlw_category) & qtr %in% c(0, 4) & year(qtr_date) == 2017 & hhwage_hourly >= living_wage_2017, living_wage := 'At or above']
-          combo[!is.na(mitlw_category) & qtr %in% c(0, 4) & year(qtr_date) == 2018 & hhwage_hourly >= living_wage_2018, living_wage := 'At or above']
+          # note that MIT living wage uses hourly wages that are PER WORKING adult, so use the average household wage rather than the sum of household wages
+          combo[!is.na(mitlw_category) & qtr %in% c(0, 4), living_wage := 0]
+          combo[!is.na(mitlw_category) & qtr %in% c(0, 4) & year(qtr_date) == 2016 & hhwage_hourly >= living_wage_2016, living_wage := 1]
+          combo[!is.na(mitlw_category) & qtr %in% c(0, 4) & year(qtr_date) == 2017 & hhwage_hourly >= living_wage_2017, living_wage := 1]
+          combo[!is.na(mitlw_category) & qtr %in% c(0, 4) & year(qtr_date) == 2018 & hhwage_hourly >= living_wage_2018, living_wage := 1]
           combo[, c('living_wage_2016', 'living_wage_2017', 'living_wage_2018') := NULL]
           
           setorder(combo[!is.na(living_wage), .N, .(living_wage, qtr)], qtr)[]
-          
           
 # Tidy exit definitions for analysis ----
     combo[, exit_category := factor(exit_category, levels = c("Positive", "Neutral", "Negative"))] # to force specific order in graph  
@@ -522,9 +528,9 @@
     setorder(combo, hh_id_kc_pha, id_kc_pha, qtr)
     combo <- combo[, .(hh_id_kc_pha, id_kc_pha, 
                       exit, exit_category, exit_date, exit_year = year(exit_date), exit_qtr, qtr, qtr_date,
-                      wage, hrs, wage_hourly, ami, percent_ami, hhwage, hhhours, hhwage_hourly, living_wage, 
+                      wage, hrs, wage_hourly, ami, percent_ami, hhwage, hhhrs, hhwage_hourly, living_wage, 
                       race_eth_me, gender_me, race_gender, age_at_exit, hh_size, hh_disability, n_disability, 
-                      single_caregiver, housing_time_at_exit, 
+                      single_caregiver, housing_time_at_exit, hh_gt_1_worker,
                       agency, prog_type, major_prog, subsidy_type, exit_reason_clean)]
 
     count10_final <- rbind(unique(combo[, .(id_kc_pha, agency)])[, .N, agency], data.table(agency = "Either", N = length(unique(combo$id_kc_pha)) ))
@@ -609,8 +615,7 @@
       )
     
     # write table to Azure 16 (production) SQL server ----
-    table_config <- yaml::yaml.load(httr::GET(url = "https://raw.githubusercontent.com/PHSKC-APDE/hud_hears/main/analyses/wages/ref/wage_analytic_table.yaml", 
-                                              httr::authenticate(Sys.getenv("GITHUB_TOKEN"), "")))
+    table_config <- yaml::read_yaml(file.path(here::here(), "analyses/wages/ref/wage_analytic_table.yaml"))
 
     setcolorder(combo, names(table_config$vars))
       

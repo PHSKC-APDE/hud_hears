@@ -413,11 +413,11 @@
         # quarterly wage data
             setorder(combo[is.na(wage), .N, qtr], qtr)[] # just to see distribution of where we have data
             setorder(combo, id_hudhears, qtr_date, qtr)
-            combo[, wage  := nafill(wage, type = 'locf'), by = "id_hudhears" ] # fill wage forward / downward
-            combo[, wage  := nafill(wage, type = 'nocb'), by = "id_hudhears" ] # fill wage backward / upward
-            combo[, hrs  := nafill(hrs, type = 'locf'), by = "id_hudhears" ] # fill hours forward / downward
-            combo[, hrs  := nafill(hrs, type = 'nocb'), by = "id_hudhears" ] # fill hours backward / upward
-        
+            # combo[, wage  := nafill(wage, type = 'locf'), by = "id_hudhears" ] # fill wage forward / downward
+            # combo[, wage  := nafill(wage, type = 'nocb'), by = "id_hudhears" ] # fill wage backward / upward
+            # combo[, hrs  := nafill(hrs, type = 'locf'), by = "id_hudhears" ] # fill hours forward / downward
+            # combo[, hrs  := nafill(hrs, type = 'nocb'), by = "id_hudhears" ] # fill hours backward / upward
+            
         # hourly wage data
           combo[, wage_hourly := rads::round2(wage / hrs, 2)]
           # drop hourly wages that irrational
@@ -433,8 +433,8 @@
             combo <- merge(combo, minwage, by = 'year', all.x = T, all.y = F)
             ids.w.problem.hourly.wages <- combo[is.na(wage_hourly) |
                                                 is.nan(wage_hourly) | 
-                                                wage_hourly > 100 | # would not receive federal housing assistance if made $100/hr
-                                                wage_hourly < minimumwage # can't make less than WA minimum wage 
+                                                wage_hourly > 100  # would not receive federal housing assistance if made $100/hr
+                                                # | wage_hourly < minimumwage # no longer dropped bc reviewer pointed out that can make less than min wage (sadly) 
                                                ]$id_kc_pha 
             combo[id_kc_pha %in% ids.w.problem.hourly.wages, c("wage_hourly", "hrs") := NA]
             combo[, year := NULL]
@@ -470,12 +470,6 @@
           combo[, hhhrs := sum(hrs),  by = c("hh_id_kc_pha", "qtr")] # calculate quarterly hours for whole household
           combo[, hhwage_hourly := rads::round2(hhwage / hhhrs, 2)]
           combo[, percent_ami := rads::round2(100*4*hhwage / ami, 1)] # multiply by four because wage is quarterly but AMI is annual
-          
-          # only keep percent_ami if always present across time
-          message("Have a LOT of missing percent AMI because of missing address information 4 quarters after exit")
-          ids.missing.percent_ami <- unique(combo[qtr %in% -4:4 & is.na(percent_ami)]$id_kc_pha)    
-          combo[id_kc_pha %in% ids.missing.percent_ami, percent_ami := NA]
-          combo[!is.na(percent_ami), .N, qtr]
           
       # merge on MIT Living wage data ----
           # identify the number of workers per household

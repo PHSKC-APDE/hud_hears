@@ -420,25 +420,10 @@
             
         # hourly wage data
           combo[, wage_hourly := rads::round2(wage / hrs, 2)]
-          # drop hourly wages that irrational
-            combo[is.infinite(wage_hourly), wage_hourly := NA]
-            combo[, year := year(qtr_date)]
-            minwage <- fread(
-              httr::content(
-                httr::GET(url = "https://raw.githubusercontent.com/PHSKC-APDE/hud_hears/main/analyses/wages/ref/minimum_wage_history.csv", 
-                                      httr::authenticate(Sys.getenv("GITHUB_TOKEN"), ""))
-                )
-              )
-            minwage <- minwage[geography == "WA", .(year, minimumwage = as.numeric(gsub('\\$', '', wage)))]
-            combo <- merge(combo, minwage, by = 'year', all.x = T, all.y = F)
-            ids.w.problem.hourly.wages <- combo[is.na(wage_hourly) |
-                                                is.nan(wage_hourly) | 
-                                                wage_hourly > 100  # would not receive federal housing assistance if made $100/hr
-                                                # | wage_hourly < minimumwage # no longer dropped bc reviewer pointed out that can make less than min wage (sadly) 
-                                               ]$id_kc_pha 
-            combo[id_kc_pha %in% ids.w.problem.hourly.wages, c("wage_hourly", "hrs") := NA]
-            combo[, year := NULL]
-        
+          # previously dropped wages_hours if less than min wage, but challenged by reviewer to keep it in there unless have strong rationale
+          combo[wage_hourly > 100 | is.nan(wage_hourly) | is.infinite(wage_hourly), wage_hourly := NA] # this is arbitrary, but it is EXTREMELY unlikely for people receiving housing support to receive this much compensation per hour
+          combo[is.na(wage_hourly), hrs := NA] # if hourly wage is illogical, the hours are also not reliable
+          
       # address data ----
           # check if have address for each quarter of exit (qtr == 0)
           setorder(combo[is.na(geo_tractce10), .N, qtr])[] # rarely missing baseline address and when missing, always missing, so leave as is.
@@ -461,6 +446,7 @@
 
 # Merge on reference data ----
       # merge area median income by year onto combo table ----
+          # remember AMI is per household! So need to tally up the household level data. 
           combo[, amiyear := year(qtr_date)]
           combo[, fips2010 := as.integer(geo_countyfp10)]
           combo[fips2010 == 33, fips2010 := 53033] 

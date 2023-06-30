@@ -509,7 +509,7 @@
                     dest = paste0(outputdir, "/Tables_regression.xlsx")) 
         
 #### Compare the observed and expected & save as Excel file in SharePoint----
-    observed <- raw[, .(Observed = rads::round2(mean(wage, na.rm = T), 0)), .(qtr, exit_category)]
+    observed <- copy(raw)[, .(Observed = rads::round2(mean(wage, na.rm = T), 0)), .(qtr, exit_category)]
     observed[, Quarter := as.character(qtr)]
     observed[Quarter == '0', Quarter := 'Exit']
     

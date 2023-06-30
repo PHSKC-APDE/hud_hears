@@ -351,7 +351,7 @@
         scale_x_continuous(labels=c("1 year prior", "Exit", "1 year post"), breaks=c(-4, 0, 4))
       
       wage_model.plot <- formatplots(wage_model.plot) + 
-        scale_y_continuous(limits = c(4000, 9000), breaks=c(seq(4000, 9000, 1000)), labels=scales::dollar_format()) +
+        scale_y_continuous(limits = c(4000, 9100), breaks=c(seq(4000, 9000, 1000)), labels=scales::dollar_format()) +
         facet_wrap(~program, nrow = 2, strip.position = "top") +
         theme(panel.spacing = unit(15, "pt"))
       
@@ -364,8 +364,8 @@
       
 #### Two regression with IPTW: % AMI as outcome of interest----
   # Step 0: Subset data to when all are present ----
-      model.data <- copy(raw)
-      model.data <- model.data[!id_kc_pha %in% unique(model.data[is.na(percent_ami)]$id_kc_pha)] # drop if do not have AMI for each time point
+      model.data <- copy(raw)[!is.na(percent_ami) & !is.na(prog_type_use)]
+      # model.data <- model.data[!id_kc_pha %in% unique(model.data[is.na(percent_ami)]$id_kc_pha)] # drop if do not have AMI for each time point
       
   # Step 1: Get propensity scores using multinomial logistic regression (using GEE with complete data using 'All Programs') ----
       # same model as when calculating wages above, because the true outcome of interest is irrelevant in the propensity score model
@@ -416,7 +416,7 @@
         scale_x_continuous(labels=c("1 year prior", "Exit", "1 year post"), breaks=c(-4, 0, 4))
       
       ami_model.plot <- formatplots(ami_model.plot) + 
-        scale_y_continuous(limits = c(15, 60), breaks = seq(20, 60, 10), labels=scales::label_percent(scale = 1)) +
+        scale_y_continuous(limits = c(15, 70), breaks = seq(20, 70, 10), labels=scales::label_percent(scale = 1)) +
         facet_wrap(~program, nrow = 2, strip.position = "top") +
         theme(panel.spacing = unit(15, "pt"))
       
@@ -489,7 +489,7 @@
         scale_x_continuous(labels=c("1 year prior", "Exit", "1 year post"), breaks=c(-4, 0, 4))
       
       sensitivity_model.plot <- formatplots(sensitivity_model.plot) + 
-        scale_y_continuous(limits = c(4000, 9000), breaks=c(seq(4000, 9000, 1000)), labels=scales::dollar_format()) +
+        scale_y_continuous(limits = c(4000, 9100), breaks=c(seq(4000, 9000, 1000)), labels=scales::dollar_format()) +
         facet_wrap(~program, nrow = 2, strip.position = "top") +
         theme(panel.spacing = unit(15, "pt"))
       
@@ -501,13 +501,41 @@
                 plot.name = 'modeled_sensivity_analysis')
       
           
-#### Export Excel file to SharePoint ----
+#### Export Regression output to Excel file in SharePoint ----
     tempy.xlsx <- tempfile(fileext = ".xlsx") # tempfile in memory to hold Excel file
     saveWorkbook(wb, file = tempy.xlsx, overwrite = T) # write to tempfile
     
     drv$upload_file(src = tempy.xlsx, 
                     dest = paste0(outputdir, "/Tables_regression.xlsx")) 
         
+#### Compare the observed and expected & save as Excel file in SharePoint----
+    observed <- raw[, .(Observed = rads::round2(mean(wage, na.rm = T), 0)), .(qtr, exit_category)]
+    observed[, Quarter := as.character(qtr)]
+    observed[Quarter == '0', Quarter := 'Exit']
+    
+    expected = wage_model.preds[, .(Predicted = rads::round2(mean(estimate), 0)), .(qtr, exit_category)]
+    
+    observed_expected <- merge(observed, expected, by = c('qtr', 'exit_category'), all = T)
+    setorder(observed_expected, -exit_category, qtr)
+    observed_expected <- observed_expected[, .(qtr, Quarter, 'Exit Type' = exit_category, Observed, Predicted)]
+    observed_expected[, qtr := NULL]
+    observed_expected[, 'Difference' := Observed - Predicted]
+    observed_expected[, per := paste0(rads::round2(100*Difference / Observed, 1), "%")]
+    observed_expected[, Observed := paste0("$", format(Observed, big.mark = ','))]
+    observed_expected[, Predicted := paste0("$", format(Predicted, big.mark = ','))]
+    observed_expected[, Difference := paste0("$", format(Difference, big.mark = ','), " (", per, ")")]
+    observed_expected[, per := NULL]
+    observed_expected[, Difference := gsub("$-", "-$", Difference)]
+    observed_expected[!grepl("\\.", Difference), Difference := gsub("%", ".0%", Difference)]
+    
+    wb2 <- createWorkbook() # initiate a new / empty workbook
+    addWorksheet(wb2, 'appdx_obs_vs_pred') 
+    writeDataTable(wb2, sheet = 'appdx_obs_vs_pred', observed_expected, rowNames = F, colNames = T)    
+    tempy <- tempfile(fileext = ".xlsx") # tempfile in memory to hold Excel file
+    saveWorkbook(wb2, file = tempy, overwrite = T)
+    drv$upload_file(src = tempy, 
+                    dest = paste0(outputdir, "/appendix_table_1_obs_v_preds.xlsx")) 
+    
 # The end! ----
 
 

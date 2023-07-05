@@ -485,13 +485,15 @@
                    size = 2.5) +
         labs(
           x = "", 
-          y = "Predicted quarterly wages") +
-        scale_x_continuous(labels=c("1 year prior", "Exit", "1 year post"), breaks=c(-4, 0, 4))
+          y = "Predicted quarterly wages", 
+          caption = 'Sensitivity analysis, limited to households where the head of household is not disabled') +
+        scale_x_continuous(labels=c("1 year prior", "Exit", "1 year post"), breaks=c(-4, 0, 4)) 
       
       sensitivity_model.plot <- formatplots(sensitivity_model.plot) + 
-        scale_y_continuous(limits = c(4000, 9100), breaks=c(seq(4000, 9000, 1000)), labels=scales::dollar_format()) +
+        scale_y_continuous(limits = c(4000, 9300), breaks=c(seq(4000, 9000, 1000)), labels=scales::dollar_format()) +
         facet_wrap(~program, nrow = 2, strip.position = "top") +
-        theme(panel.spacing = unit(15, "pt"))
+        theme(panel.spacing = unit(15, "pt"), 
+              plot.caption = element_text(size=8))
       
       # dev.new(width = 6,  height = 4, unit = "in", noRStudioGD = TRUE)
       plot(sensitivity_model.plot)

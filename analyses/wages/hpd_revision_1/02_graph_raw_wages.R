@@ -93,8 +93,8 @@
         dt1[qtr == 4, time := 1]
         dt1[, time2 := factor(time, levels = c(-1, 0, 1), labels = c("1 year prior", "Exit", "1 year post"))]
         
-        dt1[, se := std.error(wage), .(qtr, exit_category, prog_type_use)]
-        dt1[, mean := mean(wage), .(qtr, exit_category, prog_type_use)]
+        dt1[, se := std.error(wage, na.rm = T), .(qtr, exit_category, prog_type_use)]
+        dt1[, mean := mean(wage, na.rm = T), .(qtr, exit_category, prog_type_use)]
         dt1[, upper := mean + (qnorm(.975) * se)]
         dt1[, lower := mean - (qnorm(.975) * se)]
         

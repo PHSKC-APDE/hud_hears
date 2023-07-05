@@ -304,6 +304,7 @@
   # Step 3: Fit the mixed model, using the IPTW as a weight, and get predictions ----
       message('Using IPTW as a weight, vs as a covariate, is more robust to misspecification.')
       # The B-spline has zero knots because a 3rd degree polynomial (cubic spline) ... df - degrees = knots
+      # tried alternate specification with 1 knot at zero, but correlation coefficient was functionally the same as the simpler model (0.892 in both cases)
       wage_model <- lmerTest::lmer(formula = wage ~ 
                                              exit_category*splines::bs(time, df = 3, Boundary.knots = c(-4, 4)) + 
                                              prog_type_use +
@@ -313,8 +314,33 @@
                                    weights = iptw
                                    )
       
+      # test if using a spline is better than treating time as a factor ----
+        model.data[, time2 := factor(time, levels = c(0, -4:-1, 1:4))]
+        wage_model_v2 <- lmerTest::lmer(formula = wage ~ 
+                                       exit_category*time2 + 
+                                       prog_type_use +
+                                       (1 | id_kc_pha) + 
+                                       (1 + exit | hh_id_kc_pha), 
+                                     data = setDF(copy(model.data)), 
+                                     weights = iptw
+        )
+        wage_model.testv2 = anova(wage_model, wage_model_v2, test = 'LRT') # compare the two models
+        if(wage_model.testv2[["Pr(>Chisq)"]][2] < 0.05){message("Keep factored time")}else{message('keep spline')}
+        
+      # test if having a knot at zero has p-value < 0.05
+        wage_model_v3 <- lmerTest::lmer(formula = wage ~ 
+                                       exit_category*splines::bs(time, knot = 0, Boundary.knots = c(-4, 4)) + 
+                                       prog_type_use +
+                                       (1 | id_kc_pha) + 
+                                       (1 + exit | hh_id_kc_pha), 
+                                     data = setDF(copy(model.data)), 
+                                     weights = iptw
+        )
+        wage_model.test_v3 = anova(wage_model, wage_model_v3, test = 'LRT') # compare the two models
+        if(wage_model.test_v3[["Pr(>Chisq)"]][2] < 0.05){message("Keep knot")}else{message('Drop knot')}
+      
       # test if p-value for interaction term is < 0.05
-        wage_model.alt <- lmerTest::lmer(formula = wage ~ 
+        wage_model_v4 <- lmerTest::lmer(formula = wage ~ 
                                                    exit_category + splines::bs(time, df = 3, Boundary.knots = c(-4, 4)) + 
                                                    prog_type_use +
                                                    (1 | id_kc_pha) + 
@@ -322,10 +348,10 @@
                                          data = setDF(copy(model.data)), 
                                          weights = iptw)
         
-        wage_model.test = anova(wage_model, wage_model.alt, test = 'LRT') # compare the two models
-        if(wage_model.test[["Pr(>Chisq)"]][2] < 0.05){message("Keep interaction")}else{message('Drop interaction')}
+        wage_model.test_v4 = anova(wage_model, wage_model_v4, test = 'LRT') # compare the two models
+        if(wage_model.test_v4[["Pr(>Chisq)"]][2] < 0.05){message("Keep interaction")}else{message('Drop interaction')}
       
-      
+      # save final selected model
       wage_model.tidy <- model.clean(wage_model, myformat = 'dollar')
       addWorksheet(wb, 'Table_2_regression_wages') 
       writeDataTable(wb, sheet = 'Table_2_regression_wages', wage_model.tidy, 

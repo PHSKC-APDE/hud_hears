@@ -78,12 +78,12 @@
       esd_address <- setDT(DBI::dbGetQuery(conn = hhsaw20, "SELECT * FROM [esd].[stage_sow1_address3]"))
       
       # geocodes
-        geocodes <- setDT(
+        geocodes <- setDT(suppressWarnings(
           kcgeocode::fetch_addresses(ads = esd_address, 
                                      input_type = "raw", 
                                      geocode = T, 
                                      con = hhsaw16, 
-                                     deduplicate = T))  
+                                     deduplicate = T)))  
       # merge on geocode 
         esd_geo <- merge(esd_address, geocodes, by = c("geo_add1_raw", "geo_add2_raw", "geo_add3_raw", "geo_city_raw", "geo_state_raw", "geo_zip_raw"), all.x = T, all.y = F)
         esd_geo <- esd_geo[, .(id_hudhears, start_date, end_date, geo_id10_county, geo_id10_tract, geo_id10_state)]
@@ -422,7 +422,8 @@
           combo[, wage_hourly := rads::round2(wage / hrs, 2)]
           # previously dropped wages_hours if less than min wage, but challenged by reviewer to keep it in there unless have strong rationale
           # combo[wage_hourly > 100 | is.nan(wage_hourly) | is.infinite(wage_hourly), wage_hourly := NA] # this is arbitrary, but it is EXTREMELY unlikely for people receiving housing support to receive this much compensation per hour
-          combo[is.nan(wage_hourly) | is.infinite(wage_hourly), wage_hourly := NA] # this is arbitrary, but it is EXTREMELY unlikely for people receiving housing support to receive this much compensation per hour
+          combo[is.nan(wage_hourly) | is.infinite(wage_hourly), wage_hourly := NA] # 
+          combo[wage_hourly >= mean(wage_hourly, na.rm = T) + (3*sd(wage_hourly, na.rm = T)), wage_hourly := NA] # outlier if wage_hourly is > 3 z-scores from mean
           combo[is.na(wage_hourly), hrs := NA] # if hourly wage is illogical, the hours are also not reliable
           
       # address data ----
@@ -599,7 +600,7 @@
     table_config <- yaml::read_yaml(file.path(here::here(), "analyses/wages/ref/wage_analytic_table.yaml"))
 
     setcolorder(combo, names(table_config$vars))
-      
+    
     DBI::dbWriteTable(conn = hhsaw16,
                       name = DBI::Id(schema = table_config$schema, table = table_config$table),
                       value = setDF(unique(copy(combo))),

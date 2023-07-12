@@ -15,9 +15,9 @@ vars:
     hrs: INT
     hhwage: INT
     hhhrs: INT
-    wage_hourly: NUMERIC(4,2)
-    hhwage_hourly: NUMERIC(4,2)
-    ami: NUMERIC(38,5)
+    wage_hourly: NUMERIC(5,2)
+    hhwage_hourly: NUMERIC(5,2)
+    ami: INT
     percent_ami: NUMERIC(38,5)
     race_eth_me: NVARCHAR(18)
     race_gender: NVARCHAR(18)

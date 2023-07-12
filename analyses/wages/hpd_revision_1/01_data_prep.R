@@ -421,7 +421,8 @@
         # hourly wage data
           combo[, wage_hourly := rads::round2(wage / hrs, 2)]
           # previously dropped wages_hours if less than min wage, but challenged by reviewer to keep it in there unless have strong rationale
-          combo[wage_hourly > 100 | is.nan(wage_hourly) | is.infinite(wage_hourly), wage_hourly := NA] # this is arbitrary, but it is EXTREMELY unlikely for people receiving housing support to receive this much compensation per hour
+          # combo[wage_hourly > 100 | is.nan(wage_hourly) | is.infinite(wage_hourly), wage_hourly := NA] # this is arbitrary, but it is EXTREMELY unlikely for people receiving housing support to receive this much compensation per hour
+          combo[is.nan(wage_hourly) | is.infinite(wage_hourly), wage_hourly := NA] # this is arbitrary, but it is EXTREMELY unlikely for people receiving housing support to receive this much compensation per hour
           combo[is.na(wage_hourly), hrs := NA] # if hourly wage is illogical, the hours are also not reliable
           
       # address data ----

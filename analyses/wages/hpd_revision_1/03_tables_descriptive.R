@@ -324,6 +324,7 @@
         table1[, col1 := gsub("prog_type_use", "Program type", col1)]
         table1[, col1 := gsub("season", "Season", col1)]
         table1[, col1 := gsub("exit_year", "Exit Year", col1)]
+        table1[, col1 := gsub("hh_size", "Household size", col1)]
         
         table1[, col1 := gsub("&nbsp;|\\*\\*", "", col1)]
         table1[ !is.na(`p value`) & `p value` != "", variable := col1]

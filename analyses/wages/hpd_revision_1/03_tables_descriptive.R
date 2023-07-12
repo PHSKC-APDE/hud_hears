@@ -268,6 +268,7 @@
                                hh_disability +
                                hh_gt_1_worker +
                                single_caregiver + 
+                               hh_size + 
                                percent_ami +
                                living_wage +
                                agency +

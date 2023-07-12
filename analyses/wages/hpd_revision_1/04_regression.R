@@ -280,8 +280,8 @@
   
   # Step 1: Get propensity scores using multinomial logistic regression (using GEE with complete data using 'All Programs') ----
       ps_model <- nomLORgee(formula = exit_category ~ age_at_exit + gender_me + 
-                              race_eth_me + exit_year + season + hh_gt_1_worker + housing_time_at_exit + 
-                              hh_disability + single_caregiver + agency,
+                              race_eth_me + exit_year + season + hh_size + hh_gt_1_worker + 
+                              housing_time_at_exit + hh_disability + single_caregiver + agency,
                           data = setDF(copy(model.data)[qtr == 0]), # just model at the time of exit
                           id = hh_id_kc_pha, # important because can have >1 person in a single household
                           LORstr = "independence")
@@ -327,7 +327,7 @@
         wage_model.testv2 = anova(wage_model, wage_model_v2, test = 'LRT') # compare the two models
         if(wage_model.testv2[["Pr(>Chisq)"]][2] < 0.05){message("Keep factored time")}else{message('keep spline')}
         
-      # test if having a knot at zero has p-value < 0.05
+      # test if having a knot at zero has p-value < 0.05 ----
         wage_model_v3 <- lmerTest::lmer(formula = wage ~ 
                                        exit_category*splines::bs(time, knot = 0, Boundary.knots = c(-4, 4)) + 
                                        prog_type_use +
@@ -339,7 +339,7 @@
         wage_model.test_v3 = anova(wage_model, wage_model_v3, test = 'LRT') # compare the two models
         if(wage_model.test_v3[["Pr(>Chisq)"]][2] < 0.05){message("Keep knot")}else{message('Drop knot')}
       
-      # test if p-value for interaction term is < 0.05
+      # test if p-value for interaction term is < 0.05 ----
         wage_model_v4 <- lmerTest::lmer(formula = wage ~ 
                                                    exit_category + splines::bs(time, df = 3, Boundary.knots = c(-4, 4)) + 
                                                    prog_type_use +
@@ -351,7 +351,7 @@
         wage_model.test_v4 = anova(wage_model, wage_model_v4, test = 'LRT') # compare the two models
         if(wage_model.test_v4[["Pr(>Chisq)"]][2] < 0.05){message("Keep interaction")}else{message('Drop interaction')}
       
-      # save final selected model
+      # save final selected model ----
       wage_model.tidy <- model.clean(wage_model, myformat = 'dollar')
       addWorksheet(wb, 'Table_2_regression_wages') 
       writeDataTable(wb, sheet = 'Table_2_regression_wages', wage_model.tidy, 
@@ -377,7 +377,7 @@
         scale_x_continuous(labels=c("1 year prior", "Exit", "1 year post"), breaks=c(-4, 0, 4))
       
       wage_model.plot <- formatplots(wage_model.plot) + 
-        scale_y_continuous(limits = c(4000, 9100), breaks=c(seq(4000, 9000, 1000)), labels=scales::dollar_format()) +
+        scale_y_continuous(limits = c(4000, 9300), breaks=c(seq(4000, 9000, 1000)), labels=scales::dollar_format()) +
         facet_wrap(~program, nrow = 2, strip.position = "top") +
         theme(panel.spacing = unit(15, "pt"))
       
@@ -387,6 +387,47 @@
       # save the plot
       saveplots(plot.object = wage_model.plot, 
                 plot.name = 'figure_2_mean_predicted_wages')
+      
+      # Plot residuals ----
+      OvEdt <- copy(wage_model.preds)[!is.na(wage), .(wage, fitted = estimate, exit_category, time = as.integer(time), residual = wage - estimate)]
+      OvEdt[exit_category == "Negative", time := time - .05]
+      OvEdt[exit_category == "Positive", time := time + .05]
+      set.seed(98104) # because jitter is 'random'
+      
+      plot.resid.mod1 <- ggplot() +
+        geom_point(data = OvEdt, 
+                   aes(x = time, y = residual, color = exit_category), 
+                   size = 2.5, 
+                   position=position_jitterdodge(dodge.width=0.65, jitter.height=0, jitter.width=0.15), alpha=0.7) +
+        labs(
+          x = "", 
+          y = "Wage residuals") +
+        scale_x_continuous(labels=c("1 year prior", "Exit", "1 year post"), breaks=c(-4, 0, 4))
+      
+      plot.resid.mod1 <- formatplots(plot.resid.mod1) + 
+        scale_color_manual("Exit Type",
+                           values=c('Positive' = '#2c7fb8',
+                                    'Neutral' = '#2ca25f',
+                                    'Negative' = '#E60000')) 
+      plot(plot.resid.mod1)
+      message("No pattern with residuals, so evidence of autocorrelation, and no need for including lag dependent variables")
+      
+      saveplots(plot.object = plot.resid.mod1, 
+                plot.name = 'figure_2_mean_predicted_wages_residuals')
+      
+  # Compare difference at time -4 and time 4 ----
+      blah = wage_model.preds_tidy[time %in% c(-4, 4), .(exit_category, prog_type_use, time, wage)]
+      blah = dcast(blah, exit_category + prog_type_use ~ time, value.var = 'wage')
+      blah.pos = blah[exit_category == 'Positive'][, .(prog_type_use, 'pos-4' = `-4`, 'pos4' = `4`)]
+      blah.neu = blah[exit_category == 'Neutral'][, .(prog_type_use, 'neu-4' = `-4`, 'neu4' = `4`)]
+      blah.neg = blah[exit_category == 'Negative'][, .(prog_type_use, 'neg-4' = `-4`, 'neg4' = `4`)]
+      blah = merge(blah.pos, blah.neu)
+      blah = merge(blah, blah.neg)
+      blah[, 'diff_posneu-4' := `pos-4` - `neu-4`]
+      blah[, 'diff_posneu4' := `pos4` - `neu4`]
+      blah[, 'diff_posneg-4' := `pos-4` - `neg-4`]
+      blah[, 'diff_posneg4' := `pos4` - `neg4`]
+      print(blah[, .(prog_type_use, `diff_posneu-4`, diff_posneu4, `diff_posneg-4`, diff_posneg4)])
       
 #### Two regression with IPTW: % AMI as outcome of interest----
   # Step 0: Subset data to when all are present ----
@@ -452,6 +493,26 @@
       # save the plot
       saveplots(plot.object = ami_model.plot, 
                 plot.name = 'figure_3_ mean_predicted_AMI')
+      
+  # desc who was in AMI analysis ----
+      in.ami <- unique(raw[!is.na(percent_ami)]$id_kc_pha)
+      length(in.ami)
+      in.ami <- copy(raw)[id_kc_pha %in% in.ami]
+      in.ami[qtr == 0 , .N, exit_category]
+      length(unique(in.ami[qtr == 0 ]$hh_id_kc_pha))
+
+      blah = ami_model.preds_tidy[time %in% c(-4, 4), .(exit_category, prog_type_use, time, percent_ami)]
+      blah = dcast(blah, exit_category + prog_type_use ~ time, value.var = 'percent_ami')
+      blah.pos = blah[exit_category == 'Positive'][, .(prog_type_use, 'pos-4' = `-4`, 'pos4' = `4`)]
+      blah.neu = blah[exit_category == 'Neutral'][, .(prog_type_use, 'neu-4' = `-4`, 'neu4' = `4`)]
+      blah.neg = blah[exit_category == 'Negative'][, .(prog_type_use, 'neg-4' = `-4`, 'neg4' = `4`)]
+      blah = merge(blah.pos, blah.neu)
+      blah = merge(blah, blah.neg)
+      blah[, 'diff_posneu-4' := `pos-4` - `neu-4`]
+      blah[, 'diff_posneu4' := `pos4` - `neu4`]
+      blah[, 'diff_posneg-4' := `pos-4` - `neg-4`]
+      blah[, 'diff_posneg4' := `pos4` - `neg4`]
+      print(blah[, .(prog_type_use, `diff_posneu-4`, diff_posneu4, `diff_posneg-4`, diff_posneg4)])
       
 #### Sensitivity analysis dropping those with disabilities: two stage regression with IPTW: wages as outcome of interest ----
       
@@ -526,7 +587,7 @@
       
       # save the plot
       saveplots(plot.object = sensitivity_model.plot, 
-                plot.name = 'modeled_sensivity_analysis')
+                plot.name = 'appendix_fig_2_sensitivity_non-disabled')
       
           
 #### Export Regression output to Excel file in SharePoint ----

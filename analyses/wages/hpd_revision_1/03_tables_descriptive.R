@@ -67,43 +67,27 @@
                    rowNames = F, colNames = T)   
     
 # Table 0_lw: living wage ----
-    table0_lw <- data.table()
-    for(tempx in sort(unique(raw$prog_type_use))){
-      table0_lw <- rbind(
-        table0_lw,
-        data.table(category = "Households at exit", 
-                   program = tempx,
-                   total = uniqueN(raw[qtr == 0 & !is.na(living_wage) & prog_type_use == tempx]$hh_id_kc_pha), 
-                   living_wage = uniqueN(raw[qtr == 0 & !is.na(living_wage) & living_wage == "At or above" & prog_type_use == tempx]$hh_id_kc_pha),
-                   positive = uniqueN(raw[exit_category == "Positive" & qtr == 0 & !is.na(living_wage) & prog_type_use == tempx]$hh_id_kc_pha), 
-                   pos_lw = uniqueN(raw[exit_category == "Positive" & qtr == 0 & !is.na(living_wage) & living_wage == "At or above" & prog_type_use == tempx]$hh_id_kc_pha), 
-                   neutral = uniqueN(raw[exit_category == "Neutral" & qtr == 0 & !is.na(living_wage) & prog_type_use == tempx]$hh_id_kc_pha), 
-                   neut_lw = uniqueN(raw[exit_category == "Neutral" & qtr == 0 & !is.na(living_wage) & living_wage == "At or above" & prog_type_use == tempx]$hh_id_kc_pha), 
-                   negative = uniqueN(raw[exit_category == "Negative" & qtr == 0 & !is.na(living_wage) & prog_type_use == tempx]$hh_id_kc_pha), 
-                   neg_lw = uniqueN(raw[exit_category == "Negative" & qtr == 0 & !is.na(living_wage) & living_wage == "At or above" & prog_type_use == tempx]$hh_id_kc_pha)), 
-        data.table(category = "Households 1 year post exit", 
-                   program = tempx,
-                   total = uniqueN(raw[qtr == 4 & !is.na(living_wage) & prog_type_use == tempx]$hh_id_kc_pha), 
-                   living_wage = uniqueN(raw[qtr == 4 & !is.na(living_wage) & living_wage == "At or above" & prog_type_use == tempx]$hh_id_kc_pha),
-                   positive = uniqueN(raw[exit_category == "Positive" & qtr == 4 & !is.na(living_wage) & prog_type_use == tempx]$hh_id_kc_pha), 
-                   pos_lw = uniqueN(raw[exit_category == "Positive" & qtr == 4 & !is.na(living_wage) & living_wage == "At or above" & prog_type_use == tempx]$hh_id_kc_pha), 
-                   neutral = uniqueN(raw[exit_category == "Neutral" & qtr == 4 & !is.na(living_wage) & prog_type_use == tempx]$hh_id_kc_pha), 
-                   neut_lw = uniqueN(raw[exit_category == "Neutral" & qtr == 4 & !is.na(living_wage) & living_wage == "At or above" & prog_type_use == tempx]$hh_id_kc_pha), 
-                   negative = uniqueN(raw[exit_category == "Negative" & qtr == 4 & !is.na(living_wage) & prog_type_use == tempx]$hh_id_kc_pha), 
-                   neg_lw = uniqueN(raw[exit_category == "Negative" & qtr == 4 & !is.na(living_wage) & living_wage == "At or above" & prog_type_use == tempx]$hh_id_kc_pha)))
-    }
+    lw = copy(raw)[qtr %in% c(0, 4) & prog_type_use == 'All Programs', .(prog_type_use = 'All Programs', qtr, living_wage, exit_category)]
+    lw = rbind(copy(lw)[, exit_category := 'Total'], lw)
+    table0_lw <- merge( lw[!is.na(living_wage), .(denominator = .N), .(qtr, exit_category)],
+                        lw[living_wage == T, .(numerator = .N), .(qtr, exit_category)])
+    table0_lw <- merge(lw[is.na(living_wage), .(missing = .N), .(qtr, exit_category)], 
+                       table0_lw, by = c('qtr', 'exit_category'))
+    table0_lw[, percentage := rads::round2(100*numerator / denominator, 1)]
     
-    table0_lw[, total_lw_per := round2(100*living_wage/total, 1)]
-    table0_lw[, pos_lw_per := round2(100*pos_lw/positive, 1)]
-    table0_lw[, neut_lw_per := round2(100*neut_lw/neutral, 1)]
-    table0_lw[, neg_lw_per := round2(100*neg_lw/negative, 1)]
-    setorder(table0_lw, -category)
-    table0_lw <- table0_lw[, .(category, program, total, positive, neutral, negative, 
-                               pos_lw, neut_lw, neg_lw, pos_lw_per, neut_lw_per, neg_lw_per)]
-
     # write to Excel worksheets in memory
     addWorksheet(wb, 'Table_0_livingwage')
     writeDataTable(wb, sheet = 'Table_0_livingwage', table0_lw, 
+                   rowNames = F, colNames = T) 
+    
+# Table 0_ami: percent AMI ----
+    ami = copy(raw)[qtr %in% c(0, 4) & prog_type_use == 'All Programs', .(prog_type_use = 'All Programs', qtr, percent_ami, exit_category)]
+    ami = rbind(copy(ami)[, exit_category := 'Total'], ami)
+    table0_ami <- setorder(ami[, .(mean_ami = rads::round2(mean(percent_ami, na.rm = T))), .(qtr, exit_category)], qtr, exit_category)
+    
+    # write to Excel worksheets in memory
+    addWorksheet(wb, 'Table_0_percentAMI')
+    writeDataTable(wb, sheet = 'Table_0_percentAMI', table0_ami, 
                    rowNames = F, colNames = T) 
     
 # Table 0_buyhome: exit to homeownership ----
@@ -223,6 +207,16 @@
     writeDataTable(wb, sheet = 'Table_0_differences', table0, 
                    rowNames = F, colNames = T)   
 
+# Table 0: All exit types used ----
+    table0_types <- copy(raw)[qtr == 0 & prog_type_use == 'All Programs', .(Count = .N), .(`Exit type` = exit_category, `Detailed exit reason` = exit_reason_clean)]
+    setorder(table0_types, -`Exit type`, -Count)
+    
+    
+    # write to Excel worksheets in memory
+    addWorksheet(wb, 'Table_0_exit_types')
+    writeDataTable(wb, sheet = 'Table_0_exit_types', table0_types, 
+                   rowNames = F, colNames = T)   
+    
 # Table 1: Descriptive statistics by Exit Type ----
   # configure arsenal::tableby ----
     my_controls <- tableby.control(

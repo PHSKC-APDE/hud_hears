@@ -374,7 +374,7 @@
         labs(
           x = "", 
           y = "Predicted quarterly wages") +
-        scale_x_continuous(labels=c("1 year prior", "Exit", "1 year post"), breaks=c(-4, 0, 4))
+        scale_x_continuous(limits = c(-4.75, 4.75), labels=c("1 year prior", "Exit", "1 year post"), breaks=c(-4, 0, 4))
       
       wage_model.plot <- formatplots(wage_model.plot) + 
         scale_y_continuous(limits = c(4000, 9300), breaks=c(seq(4000, 9000, 1000)), labels=scales::dollar_format()) +
@@ -402,7 +402,7 @@
         labs(
           x = "", 
           y = "Wage residuals") +
-        scale_x_continuous(labels=c("1 year prior", "Exit", "1 year post"), breaks=c(-4, 0, 4))
+        scale_x_continuous(limits = c(-4.75, 4.75), labels=c("1 year prior", "Exit", "1 year post"), breaks=c(-4, 0, 4))
       
       plot.resid.mod1 <- formatplots(plot.resid.mod1) + 
         scale_color_manual("Exit Type",
@@ -480,7 +480,7 @@
         labs(
           x = "", 
           y = "Predicted percentage Area Median Income (AMI)") +
-        scale_x_continuous(labels=c("1 year prior", "Exit", "1 year post"), breaks=c(-4, 0, 4))
+        scale_x_continuous(limits = c(-4.75, 4.75), labels=c("1 year prior", "Exit", "1 year post"), breaks=c(-4, 0, 4))
       
       ami_model.plot <- formatplots(ami_model.plot) + 
         scale_y_continuous(limits = c(15, 70), breaks = seq(20, 70, 10), labels=scales::label_percent(scale = 1)) +
@@ -574,7 +574,7 @@
           x = "", 
           y = "Predicted quarterly wages", 
           caption = 'Sensitivity analysis, limited to households where the head of household is not disabled') +
-        scale_x_continuous(labels=c("1 year prior", "Exit", "1 year post"), breaks=c(-4, 0, 4)) 
+        scale_x_continuous(limits = c(-4.75, 4.75), labels=c("1 year prior", "Exit", "1 year post"), breaks=c(-4, 0, 4)) 
       
       sensitivity_model.plot <- formatplots(sensitivity_model.plot) + 
         scale_y_continuous(limits = c(4000, 9300), breaks=c(seq(4000, 9000, 1000)), labels=scales::dollar_format()) +

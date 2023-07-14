@@ -567,7 +567,7 @@
       tempy <- tempfile(fileext = ".tiff") 
       ggplot2::ggsave(filename = tempy,
                       plot = build_grid(consort.complete), 
-                      dpi=600, 
+                      dpi=1200, 
                       width = 6.5, 
                       height = 7.2, 
                       units = "in", 

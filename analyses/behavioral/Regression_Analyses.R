@@ -20,9 +20,8 @@ all_pop <- all_pop %>%
   # Remove people with missing variables since they aren't in the model
   filter(include_demog == T) %>%
   # Change exit category to a factor variable
-         mutate(across(c("gender_me", "prog_type_use", "exit_category"), ~ as_factor(.)),
-         race_eth_me = fct_relevel(race_eth_me, c("White")),
-         prog_type_use = fct_relevel(prog_type_use, c("TBV")))
+         mutate(across(c("gender_me", "major_prog", "exit_category"), ~ as_factor(.)),
+         race_eth_me = fct_relevel(race_eth_me, c("White")))
 
 # Set up numeric IDs for households
 # Needed for geeglm to work properly
@@ -52,12 +51,12 @@ summarizer <- function(df,
   outcome <- match.arg(outcome)
   
   if (outcome == "all") {
-    cat_text <- "Crisis events"
+    cat_text <- "Crisis events (excl. Medicaid ED visits)"
     output <- df %>% 
       distinct(id_hudhears, exit_date, ..., crisis_num, crisis_any) %>%
       mutate(cnt = crisis_num, any = crisis_any)
   } else if (outcome == "mcaid") {
-    cat_text <- "Crisis events (Medicaid subpopulation)"
+    cat_text <- "Crisis events (inc. Medicaid ED visits)"
     output <- df %>% 
       distinct(id_hudhears, exit_date, ..., crisis_num_mcaid, crisis_any_mcaid) %>%
       mutate(cnt = crisis_num_mcaid, any = crisis_any_mcaid)
@@ -102,7 +101,7 @@ broom::tidy(any_crude, conf.int = TRUE, exponentiate = T)
 ## Adjusted ----
 # Multiple categories model (use this)
 any_adj <- geepack::geeglm(crisis_any ~ exit_category + gender_me + age_at_exit + race_eth_me  + 
-                                  hh_size + single_caregiver + housing_time_at_exit + prog_type_use + 
+                                  hh_size + single_caregiver + housing_time_at_exit + major_prog + 
                                   hh_disability + crisis_any_before, 
                                data = all_pop, 
                                id = id_hh,
@@ -114,7 +113,7 @@ broom::tidy(any_adj, conf.int = TRUE, exponentiate = T) %>% as.data.frame()
 
 # Poisson model (not being used but just for interest's sake)
 any_adj_pois <- geepack::geeglm(crisis_num ~ exit_category + gender_me + age_at_exit + race_eth_me  + 
-                                  hh_size + single_caregiver + housing_time_at_exit + prog_type_use + 
+                                  hh_size + single_caregiver + housing_time_at_exit + major_prog + 
                                   hh_disability + crisis_any_before, 
                                data = all_pop, 
                                id = id_hh,
@@ -127,7 +126,7 @@ broom::tidy(any_adj_pois, conf.int = TRUE, exponentiate = T) %>% as.data.frame()
 ## Stratified by prior crisis (not using these at this time) ----
 # No prior BH crises
 any_stat_no_prior <- geepack::geeglm(crisis_any ~ exit_category + gender_me + age_at_exit + race_eth_me  + 
-                                       hh_size + single_caregiver + housing_time_at_exit + prog_type_use + 
+                                       hh_size + single_caregiver + housing_time_at_exit + major_prog + 
                                        hh_disability,
                                      data = all_pop[all_pop$crisis_any_before == 0, ], 
                                      id = id_hh,
@@ -138,7 +137,7 @@ broom::tidy(any_stat_no_prior, conf.int = TRUE, exponentiate = T) %>% as.data.fr
 
 # Prior BH crises
 any_stat_prior <- geepack::geeglm(crisis_any ~ exit_category + gender_me + age_at_exit + race_eth_me  + 
-                                       hh_size + single_caregiver + housing_time_at_exit + prog_type_use + 
+                                       hh_size + single_caregiver + housing_time_at_exit + major_prog + 
                                        hh_disability,
                                      data = all_pop[all_pop$crisis_any_before == 1, ], 
                                      id = id_hh,
@@ -162,7 +161,7 @@ broom::tidy(mcaid_crude, conf.int = TRUE, exponentiate = T)
 ## Adjusted ----
 # Multiple categories model (use this)
 mcaid_adj <- geepack::geeglm(crisis_any_mcaid ~ exit_category + gender_me + age_at_exit + race_eth_me  + 
-                             hh_size + single_caregiver + housing_time_at_exit + prog_type_use + 
+                             hh_size + single_caregiver + housing_time_at_exit + major_prog + 
                              hh_disability +  crisis_any_mcaid_before, 
                            data = mcaid_subset7mo, 
                            id = id_hh,
@@ -174,7 +173,7 @@ broom::tidy(mcaid_adj, conf.int = TRUE, exponentiate = T) %>% as.data.frame()
 
 # Poisson model (not being used but just for interest's sake)
 mcaid_adj_pois <- geepack::geeglm(crisis_num_mcaid ~ exit_category + gender_me + age_at_exit + race_eth_me  + 
-                                  hh_size + single_caregiver + housing_time_at_exit + prog_type_use + 
+                                  hh_size + single_caregiver + housing_time_at_exit + major_prog + 
                                   hh_disability + crisis_any_mcaid_before, 
                                 data = mcaid_subset7mo, 
                                 id = id_hh,
@@ -254,26 +253,18 @@ table_formatter <- function(tbl) {
 }
 
 
-table_regression <- function(tbl, type = c("all", "mcaid"), p_value = F) {
+table_regression <- function(tbl, type = c("all", "mcaid")) {
   # Do some basic setup
   output <- tbl %>%
     rename(group = term) %>%
     mutate(estimate = as.character(number(estimate, accuracy = 0.01)),
            p.value = case_when(p.value < 0.001 ~ "<0.001",
-                               p.value < 0.01 ~ "<0.01",
+                               p.value < 0.01 ~ "0.01",
                                p.value < 0.05 ~ "<0.05",
                                TRUE ~ as.character(round(p.value, 3))),
            ci = paste0(number(conf.low, accuracy = 0.01), "–", 
                        number(conf.high, accuracy = 0.01))) %>%
     select(group, estimate, ci, p.value)
-  
-  if (p_value == F) {
-    output <- output %>%
-      mutate(estimate = case_when(p.value =="<0.05" ~ paste0(estimate, "*"),
-                                  p.value =="<0.01" ~ paste0(estimate, "**"),
-                                  p.value =="<0.001" ~ paste0(estimate, "***"),
-                                  TRUE ~ as.character(estimate)))
-  }
   
   if (type == "all") {
     output <- output %>%
@@ -290,10 +281,6 @@ table_regression <- function(tbl, type = c("all", "mcaid"), p_value = F) {
              p_mcaid = p.value)
   }
   
-  if (p_value == F) {
-    output <- output %>% select(-starts_with("p_"))
-  }
-  
   output
 }
 
@@ -301,16 +288,12 @@ table_regression <- function(tbl, type = c("all", "mcaid"), p_value = F) {
 # TABLE 1: DESCRIPTIVE STATS (CURRENTLY ONLY OUTCOMES) ----
 # Turn into a gt table and make pretty
 descriptive <- descriptive %>% select(category, group, Positive, Neutral, Negative) %>%
-  gt(groupname_col = "category", rowname_col = "group") %>%
-  tab_footnote(footnote = "Includes behavioral-health related ED visits not captured in the full analysis",
-               locations = cells_row_groups(groups = "Crisis events (Medicaid subpopulation)"))
+  gt(groupname_col = "category", rowname_col = "group")
 
 descriptive <- table_formatter(descriptive)
 
 # Save output
 gtsave(descriptive, filename = "bh_manuscript_table1.png",
-       path = file.path(here::here(), "analyses/behavioral"))
-gtsave(descriptive, filename = "bh_manuscript_table1.html",
        path = file.path(here::here(), "analyses/behavioral"))
 
 
@@ -318,10 +301,10 @@ gtsave(descriptive, filename = "bh_manuscript_table1.html",
 # TABLE 2: REGRESSION OUTPUT ----
 # Do some basic setup
 any_model <- broom::tidy(any_adj, conf.int = TRUE, exponentiate = T) %>% as.data.frame()
-any_model <- table_regression(any_model, type = "all", p_value = F)
+any_model <- table_regression(any_model, type = "all")
 
 mcaid_model <- broom::tidy(mcaid_adj, conf.int = TRUE, exponentiate = T) %>% as.data.frame()
-mcaid_model <- table_regression(mcaid_model, type = "mcaid", p_value = F)
+mcaid_model <- table_regression(mcaid_model, type = "mcaid")
 
 
 table2 <- left_join(any_model, mcaid_model, by = "group") %>%
@@ -333,13 +316,13 @@ table2 <- left_join(any_model, mcaid_model, by = "group") %>%
                               str_detect(group, "^los|housing_time") ~ "Time in housing",
                               group %in% c("hh_size", "single_caregiver", "hh_disability")
                                            ~ "Household characteristics",
-                              str_detect(group, "prog_type_use") ~ "Program type",
+                              str_detect(group, "major_prog") ~ "Program type",
                               str_detect(group, "before") ~ "Existing behavioral health"))
 
 # Make and bind the reference rows
 ref_rows <- data.frame(category = c("Exit category", "Gender", "Race/ethnicity", "Program type"),
                        group = c("exit_categoryNeutral", "gender_meFemale", 
-                                 "race_eth_meWhite", "prog_type_useTBV"),
+                                 "race_eth_meWhite", "major_progHCV"),
                        estimate_all = rep("ref", 4), 
                        estimate_mcaid = rep("ref", 4),
                        order = rep(1L, 4))
@@ -363,10 +346,10 @@ table2 <- bind_rows(table2, ref_rows) %>%
   mutate(group = case_when(group == "housing_time_at_exit" ~ "Years in housing",
                            group == "hh_size" ~ "Household size",
                            group == "single_caregiver" ~ "Single caregiver",
-                           group == "hh_disability" ~ "Head of household disability",
+                           group == "hh_disability" ~ "HoH disability",
                            group == "age_at_exit" ~ "Age at exit (years)",
                            str_detect(group, "before") ~ "Prior crisis events",
-                           TRUE ~ str_remove(group, "age_grp|gender_me|los|prog_type_use|race_eth_me|exit_category")))
+                           TRUE ~ str_remove(group, "age_grp|gender_me|los|major_prog|race_eth_me|exit_category")))
 
 # Turn into gt table
 table2 <- table2 %>%
@@ -377,13 +360,15 @@ table2 <- table2 %>%
              group = md("Group"),
              estimate_all = md("Odds ratio"),
              ci_all = md("95% CI"),
+             p_all = md("p-value"),
              estimate_mcaid = md("Odds ratio"),
-             ci_mcaid = md("95% CI")) %>%
-  tab_footnote(footnote = "* = p<0.05, ** = p<0.01, *** = p<0.001",
-               locations = cells_column_labels(columns = starts_with("estimate"))) %>%
+             ci_mcaid = md("95% CI"),
+             p_mcaid = md("p-value")) %>%
   tab_footnote(footnote = "AI/AN = American Indian/Alaskan Native, NH/PI = Native Hawaiian/Pacific Islander", 
                locations = cells_row_groups(groups = "Race/ethnicity")) %>%
-  tab_footnote(footnote = "PBV = Project-based voucher, PH = Public housing, TBV = Tenant-based voucher", 
+  tab_footnote(footnote = "HoH = Head of household", 
+               locations = cells_stub(rows = str_detect(group, "HoH"))) %>%
+  tab_footnote(footnote = "HCV = Housing Choice Voucher, PH = Public housing", 
                locations = cells_row_groups(groups = "Program type")) %>%
   sub_missing()
 
@@ -393,5 +378,163 @@ table_2 <- table_formatter(table2)
 # Save output
 gtsave(table_2, filename = "bh_manuscript_table2.png",
        path = file.path(here::here(), "analyses/behavioral"))
-gtsave(table_2, filename = "bh_manuscript_table2.html",
-       path = file.path(here::here(), "analyses/behavioral"))
+
+
+
+
+## Added on 7/14/23 
+##Table 1: demographics for all participants by exit and exit type ----
+
+#Note: using functions that are found in pha_exit_factors.R
+
+
+## Demogs for exit vs not ----
+# Age
+exit_any_age <- age_sum(all_pop, full_demog = T, sd = T, id_type)
+
+# Gender
+exit_any_gender <- demog_pct_sum(all_pop, full_demog = T, suppress = T, level = "ind", 
+                                 demog = "gender", id_type)
+
+# Race/eth
+exit_any_race <- demog_pct_sum(all_pop, full_demog = T, suppress = T, level = "ind", 
+                               demog = "race", id_type)
+
+# Time in housing (this is based on HH data)
+exit_any_hh_los <- demog_num_sum(all_pop, full_demog = T, level = "hh", demog = "los", sd = T, id_type)
+
+# HH size and composition
+exit_any_hh_demogs <- hh_demogs_sum(all_pop, full_demog = T, level = "hh", sd = T, id_type)
+
+# Program type
+exit_any_hh_prog <- demog_pct_sum(all_pop, full_demog = T, suppress = T, level = "hh", demog = "program_type", id_type)
+
+
+# Combine for R markdown
+exit_any_demogs <- bind_rows(exit_any_age, exit_any_gender, exit_any_race, exit_any_hh_los,
+                             exit_any_hh_demogs)
+
+rm(exit_any_age, exit_any_gender, exit_any_race, exit_any_hh_los,
+   exit_any_hh_demogs, exit_any_hh_prog)
+
+
+## Demogs by exit ----
+# Age
+exit_type_age <- age_sum(exit_nodeath, full_demog = T, sd = T, exit_category)
+
+# Gender
+exit_type_gender <- demog_pct_sum(exit_nodeath, full_demog = T, suppress = T, level = "ind", 
+                                  demog = "gender", exit_category)
+
+# Race/eth
+exit_type_race <- demog_pct_sum(exit_nodeath, full_demog = T, suppress = T, level = "ind", 
+                                demog = "race", exit_category)
+
+# Time in housing (this is based on HH data)
+exit_type_hh_los <- demog_num_sum(exit_nodeath, full_demog = T, level = "hh", demog = "los", sd = T, exit_category)
+
+# HH size and composition
+exit_type_hh_demogs <- hh_demogs_sum(exit_nodeath, full_demog = T, level = "hh", sd = T, exit_category)
+
+# Program type
+exit_type_hh_prog <- demog_pct_sum(exit_nodeath, full_demog = T, suppress = T, level = "hh", demog = "program_type", exit_category)
+
+# Medicaid outcomes
+exit_type_mcaid_7_prior <- mcaid_outcomes_sum(exit_nodeath, full_demog = T, suppress = T, 
+                                              time_examine =  "prior", time_limit = "both", 
+                                              cov_time = "7_mth", show_num = T, sd = T, exit_category)
+exit_type_mcaid_7_after <- mcaid_outcomes_sum(exit_nodeath, full_demog = T, suppress = T, 
+                                              time_examine =  "after", time_limit = "both", 
+                                              cov_time = "7_mth", show_num = T, sd = T, exit_category)
+
+
+# Combine for R markdown
+exit_type_demogs <- bind_rows(exit_type_age, exit_type_gender, exit_type_race, exit_type_hh_los,
+                              exit_type_hh_demogs, exit_type_hh_prog, exit_type_mcaid_7_prior,
+                              exit_type_mcaid_7_after)
+
+rm(exit_type_age, exit_type_gender, exit_type_race, exit_type_hh_los,
+   exit_type_hh_demogs, exit_type_hh_prog, exit_type_mcaid_7_prior,
+   exit_type_mcaid_7_after)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Set up n for col names
+n_exit_any <- exit_control %>% count(id_type) %>% deframe()
+n_exit_type <- exit_nodeath %>% count(exit_category) %>% deframe()
+
+n_exit_any_hh <- exit_control %>% distinct(hh_id_kc_pha, exit_date, id_type) %>% 
+  count(id_type) %>% deframe()
+n_exit_type_hh <- exit_nodeath %>% distinct(hh_id_kc_pha, exit_date, exit_category) %>% 
+  count(exit_category) %>% deframe()
+
+n_exit_any_wc <- exit_control %>% filter(age_at_exit < 6) %>% 
+  distinct(id_hudhears, exit_date, id_type) %>% 
+  count(id_type) %>% deframe()
+n_exit_type_wc <- exit_nodeath %>% filter(age_at_exit < 6) %>% 
+  distinct(id_hudhears, exit_date, exit_category) %>% 
+  count(exit_category) %>% deframe()
+
+
+# Make table
+table_1_demogs <- left_join(exit_any_demogs, exit_type_demogs,
+                            by = c("category", "group")) %>%
+  # Remove unwanted groups
+  filter(!group %in% c("n", "Range (years)", "Child (aged <18)", "Senior (aged 62+)")) %>% 
+  filter(str_detect(group, "Did not experience", negate = T)) %>%
+  filter(str_detect(group, "crisis", negate = T)) %>%
+  # Do some renaming
+  rename("Remained" = "id_control", "Exited" = "id_exit") %>%
+  mutate(category = str_replace_all(category, "HoH time", "Time"),
+         group = str_replace_all(group, " time in housing \\(years\\)", " time (years)")) %>%
+  distinct() %>%
+  # Set up table
+  gt(groupname_col = "category", rowname_col = "group") %>%
+  tab_footnote(footnote = "AI/AN = American Indian/Alaskan Native, NH/PI = Native Hawaiian/Pacific Islander", 
+               locations = cells_row_groups(groups = "Race/ethnicity")) %>%
+  tab_footnote(footnote = md(glue("At household level (",
+                                  "Remained N={number(n_exit_any_hh[1], big.mark = ',')}, ",
+                                  "Exited N={number(n_exit_any_hh[2], big.mark = ',')}, ",
+                                  "Negative N={number(n_exit_type_hh[1], big.mark = ',')}, ",
+                                  "Neutral N={number(n_exit_type_hh[2], big.mark = ',')}, ",
+                                  "Positive N={number(n_exit_type_hh[3], big.mark = ',')}",
+                                  ")")), 
+               locations = cells_row_groups(groups = c("Time in housing", "Household characteristics",
+                                                       "Program type"))) %>%
+  tab_footnote(footnote = "HCV = Housing Choice Voucher, PH = Public housing", 
+               locations = cells_row_groups(groups = "Program type")) %>%
+  tab_footnote(footnote = md(glue("Ages <6 (",
+                                  "Remained N={number(n_exit_any_wc[1], big.mark = ',')}, ",
+                                  "Exited N={number(n_exit_any_wc[2], big.mark = ',')}, ",
+                                  "Negative N={number(n_exit_type_wc[1], big.mark = ',')}, ",
+                                  "Neutral N={number(n_exit_type_wc[2], big.mark = ',')}, ",
+                                  "Positive N={number(n_exit_type_wc[3], big.mark = ',')}",
+                                  ")")),
+               locations = cells_stub(rows = str_detect(group, "well-child"))) %>%
+  cols_label(category = md("Category"),
+             group = md("Group"),
+             Remained = md(paste0("Remained (N=", number(n_exit_any[1], big.mark = ","), ")")),
+             Exited = md(paste0("Exited (N=", number(n_exit_any[2], big.mark = ","), ")")),
+             Negative = md(paste0("Negative exit (N=", number(n_exit_type[1], big.mark = ","), ")")),
+             Neutral = md(paste0("Neutral exit (N=", number(n_exit_type[2], big.mark = ","), ")")),
+             Positive = md(paste0("Positive exit (N=", number(n_exit_type[3], big.mark = ","), ")")))
+
+table_1_demogs <- table_formatter(table_1_demogs)
+
+# Save output
+gtsave(table_1_demogs, filename = "health_manuscript_table1.png",
+       path = file.path(here::here(), "analyses/health"))
+gtsave(table_1_demogs, filename = "health_manuscript_table1.html",
+       path = file.path(here::here(), "analyses/health"))

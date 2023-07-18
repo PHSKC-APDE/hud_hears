@@ -39,7 +39,7 @@ all_pop <- all_pop %>%
 mcaid_subset7mo <- all_pop %>% filter(include_cov_age == T)
 
 #Make subset with only under 62
-all_pop <- all_pop %>% filter(age_at_exit <62)
+# U62all_pop <- all_pop %>% filter(age_at_exit <62)
 
 
 # Summary table of outcomes ----
@@ -353,8 +353,6 @@ table2 <- bind_rows(table2, ref_rows) %>%
                            group == "age_at_exit" ~ "Age at exit (years)",
                            str_detect(group, "before") ~ "Prior crisis events",
                            TRUE ~ str_remove(group, "age_grp|gender_me|los|major_prog|race_eth_me|exit_category")))
-#copy for poisson table
-tableS2 <- copy(table2)
 
 # Turn into gt table
 table2 <- table2 %>%
@@ -386,9 +384,86 @@ gtsave(table_2, filename = "bh_manuscript_table2.png",
 
 
 ##Table S2: Poisson Regression table
-#Basic set up
-tableS2 <- copy(table2)
+#Repeat the same thing, but adjust the inputs
+# Do some basic setup
+any_model <- broom::tidy(any_adj_pois, conf.int = TRUE, exponentiate = T) %>% as.data.frame()
+any_model <- table_regression(any_model, type = "all")
 
+mcaid_model <- broom::tidy(mcaid_adj_pois, conf.int = TRUE, exponentiate = T) %>% as.data.frame()
+mcaid_model <- table_regression(mcaid_model, type = "mcaid")
+
+
+tableS2 <- left_join(any_model, mcaid_model, by = "group") %>%
+  mutate(order = 2L,
+         category = case_when(str_detect(group, "exit_category") ~ "Exit category",
+                              str_detect(group, "age_") ~ "Age",
+                              str_detect(group, "gender_") ~ "Gender",
+                              str_detect(group, "race_") ~ "Race/ethnicity",
+                              str_detect(group, "^los|housing_time") ~ "Time in housing",
+                              group %in% c("hh_size", "single_caregiver", "hh_disability")
+                              ~ "Household characteristics",
+                              str_detect(group, "major_prog") ~ "Program type",
+                              str_detect(group, "before") ~ "Existing behavioral health"))
+
+# Make and bind the reference rows
+ref_rows <- data.frame(category = c("Exit category", "Gender", "Race/ethnicity", "Program type"),
+                       group = c("exit_categoryNeutral", "gender_meFemale", 
+                                 "race_eth_meWhite", "major_progHCV"),
+                       estimate_all = rep("ref", 4), 
+                       estimate_mcaid = rep("ref", 4),
+                       order = rep(1L, 4))
+
+
+tableS2 <- bind_rows(tableS2, ref_rows) %>%
+  mutate(cat_order = case_when(category == "Exit category" ~ 1L,
+                               category == "Age" ~ 2L,
+                               category == "Gender" ~ 3L,
+                               category == "Race/ethnicity" ~ 4L,
+                               category == "Time in housing" ~ 5L,
+                               category == "Household characteristics" ~ 6L,
+                               category == "Program type" ~ 7L,
+                               category == "Existing behavioral health" ~ 8L),
+         group_order = case_when(group %in% c("hh_size") ~ 1L,
+                                 group %in% c("single_caregiver") ~ 2L,
+                                 group %in% c("hh_disability") ~ 3L)) %>%
+  arrange(cat_order, order, group_order, group) %>%
+  filter(group != "(Intercept)") %>%
+  select(-ends_with("order")) %>%
+  mutate(group = case_when(group == "housing_time_at_exit" ~ "Years in housing",
+                           group == "hh_size" ~ "Household size",
+                           group == "single_caregiver" ~ "Single caregiver",
+                           group == "hh_disability" ~ "HoH disability",
+                           group == "age_at_exit" ~ "Age at exit (years)",
+                           str_detect(group, "before") ~ "Prior crisis events",
+                           TRUE ~ str_remove(group, "age_grp|gender_me|los|major_prog|race_eth_me|exit_category")))
+
+# Turn into gt table
+tableS2 <- tableS2 %>%
+  gt(groupname_col = "category", rowname_col = "group") %>%
+  tab_spanner(label = md("All exits"), columns = ends_with("_all")) %>%
+  tab_spanner(label = md("Medicaid subset"), columns = ends_with("_mcaid")) %>%
+  cols_label(category = md("Category"),
+             group = md("Group"),
+             estimate_all = md("Incidence rate ratio"),
+             ci_all = md("95% CI"),
+             p_all = md("p-value"),
+             estimate_mcaid = md("Incidence rate ratio"),
+             ci_mcaid = md("95% CI"),
+             p_mcaid = md("p-value")) %>%
+  tab_footnote(footnote = "AI/AN = American Indian/Alaskan Native, NH/PI = Native Hawaiian/Pacific Islander", 
+               locations = cells_row_groups(groups = "Race/ethnicity")) %>%
+  tab_footnote(footnote = "HoH = Head of household", 
+               locations = cells_stub(rows = str_detect(group, "HoH"))) %>%
+  tab_footnote(footnote = "HCV = Housing Choice Voucher, PH = Public housing", 
+               locations = cells_row_groups(groups = "Program type")) %>%
+  sub_missing()
+
+
+table_S2 <- table_formatter(tableS2)
+
+# Save output
+gtsave(table_S2, filename = "bh_manuscript_tableS2.png",
+       path = file.path(here::here(), "analyses/behavioral"))
 
 
 ## Added on 7/14/23 
@@ -396,18 +471,18 @@ tableS2 <- copy(table2)
 
 #Note: the demo table also uses functions that are found in pha_exit_factors.R
 #Run function to clean program type (groups it into different categories and renames it prog_type_use)
-# prog_type_add <- function(df) {
-#   output <- df %>%
-#     mutate(prog_type_use = case_when(prog_type %in% c("PBS8", "COLLABORATIVE HOUSING") ~ "PBV",
-#                                      prog_type %in% c("PH", "SHA OWNED AND MANAGED") ~ "PH",
-#                                      prog_type %in% c("PORT", "TBS8", "TENANT BASED") ~ "TBV",
-#                                      # A better way is to look at voucher type, but that would mean 
-#                                      # rerunning all analyses for an additional ~10 exits
-#                                      # This approach lines up the covariate and timevar prog_types
-#                                      exit_reason_clean == "Other subsidized HSG/HCV" & is.na(prog_type) ~ "TBV"
-#     ))
-#   output
-# }
+prog_type_add <- function(df) {
+  output <- df %>%
+    mutate(prog_type_use = case_when(prog_type %in% c("PBS8", "COLLABORATIVE HOUSING") ~ "PBV",
+                                     prog_type %in% c("PH", "SHA OWNED AND MANAGED") ~ "PH",
+                                     prog_type %in% c("PORT", "TBS8", "TENANT BASED") ~ "TBV",
+                                     # A better way is to look at voucher type, but that would mean
+                                     # rerunning all analyses for an additional ~10 exits
+                                     # This approach lines up the covariate and timevar prog_types
+                                     exit_reason_clean == "Other subsidized HSG/HCV" & is.na(prog_type) ~ "TBV"
+    ))
+  output
+}
 
 all_pop <- prog_type_add(all_pop)
 

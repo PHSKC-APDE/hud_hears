@@ -353,6 +353,8 @@ table2 <- bind_rows(table2, ref_rows) %>%
                            group == "age_at_exit" ~ "Age at exit (years)",
                            str_detect(group, "before") ~ "Prior crisis events",
                            TRUE ~ str_remove(group, "age_grp|gender_me|los|major_prog|race_eth_me|exit_category")))
+#copy for poisson table
+tableS2 <- copy(table2)
 
 # Turn into gt table
 table2 <- table2 %>%
@@ -382,6 +384,10 @@ table_2 <- table_formatter(table2)
 gtsave(table_2, filename = "bh_manuscript_table2.png",
        path = file.path(here::here(), "analyses/behavioral"))
 
+
+##Table S2: Poisson Regression table
+#Basic set up
+tableS2 <- copy(table2)
 
 
 

@@ -38,14 +38,14 @@ all_pop <- all_pop %>%
 # MCAID coverage preliminary models that include subset with medicaid coverage 7/12 months before and after and age restriction
 mcaid_subset7mo <- all_pop %>% filter(include_cov_age == T)
 
-#Only include under 62 in main model
-all_pop_U62 <- all_pop %>% filter(age_at_exit <62)
+#Make subset with only under 62
+all_pop <- all_pop %>% filter(age_at_exit <62)
 
 
 # Summary table of outcomes ----
 ## Functions to make and format tables
 summarizer <- function(df,
-                       outcome = c("all_pop_U62", "mcaid"),
+                       outcome = c("all", "mcaid"),
                        ...) {
     # Set things up to select in pivot_ functions
   # There is probably a better way to do this but it works
@@ -94,7 +94,7 @@ descriptive <- bind_rows(summarizer(all_pop, outcome = "all", exit_category),
 # REGRESSION MODEL: EXCLUDING MCAID ----
 ## Crude ----
 any_crude <- geepack::geeglm(crisis_any ~ exit_category, 
-                            data = all_pop_U62,
+                            data = all_pop,
                             id = id_hh,
                             family = "binomial")
 
@@ -106,7 +106,7 @@ broom::tidy(any_crude, conf.int = TRUE, exponentiate = T)
 any_adj <- geepack::geeglm(crisis_any ~ exit_category + gender_me + age_at_exit + race_eth_me  + 
                                   hh_size + single_caregiver + housing_time_at_exit + major_prog + 
                                   hh_disability + crisis_any_before, 
-                               data = all_pop_U62, 
+                               data = all_pop, 
                                id = id_hh,
                                family = "binomial")
 

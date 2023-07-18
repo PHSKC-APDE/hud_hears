@@ -244,7 +244,7 @@ control_match_covariate <- control_match_covariate %>%
     prog_type_use = case_when(prog_type %in% c("PBS8", "COLLABORATIVE HOUSING") ~ "PBV",
                               prog_type %in% c("PH", "SHA OWNED AND MANAGED") ~ "PH",
                               prog_type %in% c("PORT", "TBS8", "TENANT BASED") ~ "TBV"),
-    # Flag anyone with missing covariates since they will be dropped from the propensity scores
+    # Flag anyone with missing covariates
     include_demog = (!(is.na(exit_category) | is.na(age_at_exit) | is.na(gender_me) | 
                          is.na(race_eth_me) | race_eth_me == "Unknown" |
                          is.na(agency) | is.na(single_caregiver) | 

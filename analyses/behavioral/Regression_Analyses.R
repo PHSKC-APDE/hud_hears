@@ -385,10 +385,25 @@ gtsave(table_2, filename = "bh_manuscript_table2.png",
 ## Added on 7/14/23 
 ##Table 1: demographics for all participants by exit and exit type ----
 
-#Note: using functions that are found in pha_exit_factors.R
+#Note: the demo table also uses functions that are found in pha_exit_factors.R
+#Run function to clean program type (groups it into different categories and renames it prog_type_use)
+# prog_type_add <- function(df) {
+#   output <- df %>%
+#     mutate(prog_type_use = case_when(prog_type %in% c("PBS8", "COLLABORATIVE HOUSING") ~ "PBV",
+#                                      prog_type %in% c("PH", "SHA OWNED AND MANAGED") ~ "PH",
+#                                      prog_type %in% c("PORT", "TBS8", "TENANT BASED") ~ "TBV",
+#                                      # A better way is to look at voucher type, but that would mean 
+#                                      # rerunning all analyses for an additional ~10 exits
+#                                      # This approach lines up the covariate and timevar prog_types
+#                                      exit_reason_clean == "Other subsidized HSG/HCV" & is.na(prog_type) ~ "TBV"
+#     ))
+#   output
+# }
+
+all_pop <- prog_type_add(all_pop)
 
 
-## Demogs for exit vs not ----
+## Demogs for all ----
 # Age
 exit_any_age <- age_sum(all_pop, full_demog = T, sd = T, id_type)
 
@@ -420,83 +435,42 @@ rm(exit_any_age, exit_any_gender, exit_any_race, exit_any_hh_los,
 
 ## Demogs by exit ----
 # Age
-exit_type_age <- age_sum(exit_nodeath, full_demog = T, sd = T, exit_category)
+exit_type_age <- age_sum(all_pop, full_demog = T, sd = T, exit_category)
 
 # Gender
-exit_type_gender <- demog_pct_sum(exit_nodeath, full_demog = T, suppress = T, level = "ind", 
+exit_type_gender <- demog_pct_sum(all_pop, full_demog = T, suppress = T, level = "ind", 
                                   demog = "gender", exit_category)
 
 # Race/eth
-exit_type_race <- demog_pct_sum(exit_nodeath, full_demog = T, suppress = T, level = "ind", 
+exit_type_race <- demog_pct_sum(all_pop, full_demog = T, suppress = T, level = "ind", 
                                 demog = "race", exit_category)
 
 # Time in housing (this is based on HH data)
-exit_type_hh_los <- demog_num_sum(exit_nodeath, full_demog = T, level = "hh", demog = "los", sd = T, exit_category)
+exit_type_hh_los <- demog_num_sum(all_pop, full_demog = T, level = "hh", demog = "los", sd = T, exit_category)
 
 # HH size and composition
-exit_type_hh_demogs <- hh_demogs_sum(exit_nodeath, full_demog = T, level = "hh", sd = T, exit_category)
+exit_type_hh_demogs <- hh_demogs_sum(all_pop, full_demog = T, level = "hh", sd = T, exit_category)
 
 # Program type
-exit_type_hh_prog <- demog_pct_sum(exit_nodeath, full_demog = T, suppress = T, level = "hh", demog = "program_type", exit_category)
+exit_type_hh_prog <- demog_pct_sum(all_pop, full_demog = T, suppress = T, level = "hh", demog = "program_type", exit_category)
 
-# Medicaid outcomes
-exit_type_mcaid_7_prior <- mcaid_outcomes_sum(exit_nodeath, full_demog = T, suppress = T, 
-                                              time_examine =  "prior", time_limit = "both", 
-                                              cov_time = "7_mth", show_num = T, sd = T, exit_category)
-exit_type_mcaid_7_after <- mcaid_outcomes_sum(exit_nodeath, full_demog = T, suppress = T, 
-                                              time_examine =  "after", time_limit = "both", 
-                                              cov_time = "7_mth", show_num = T, sd = T, exit_category)
+
 
 
 # Combine for R markdown
 exit_type_demogs <- bind_rows(exit_type_age, exit_type_gender, exit_type_race, exit_type_hh_los,
-                              exit_type_hh_demogs, exit_type_hh_prog, exit_type_mcaid_7_prior,
-                              exit_type_mcaid_7_after)
+                              exit_type_hh_demogs, exit_type_hh_prog)
 
 rm(exit_type_age, exit_type_gender, exit_type_race, exit_type_hh_los,
-   exit_type_hh_demogs, exit_type_hh_prog, exit_type_mcaid_7_prior,
-   exit_type_mcaid_7_after)
+   exit_type_hh_demogs, exit_type_hh_prog)
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-# Set up n for col names
-n_exit_any <- exit_control %>% count(id_type) %>% deframe()
-n_exit_type <- exit_nodeath %>% count(exit_category) %>% deframe()
-
-n_exit_any_hh <- exit_control %>% distinct(hh_id_kc_pha, exit_date, id_type) %>% 
-  count(id_type) %>% deframe()
-n_exit_type_hh <- exit_nodeath %>% distinct(hh_id_kc_pha, exit_date, exit_category) %>% 
-  count(exit_category) %>% deframe()
-
-n_exit_any_wc <- exit_control %>% filter(age_at_exit < 6) %>% 
-  distinct(id_hudhears, exit_date, id_type) %>% 
-  count(id_type) %>% deframe()
-n_exit_type_wc <- exit_nodeath %>% filter(age_at_exit < 6) %>% 
-  distinct(id_hudhears, exit_date, exit_category) %>% 
-  count(exit_category) %>% deframe()
-
-
+# Make descriptive table
 # Make table
-table_1_demogs <- left_join(exit_any_demogs, exit_type_demogs,
-                            by = c("category", "group")) %>%
+table_1_demogs <- exit_type_demogs %>%
   # Remove unwanted groups
   filter(!group %in% c("n", "Range (years)", "Child (aged <18)", "Senior (aged 62+)")) %>% 
-  filter(str_detect(group, "Did not experience", negate = T)) %>%
-  filter(str_detect(group, "crisis", negate = T)) %>%
   # Do some renaming
-  rename("Remained" = "id_control", "Exited" = "id_exit") %>%
   mutate(category = str_replace_all(category, "HoH time", "Time"),
          group = str_replace_all(group, " time in housing \\(years\\)", " time (years)")) %>%
   distinct() %>%
@@ -505,8 +479,6 @@ table_1_demogs <- left_join(exit_any_demogs, exit_type_demogs,
   tab_footnote(footnote = "AI/AN = American Indian/Alaskan Native, NH/PI = Native Hawaiian/Pacific Islander", 
                locations = cells_row_groups(groups = "Race/ethnicity")) %>%
   tab_footnote(footnote = md(glue("At household level (",
-                                  "Remained N={number(n_exit_any_hh[1], big.mark = ',')}, ",
-                                  "Exited N={number(n_exit_any_hh[2], big.mark = ',')}, ",
                                   "Negative N={number(n_exit_type_hh[1], big.mark = ',')}, ",
                                   "Neutral N={number(n_exit_type_hh[2], big.mark = ',')}, ",
                                   "Positive N={number(n_exit_type_hh[3], big.mark = ',')}",
@@ -525,8 +497,6 @@ table_1_demogs <- left_join(exit_any_demogs, exit_type_demogs,
                locations = cells_stub(rows = str_detect(group, "well-child"))) %>%
   cols_label(category = md("Category"),
              group = md("Group"),
-             Remained = md(paste0("Remained (N=", number(n_exit_any[1], big.mark = ","), ")")),
-             Exited = md(paste0("Exited (N=", number(n_exit_any[2], big.mark = ","), ")")),
              Negative = md(paste0("Negative exit (N=", number(n_exit_type[1], big.mark = ","), ")")),
              Neutral = md(paste0("Neutral exit (N=", number(n_exit_type[2], big.mark = ","), ")")),
              Positive = md(paste0("Positive exit (N=", number(n_exit_type[3], big.mark = ","), ")")))
@@ -538,3 +508,4 @@ gtsave(table_1_demogs, filename = "health_manuscript_table1.png",
        path = file.path(here::here(), "analyses/health"))
 gtsave(table_1_demogs, filename = "health_manuscript_table1.html",
        path = file.path(here::here(), "analyses/health"))
+

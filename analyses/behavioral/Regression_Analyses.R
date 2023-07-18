@@ -1,5 +1,5 @@
 ## HUD HEARS Behavioral Health Exit Type Regression Code
-#Code updated on September 7, 2022
+#Code updated on July 18, 2023
 #Author: Megan Suter
 
 
@@ -38,11 +38,14 @@ all_pop <- all_pop %>%
 # MCAID coverage preliminary models that include subset with medicaid coverage 7/12 months before and after and age restriction
 mcaid_subset7mo <- all_pop %>% filter(include_cov_age == T)
 
+#Only include under 62 in main model
+all_pop_U62 <- all_pop %>% filter(age_at_exit <62)
+
 
 # Summary table of outcomes ----
 ## Functions to make and format tables
 summarizer <- function(df,
-                       outcome = c("all", "mcaid"),
+                       outcome = c("all_pop_U62", "mcaid"),
                        ...) {
     # Set things up to select in pivot_ functions
   # There is probably a better way to do this but it works
@@ -91,7 +94,7 @@ descriptive <- bind_rows(summarizer(all_pop, outcome = "all", exit_category),
 # REGRESSION MODEL: EXCLUDING MCAID ----
 ## Crude ----
 any_crude <- geepack::geeglm(crisis_any ~ exit_category, 
-                            data = all_pop,
+                            data = all_pop_U62,
                             id = id_hh,
                             family = "binomial")
 
@@ -103,7 +106,7 @@ broom::tidy(any_crude, conf.int = TRUE, exponentiate = T)
 any_adj <- geepack::geeglm(crisis_any ~ exit_category + gender_me + age_at_exit + race_eth_me  + 
                                   hh_size + single_caregiver + housing_time_at_exit + major_prog + 
                                   hh_disability + crisis_any_before, 
-                               data = all_pop, 
+                               data = all_pop_U62, 
                                id = id_hh,
                                family = "binomial")
 
@@ -123,29 +126,29 @@ summary(any_adj_pois)
 broom::tidy(any_adj_pois, conf.int = TRUE, exponentiate = T) %>% as.data.frame()
 
 
-## Stratified by prior crisis (not using these at this time) ----
-# No prior BH crises
-any_stat_no_prior <- geepack::geeglm(crisis_any ~ exit_category + gender_me + age_at_exit + race_eth_me  + 
-                                       hh_size + single_caregiver + housing_time_at_exit + major_prog + 
-                                       hh_disability,
-                                     data = all_pop[all_pop$crisis_any_before == 0, ], 
-                                     id = id_hh,
-                                     family = "binomial")
-
-summary(any_stat_no_prior)
-broom::tidy(any_stat_no_prior, conf.int = TRUE, exponentiate = T) %>% as.data.frame()
-
-# Prior BH crises
-any_stat_prior <- geepack::geeglm(crisis_any ~ exit_category + gender_me + age_at_exit + race_eth_me  + 
-                                       hh_size + single_caregiver + housing_time_at_exit + major_prog + 
-                                       hh_disability,
-                                     data = all_pop[all_pop$crisis_any_before == 1, ], 
-                                     id = id_hh,
-                                     family = "binomial")
-
-summary(any_stat_prior)
-broom::tidy(any_stat_prior, conf.int = TRUE, exponentiate = T) %>% as.data.frame()
-
+# ## Stratified by prior crisis (not using these at this time) ----
+# # No prior BH crises
+# any_stat_no_prior <- geepack::geeglm(crisis_any ~ exit_category + gender_me + age_at_exit + race_eth_me  + 
+#                                        hh_size + single_caregiver + housing_time_at_exit + major_prog + 
+#                                        hh_disability,
+#                                      data = all_pop[all_pop$crisis_any_before == 0, ], 
+#                                      id = id_hh,
+#                                      family = "binomial")
+# 
+# summary(any_stat_no_prior)
+# broom::tidy(any_stat_no_prior, conf.int = TRUE, exponentiate = T) %>% as.data.frame()
+# 
+# # Prior BH crises
+# any_stat_prior <- geepack::geeglm(crisis_any ~ exit_category + gender_me + age_at_exit + race_eth_me  + 
+#                                        hh_size + single_caregiver + housing_time_at_exit + major_prog + 
+#                                        hh_disability,
+#                                      data = all_pop[all_pop$crisis_any_before == 1, ], 
+#                                      id = id_hh,
+#                                      family = "binomial")
+# 
+# summary(any_stat_prior)
+# broom::tidy(any_stat_prior, conf.int = TRUE, exponentiate = T) %>% as.data.frame()
+# 
 
 
 # REGRESSION MODEL: INCLUDING MCAID ----

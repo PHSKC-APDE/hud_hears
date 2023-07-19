@@ -89,6 +89,8 @@ summarizer <- function(df,
 descriptive <- bind_rows(summarizer(all_pop, outcome = "all", exit_category),
                          summarizer(mcaid_subset7mo, outcome = "mcaid", exit_category))
 
+#Note: continued below
+
 
 
 # REGRESSION MODEL: EXCLUDING MCAID ----
@@ -290,8 +292,19 @@ table_regression <- function(tbl, type = c("all", "mcaid")) {
 
 # TABLE 1: DESCRIPTIVE STATS (CURRENTLY ONLY OUTCOMES) ----
 # Turn into a gt table and make pretty
+
+
+descriptive <- bind_rows(summarizer(all_pop, outcome = "all", exit_category),
+                         summarizer(mcaid_subset7mo, outcome = "mcaid", exit_category))
+
+
+
 descriptive <- descriptive %>% select(category, group, Positive, Neutral, Negative) %>%
-  gt(groupname_col = "category", rowname_col = "group")
+gt(groupname_col = "category", rowname_col = "group") %>%
+  tab_spanner(label = md("Crisis Events"), columns = ends_with("excl. Medicaid ED visits)")) %>%
+  tab_spanner(label = md("Crisis Events (Medicaid Subpopulation)"), columns = ends_with("inc. Medicaid ED visits)")) %>%
+  tab_footnote(footnote = "Includes behavioral health-related Emergency Department (ED) visits not captured in the full analysis", 
+                  locations =  cells_row_groups(groups ="Crisis events (Medicaid subpopulation)"))
 
 descriptive <- table_formatter(descriptive)
 

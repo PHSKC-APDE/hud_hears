@@ -350,6 +350,10 @@ table2 <- bind_rows(table2, ref_rows) %>%
                                  p_all =="<0.01" ~ paste0(estimate_all, "**"),
                                  p_all =="<0.001" ~ paste0(estimate_all, "***"),
                                  TRUE ~ as.character(estimate_all))) %>%
+  mutate(estimate_mcaid = case_when(p_mcaid =="<0.05" ~ paste0(estimate_mcaid, "*"),
+                                  p_mcaid =="<0.01" ~ paste0(estimate_mcaid, "**"),
+                                  p_mcaid =="<0.001" ~ paste0(estimate_mcaid, "***"),
+                                  TRUE ~ as.character(estimate_mcaid))) %>%
   mutate(group = case_when(group == "housing_time_at_exit" ~ "Years in housing",
                            group == "hh_size" ~ "Household size",
                            group == "single_caregiver" ~ "Single caregiver",
@@ -437,10 +441,14 @@ tableS2 <- bind_rows(tableS2, ref_rows) %>%
   arrange(cat_order, order, group_order, group) %>%
   filter(group != "(Intercept)") %>%
   select(-ends_with("order")) %>%
-  mutate(estimate_mcaid = case_when(p_all =="<0.05" ~ paste0(estimate_mcaid, "*"),
-                                  p_all =="<0.01" ~ paste0(estimate_mcaid, "**"),
-                                  p_all =="<0.001" ~ paste0(estimate_mcaid, "***"),
-                                  TRUE ~ as.character(estimate_mcaid))) %>%
+  mutate(estimate_all = case_when(p_all =="<0.05" ~ paste0(estimate_all, "*"),
+                                  p_all =="<0.01" ~ paste0(estimate_all, "**"),
+                                  p_all =="<0.001" ~ paste0(estimate_all, "***"),
+                                  TRUE ~ as.character(estimate_all))) %>%
+  mutate(estimate_mcaid = case_when(p_mcaid =="<0.05" ~ paste0(estimate_mcaid, "*"),
+                                    p_mcaid =="<0.01" ~ paste0(estimate_mcaid, "**"),
+                                    p_mcaid =="<0.001" ~ paste0(estimate_mcaid, "***"),
+                                    TRUE ~ as.character(estimate_mcaid))) %>%
   mutate(group = case_when(group == "housing_time_at_exit" ~ "Years in housing",
                            group == "hh_size" ~ "Household size",
                            group == "single_caregiver" ~ "Single caregiver",
@@ -465,7 +473,7 @@ tableS2 <- tableS2 %>%
   tab_footnote(footnote = "* = p<0.05, ** = p<0.01, *** = p<0.001",
                locations = cells_column_labels(columns = starts_with("estimate"))) %>%
   tab_footnote(footnote = "Multiple genders = both genders reported at different time points", 
-               locations =  cells_stub(rows = str_detect(group, "Multiple"))) %>%
+               locations =  cells_row_groups(groups = "Gender")) %>%
   tab_footnote(footnote = "AI/AN = American Indian/Alaskan Native, NH/PI = Native Hawaiian/Pacific Islander", 
                locations = cells_row_groups(groups = "Race/ethnicity")) %>%
   tab_footnote(footnote = "HoH = Head of household", 

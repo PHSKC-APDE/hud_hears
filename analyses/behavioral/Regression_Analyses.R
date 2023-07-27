@@ -308,9 +308,11 @@ gt(groupname_col = "category", rowname_col = "group") %>%
 
 descriptive <- table_formatter(descriptive)
 
-# Save output
+# Save output 
 gtsave(descriptive, filename = "bh_manuscript_table1.png",
        path = file.path(here::here(), "analyses/behavioral"))
+
+
 
 
 
@@ -396,7 +398,7 @@ table2 <- table2 %>%
                locations = cells_row_groups(groups = "Race/ethnicity")) %>%
   tab_footnote(footnote = "HoH = Head of household", 
                locations = cells_stub(rows = str_detect(group, "HoH"))) %>%
-  tab_footnote(footnote = "HCV = Housing Choice Voucher, PH = Public housing", 
+  tab_footnote(footnote = "HCV = Housing Choice Voucher, PH = Public housing, TBV=Tenant Based Voucher", 
                locations = cells_row_groups(groups = "Program type")) %>%
   sub_missing()
 
@@ -491,7 +493,7 @@ tableS2 <- tableS2 %>%
                locations = cells_row_groups(groups = "Race/ethnicity")) %>%
   tab_footnote(footnote = "HoH = Head of household", 
                locations = cells_stub(rows = str_detect(group, "HoH"))) %>%
-  tab_footnote(footnote = "HCV = Housing Choice Voucher, PH = Public housing", 
+  tab_footnote(footnote = "HCV = Housing Choice Voucher, PH = Public housing, TBV=Tenant Based Voucher", 
                locations = cells_row_groups(groups = "Program type")) %>%
   sub_missing()
 
@@ -503,392 +505,130 @@ gtsave(table_S2, filename = "bh_manuscript_tableS2.png",
        path = file.path(here::here(), "analyses/behavioral"))
 
 
-## Added on 7/14/23 
+## Added on 7/25/23 
 ##Table 1: demographics for all participants by exit and exit type ----
 
-#Note: Need to create these functions first. Developed by Alaistar from pha_exit_factors.R script
+#Note: am using a different package for this table, vs. other tables
+#### Prep vars ----
+setDT(all_pop)
+all_pop[, Senior := (fcase(age_at_exit >= 62, TRUE, 
+                           default = FALSE))]
+all_pop[, Child := (fcase(age_at_exit <18, TRUE, 
+                          default = FALSE))]
+all_pop[gender_me == 'Multiple', gender_me := 'Another gender']
+all_pop[, hh_disability := as.logical(hh_disability)]
+all_pop[, single_caregiver := as.logical(single_caregiver)]
+all_pop[race_eth_me == 'Unknown', race_eth_me := NA]
 
-# SET UP GENERIC SUMMARY FUNCTIONS ----
-age_sum <- function(df, full_demog = F, sd = T, ...) {
-  # Set things up to select in pivot_ functions
-  # There is probably a better way to do this but it works
-  col_names <- df %>% select(...) %>% colnames()
-  
-  if (full_demog == T) {
-    df <- df %>% filter(full_demog == T)
-  }
-  
-  output <- df %>% 
-    mutate(# Remove spurious ages
-      age_at_exit = ifelse(age_at_exit > 125, NA_integer_, age_at_exit),
-      senior = case_when(age_at_exit >= 62 ~ 1L, age_at_exit < 62 ~ 0L),
-      child = case_when(age_at_exit < 18 ~ 1L, age_at_exit >= 18 ~ 0L)) %>%
-    filter(!is.na(age_at_exit)) %>%
-    group_by(...) 
-  
-  if (sd == T) {
-    output <- output %>%
-      summarise(n = number(n(), big.mark = ","), 
-                age_mean = paste0(round(mean(age_at_exit), 1), " (",
-                                  round(sd(age_at_exit), 1), ")"),
-                age_med = paste0(median(age_at_exit), " (",
-                                 quantile(age_at_exit)[[2]], "-",
-                                 quantile(age_at_exit)[[4]], ")"),
-                age_range = paste0(min(age_at_exit), "-", max(age_at_exit)),
-                senior = scales::percent(mean(senior, na.rm = T), accuracy = 0.1L),
-                child = scales::percent(mean(child, na.rm = T), accuracy = 0.1L)) 
-    
-  } else {
-    output <- output %>%
-      summarise(n = number(n(), big.mark = ","), 
-                age_mean = round(mean(age_at_exit), 1),
-                age_med = median(age_at_exit),
-                age_range = paste0(min(age_at_exit), "-", max(age_at_exit)),
-                senior = scales::percent(mean(senior, na.rm = T), accuracy = 0.1L),
-                child = scales::percent(mean(child, na.rm = T), accuracy = 0.1L))
-  }
-  
-  output <- output %>%
-    pivot_longer(cols = !col_names, values_transform = list(value = as.character)) %>%
-    pivot_wider(id_cols = "name", names_from = col_names) %>%
-    mutate(category = "Age", .before = "name",
-           name = case_when(name == "age_mean" & sd == T ~ "Mean (years) (SD)",
-                            name == "age_mean" & sd == F ~ "Mean (years) (SD)",
-                            name == "age_med" & sd == T ~ "Median (years) (IQR)",
-                            name == "age_med" & sd == F ~ "Median (years)",
-                            name == "age_range" ~ "Range (years)",
-                            name == "senior" ~ "Senior (aged 62+)",
-                            name == "child" ~ "Child (aged <18)",
-                            TRUE ~ name)) %>%
-    rename("group" = "name")
-  
-  output
+#### Build Arsenal Table ----
+# Configure Arsenal arguments ----
+library(arsenal)
+my_controls <- tableby.control(
+  test = T,
+  total = T,
+  numeric.test = "kwt", cat.test = "chisq",
+  numeric.stats = c("meansd", "medianq1q3", "range", "Nmiss2"),
+  # numeric.stats = c("meansd", "median", "Nmiss2"),
+  digits = 0,
+  cat.stats = c("countpct", "Nmiss2"),
+  stats.labels = list(
+    meansd = "Mean (SD)",
+    medianq1q3 = "Median (IQR)",
+    range = "Range",
+    Nmiss2 = "Missing"
+  )
+)
+
+# create table ----
+table1 <- as.data.table(summary(
+  arsenal::tableby(exit_category ~ 
+                     age_at_exit +
+                     Senior +
+                     Child +
+                     gender_me +
+                     race_eth_me +
+                     housing_time_at_exit +
+                     hh_size +
+                     single_caregiver +
+                     hh_disability +
+                     prog_type_use, 
+                   data = all_pop, # at exit!
+                   control = my_controls)
+))
+
+# strip attributes ----
+attr(table1, 'align') <- NULL
+attr(table1, 'ylabel') <- NULL
+attr(table1, 'control.list') <- NULL
+table1 <- setDT(copy(as.data.frame(table1)))
+
+# format big numbers ----
+for(ii in 2:5){
+  orig.colname <- names(table1)[ii]
+  setnames(table1, orig.colname, 'tempy')
+  orig.colname <- paste0(gsub("\\(N=\\d+\\)", "(N=", orig.colname), 
+                         format(as.integer(gsub(".*\\((N=)(\\d+)\\).*", "\\2", orig.colname)), big.mark = ','), 
+                         ")")
+  table1[, tempy := unlist(gsub("\\(|\\)", "", tempy))] # drop parenthesis
+  table1[, tempy := gsub(", ", ",_", tempy)] # temporarily swap out space 
+  table1[, tempy := gsub(" - ", "_-_", tempy)] # temporarily swap out space i
+  table1[, c('tempy1', 'tempy2') := tstrsplit(tempy, split = ' ', fixed=TRUE)]
+  table1[, tempy1 := as.integer(tempy1)]
+  table1[tempy1 > 999, tempy1.big := format(tempy1, big.mark = ',')]
+  table1[, tempy1.big := fcase(tempy1 > 999, format(tempy1, big.mark = ','), 
+                               tempy1 <= 999, as.character(tempy1))]
+  table1[, tempy2 := suppressWarnings(as.integer(tempy2))]
+  table1[, tempy2.big := fcase(tempy2 > 999, format(tempy2, big.mark = ','), 
+                               tempy2 <= 999, as.character(tempy2))]
+  table1[!is.na(tempy1.big) & is.na(tempy2.big) & grepl(" ", tempy), tempy2.big := gsub("^.* ", "", tempy)] # to keep 2nd half as is when only first part is a big number
+  table1[, tempybig := gsub(" \\(NA\\)", "", paste0(tempy1.big, " (", tempy2.big, ")"))]
+  table1[tempybig == 'NA', tempybig := NA]
+  table1[is.na(tempybig) & !is.na(tempy), tempybig := tempy]
+  table1[, tempy := tempybig]
+  table1[, tempy := gsub(",_", ", ", tempy)]
+  table1[, tempy := gsub("_-_", " - ", tempy)]
+  setnames(table1, 'tempy', orig.colname)
+  table1[, grep('tempy', names(table1)) := NULL]
 }
 
-# Can take a common approach to summaries that are simple percents
-demog_pct_sum <- function(df, 
-                          full_demog = F,
-                          level = c("ind", "hh"),
-                          demog = c("gender", "race", "program_major", "program_type", "voucher", 
-                                    "program_ind", "voucher_ind", "crisis_any_prior",
-                                    "homeless_grp"),
-                          suppress = T,
-                          ...) {
-  # Set things up to select in pivot_ functions
-  # There is probably a better way to do this but it works
-  col_names <- df %>% select(...) %>% colnames()
-  
-  level <- match.arg(level)
-  demog <- match.arg(demog)
-  
-  if (full_demog == T) {
-    df <- df %>% filter(full_demog == T)
-  }
-  
-  if (level == "ind") {
-    output <- df %>% mutate(id_var = id_hudhears)
-  } else if (level == "hh") {
-    output <- df %>% mutate(id_var = hh_id_kc_pha)
-  }
-  
-  if (demog == "gender") {
-    cat_text <- "Gender"
-    output <- output %>% 
-      distinct(id_var, exit_date, ..., gender_me) %>% 
-      mutate(group = case_when(gender_me == "Multiple" ~ "Another gender",
-                               TRUE ~ gender_me))
-  } else if (demog == "race") {
-    cat_text <- "Race/ethnicity"
-    output <- output %>% 
-      distinct(id_var, exit_date, ..., race_eth_me) %>%
-      filter(!is.na(race_eth_me) & race_eth_me != "Unknown") %>%
-      mutate(group = ifelse(race_eth_me == "Latino", "Latina/o/x", race_eth_me))
-  } else if (demog == "program_major") {
-    cat_text <- "Program type"
-    output <- output %>% 
-      distinct(id_var, exit_date, ..., major_prog) %>%
-      filter(!is.na(major_prog)) %>%
-      mutate(group = major_prog)
-  } else if (demog == "program_type") {
-    cat_text <- "Program type"
-    output <- output %>% 
-      distinct(id_var, exit_date, ..., prog_type_use) %>%
-      filter(!is.na(prog_type_use)) %>%
-      mutate(group = prog_type_use)
-  } else if (demog == "voucher") {
-    cat_text <- "Voucher type"
-    output <- output %>% 
-      filter(major_prog == "HCV") %>%
-      distinct(id_var, exit_date, ..., vouch_type_use) %>%
-      mutate(group = vouch_type_use) %>%
-      filter(!is.na(group))
-  } else if (demog == "crisis_any_prior") {
-    cat_text <- "Health and homelessness events"
-    output <- output %>% 
-      distinct(id_var, exit_date, ..., crisis_any_prior) %>%
-      filter(!is.na(crisis_any_prior)) %>%
-      mutate(group = case_when(crisis_any_prior == 1 ~ paste0("Experienced 1+ behavioral health crisis events ", 
-                                                              "in year prior to exit (excl. Medicaid ED visits)"),
-                               crisis_any_prior == 0 ~ paste0("Did not experience a behavioral health crisis ", 
-                                                              "in year prior to exit (excl. Medicaid ED visits)")))
-  } else if (demog == "homeless_grp") {
-    cat_text <- "Health and homelessness events"
-    output <- output %>% 
-      distinct(id_var, exit_date, ..., recent_homeless_grp) %>%
-      filter(!is.na(recent_homeless_grp)) %>%
-      mutate(group = case_when(recent_homeless_grp == 1 ~ "Experienced recent homelessness",
-                               recent_homeless_grp == 0 ~ "Did not experience recent homelessness"))
-  }
-  
-  # Common reshaping approach
-  output <- output %>%
-    count(..., group) %>%
-    group_by(...) %>%
-    mutate(tot = sum(n), pct = round(n/tot*100,1)) %>%
-    # Check for suppression
-    arrange(..., n) %>%
-    mutate(group_min = min(n, na.rm = T),
-           row = row_number()) %>%
-    ungroup() %>%
-    # Deal with suppression, including secondary
-    mutate(n_supp = case_when(n < 10 ~ "<10", 
-                              row == 2 & group_min < 10 ~ paste0("<", ceiling(n / 10)*10),
-                              TRUE ~ NA_character_)) %>%
-    mutate(category = cat_text,
-           val = case_when(is.na(n_supp) | suppress == F ~ 
-                             paste0(number(n, big.mark = ",", accuracy = 1L), 
-                                    " (", pct, "%)"),
-                           TRUE ~ n_supp)) %>%
-    select(col_names, category, group, val) %>%
-    arrange(..., group) %>%
-    pivot_wider(id_cols = c("category", "group"), names_from = col_names, values_from = "val")
-  
-  
-  output
+# tidy table ----  
+setnames(table1, names(table1)[1], 'col1')
+table1[, col1 := gsub("race_eth_me", "Race/ethnicity", col1)]
+table1[, col1 := gsub("gender_me", "Gender", col1)]
+table1[, col1 := gsub("age_at_exit", "Age", col1)]
+table1[, col1 := gsub("hh_disability", "Head of household disability", col1)]
+table1[, col1 := gsub("hh_gt_1_worker", "Household ≥ 2 wage earners", col1)]
+table1[, col1 := gsub("single_caregiver", "Single caregiver", col1)]
+table1[, col1 := gsub("housing_time_at_exit", "Years of housing assistance", col1)]
+table1[, col1 := gsub("prog_type_use", "Program type", col1)]
+table1[, col1 := gsub("hh_size", "Household size", col1)]
+table1[, col1 := gsub("Senior", "Senior (aged 62+)", col1)]
+table1[, col1 := gsub("Child", "Child (aged < 18)", col1)]
+
+table1[, col1 := gsub("&nbsp;|\\*\\*", "", col1)]
+table1[ !is.na(`p value`) & `p value` != "", variable := col1]
+table1[, variable := variable[1], by= .(cumsum(!is.na(variable)) ) ] # fill downward
+
+table1[variable %in% c('Age', 'Years of housing assistance'), col1 := gsub("\\(", "(years) (", col1)]
+table1[variable %in% c('Age', 'Years of housing assistance'), col1 := gsub("Range", "Range (years)", col1)]
+
+# more tidying ----
+# when binary true/false, collapse it down to one row
+tf.vars <- table1[col1 == 'TRUE']$variable # identify true / false variables
+table1 <- table1[col1 != "FALSE"]
+table1[col1 == "TRUE", col1 := variable]
+for(tf in tf.vars){ # collapse the header and the TRUE row down to one row
+  table1[col1 == tf, dup := 1:.N, col1]
+  table1[dup == 2 & col1 == tf, "p value" := table1[dup==1 & col1 == tf]$`p value`]
+  table1 <- table1[!(dup == 1 & col1 == tf)]
+  table1[, dup := NULL]
 }
 
+table1 <- table1[!(col1 == "Missing" & get(names(table1)[2]) == 0 & get(names(table1)[3]) == 0 & get(names(table1)[4]) == 0)] # drop if missing always zero
 
-demog_num_sum <- function(df, 
-                          full_demog = F, 
-                          level = c("ind", "hh"),
-                          demog = c("los", "opp_index"),
-                          sd = T,
-                          ...) {
-  
-  level <- match.arg(level)
-  demog <- match.arg(demog)
-  
-  col_names <- df %>% distinct(...) %>% colnames()
-  
-  if (full_demog == T) {
-    df <- df %>% filter(full_demog == T)
-  }
-  
-  if (level == "ind") {
-    df <- df %>% mutate(id_var = id_hudhears)
-  } else if (level == "hh") {
-    df <- df %>% mutate(id_var = hh_id_kc_pha)
-  }
-  
-  if (demog == "los") {
-    cat_text <- "HoH time in housing"
-    scale <- 1
-    df <- df %>% 
-      filter(!is.na(housing_time_at_exit)) %>%
-      distinct(id_var, housing_time_at_exit, ...) %>%
-      mutate(group = housing_time_at_exit)
-  } else if (demog == "opp_index") {
-    cat_text <- "Opportunity index"
-    scale <- 2
-    df <- df %>% 
-      filter(!is.na(kc_opp_index_score)) %>%
-      distinct(id_var, kc_opp_index_score, ...) %>%
-      mutate(group = kc_opp_index_score)
-  }
-  
-  output <- df %>% 
-    group_by(...) 
-  
-  if (sd == T) {
-    output <- output %>%
-      summarise(n = number(n(), big.mark = ","), 
-                grp_mean = paste0(round(mean(group), scale), " (",
-                                  round(sd(group), scale), ")"),
-                grp_med = paste0(round(median(group), scale), " (",
-                                 round(quantile(group)[[2]], scale), "-",
-                                 round(quantile(group)[[4]], scale), ")"))
-  } else {
-    output <- output %>%
-      summarise(n = number(n(), big.mark = ","), 
-                grp_mean = round(mean(group), scale),
-                grp_med = round(median(group), scale))
-  }
-  output <- output %>%
-    pivot_longer(cols = !col_names, values_transform = list(value = as.character)) %>%
-    pivot_wider(id_cols = "name", names_from = col_names) %>%
-    mutate(category = cat_text, .before = "name",
-           name = case_when(demog == "los" & name == "grp_mean" & sd == T ~ "Mean time (years) (SD)",
-                            demog == "los" & name == "grp_mean" & sd == F ~ "Mean time (years)",
-                            demog == "los" & name == "grp_med" & sd == T ~ "Median time (years) (IQR)",
-                            demog == "los" & name == "grp_med" & sd == F ~ "Median time (years)",
-                            demog == "opp_index" & name == "grp_mean" & sd == T ~ "Mean score (SD)",
-                            demog == "opp_index" & name == "grp_mean" & sd == F ~ "Mean score",
-                            demog == "opp_index" & name == "grp_med" & sd == T ~ "Median score (SD)",
-                            demog == "opp_index" & name == "grp_med" & sd == F ~ "Median score",
-                            TRUE ~ name)) %>%
-    rename("group" = "name")
-  
-  output
-}
+table1[col1 != variable, col1 := paste0("   ", col1)] # add indent for categories within a variable
 
-hh_demogs_sum <- function(df, full_demog = F, level = c("hh", "ind"), sd = T, ...) {
-  col_names <- df %>% select(...) %>% colnames()
-  
-  if (full_demog == T) {
-    df <- df %>% filter(full_demog == T)
-  }
-  
-  # Set things up for household- or individual-level analyses
-  level <- match.arg(level)
-  if (level == "ind") {
-    output <- df %>% mutate(id_var = id_hudhears)
-  } else if (level == "hh") {
-    output <- df %>% mutate(id_var = hh_id_kc_pha)
-  }
-  
-  output <- output %>% 
-    distinct(id_var, exit_date, ..., hh_size, single_caregiver, hh_disability) %>%
-    group_by(...)
-  
-  if (sd == T) {
-    output <- output %>%
-      summarise(n = number(n(), big.mark = ","), 
-                hh_size_mean = paste0(round(mean(hh_size), 1), " (",
-                                      round(sd(hh_size), 1), ")"),
-                hh_size_med = paste0(median(hh_size), " (",
-                                     quantile(hh_size)[[2]], "-",
-                                     quantile(hh_size)[[4]], ")"),
-                single_caregiver = scales::percent(mean(single_caregiver, na.rm = T), accuracy = 0.1L),
-                hh_disability = scales::percent(mean(hh_disability, na.rm = T), accuracy = 0.1L))
-  } else {
-    output <- output %>%
-      summarise(n = number(n(), big.mark = ","), 
-                hh_size_mean = round(mean(hh_size, na.rm = T), 1),
-                hh_size_med = median(hh_size, na.rm = T),
-                single_caregiver = scales::percent(mean(single_caregiver, na.rm = T), accuracy = 0.1L),
-                hh_disability = scales::percent(mean(hh_disability, na.rm = T), accuracy = 0.1L))
-  }
-  
-  output <- output %>%
-    pivot_longer(cols = !col_names, values_transform = list(value = as.character)) %>%
-    pivot_wider(id_cols = "name", names_from = col_names) %>%
-    mutate(category = "Household characteristics", .before = "name",
-           name = case_when(name == "hh_size_mean" & sd == T ~ "Mean household size (SD)",
-                            name == "hh_size_mean" & sd == F ~ "Mean household size",
-                            name == "hh_size_med" & sd == T ~ "Median household size (IQR)",
-                            name == "hh_size_med" & sd == F ~ "Median household size",
-                            name == "single_caregiver" ~ "Single caregiver",
-                            name == "hh_disability" ~ "Head of household disability",
-                            TRUE ~ name)) %>%
-    rename("group" = "name")
-  
-  output
-}
+table1 <- table1[, 1:6]
 
-#Next calculate demographics for all (Medicaid subset and entire population)
-## Demogs for all ----
-# Age
-exit_any_age <- age_sum(all_pop, full_demog = T, sd = T, id_type)
-
-# Gender
-exit_any_gender <- demog_pct_sum(all_pop, full_demog = T, suppress = T, level = "ind", 
-                                 demog = "gender", id_type)
-
-# Race/eth
-exit_any_race <- demog_pct_sum(all_pop, full_demog = T, suppress = T, level = "ind", 
-                               demog = "race", id_type)
-
-# Time in housing (this is based on HH data)
-exit_any_hh_los <- demog_num_sum(all_pop, full_demog = T, level = "hh", demog = "los", sd = T, id_type)
-
-# HH size and composition
-exit_any_hh_demogs <- hh_demogs_sum(all_pop, full_demog = T, level = "hh", sd = T, id_type)
-
-# Program type
-exit_any_hh_prog <- demog_pct_sum(all_pop, full_demog = T, suppress = T, level = "hh", demog = "program_type", id_type)
-
-
-# Combine for R markdown
-exit_any_demogs <- bind_rows(exit_any_age, exit_any_gender, exit_any_race, exit_any_hh_los,
-                             exit_any_hh_demogs)
-
-rm(exit_any_age, exit_any_gender, exit_any_race, exit_any_hh_los,
-   exit_any_hh_demogs, exit_any_hh_prog)
-
-
-## Demogs by exit ----
-# Age
-exit_type_age <- age_sum(all_pop, full_demog = T, sd = T, exit_category)
-
-# Gender
-exit_type_gender <- demog_pct_sum(all_pop, full_demog = T, suppress = T, level = "ind", 
-                                  demog = "gender", exit_category)
-
-# Race/eth
-exit_type_race <- demog_pct_sum(all_pop, full_demog = T, suppress = T, level = "ind", 
-                                demog = "race", exit_category)
-
-# Time in housing (this is based on HH data)
-exit_type_hh_los <- demog_num_sum(all_pop, full_demog = T, level = "hh", demog = "los", sd = T, exit_category)
-
-# HH size and composition
-exit_type_hh_demogs <- hh_demogs_sum(all_pop, full_demog = T, level = "hh", sd = T, exit_category)
-
-# Program type
-exit_type_hh_prog <- demog_pct_sum(all_pop, full_demog = T, suppress = T, level = "hh", demog = "program_type", exit_category)
-
-
-
-
-# Combine for R markdown
-exit_type_demogs <- bind_rows(exit_type_age, exit_type_gender, exit_type_race, exit_type_hh_los,
-                              exit_type_hh_demogs, exit_type_hh_prog)
-
-rm(exit_type_age, exit_type_gender, exit_type_race, exit_type_hh_los,
-   exit_type_hh_demogs, exit_type_hh_prog)
-
-
-# Make descriptive table
-table_1_demogs <- exit_type_demogs %>%
-  # Remove unwanted groups
-  filter(!group %in% c("n", "Range (years)")) %>% 
-  # Do some renaming
-  mutate(category = str_replace_all(category, "HoH time", "Time"),
-         group = str_replace_all(group, " time in housing \\(years\\)", " time (years)")) %>%
-  distinct() %>%
-  # Set up table
-  gt(groupname_col = "category", rowname_col = "group") %>%
-  tab_footnote(footnote = "AI/AN = American Indian/Alaskan Native, NH/PI = Native Hawaiian/Pacific Islander", 
-               locations = cells_row_groups(groups = "Race/ethnicity")) %>%
-  tab_footnote(footnote = "HCV = Housing Choice Voucher, PH = Public housing", 
-               locations = cells_row_groups(groups = "Program type")) %>%
-  tab_footnote(footnote = md(glue("Exited N={number(n_exit_any_wc[2], big.mark = ',')}, ",
-                                  "Negative N={number(n_exit_type_wc[1], big.mark = ',')}, ",
-                                  "Neutral N={number(n_exit_type_wc[2], big.mark = ',')}, ",
-                                  "Positive N={number(n_exit_type_wc[3], big.mark = ',')}",
-                                  ")")),
-               locations = cells_stub(rows = str_detect(group, "well-child"))) %>%
-  cols_label(category = md("Category"),
-             group = md("Group"),
-             Negative = md(paste0("Negative exit (N=", number(n_exit_type[1], big.mark = ","), ")")),
-             Neutral = md(paste0("Neutral exit (N=", number(n_exit_type[2], big.mark = ","), ")")),
-             Positive = md(paste0("Positive exit (N=", number(n_exit_type[3], big.mark = ","), ")")))
-
-table_1_demogs <- table_formatter(table_1_demogs)
-
-# Save output
-gtsave(table_1_demogs, filename = "bh_manuscript_demogs 1.png",
-       path = file.path(here::here(), "analyses/behavioral"))
-# gtsave(table_1_demogs, filename = "bh_manuscript_demogs.html",
-#        path = file.path(here::here(), "analyses/behaviora"))
+setnames(table1, c("p value"), c("P-value"))
 

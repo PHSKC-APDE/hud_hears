@@ -290,8 +290,8 @@ table_regression <- function(tbl, type = c("all", "mcaid")) {
 }
 
 
-# TABLE 1
-#DESCRIPTIVE STATS (CURRENTLY ONLY OUTCOMES) ----
+# TABLE 2
+#DESCRIPTIVE STATS fo outcomes ----
 # Turn into a gt table and make pretty
 
 
@@ -309,7 +309,7 @@ gt(groupname_col = "category", rowname_col = "group") %>%
 descriptive <- table_formatter(descriptive)
 
 # Save output 
-gtsave(descriptive, filename = "bh_manuscript_table1.png",
+gtsave(descriptive, filename = "bh_manuscript_table2.png",
        path = file.path(here::here(), "analyses/behavioral"))
 
 
@@ -325,7 +325,7 @@ mcaid_model <- broom::tidy(mcaid_adj, conf.int = TRUE, exponentiate = T) %>% as.
 mcaid_model <- table_regression(mcaid_model, type = "mcaid")
 
 
-table2 <- left_join(any_model, mcaid_model, by = "group") %>%
+table3 <- left_join(any_model, mcaid_model, by = "group") %>%
   mutate(order = 2L,
          category = case_when(str_detect(group, "exit_category") ~ "Exit category",
                               str_detect(group, "age_") ~ "Age",
@@ -346,7 +346,7 @@ ref_rows <- data.frame(category = c("Exit category", "Gender", "Race/ethnicity",
                        order = rep(1L, 4))
 
 
-table2 <- bind_rows(table2, ref_rows) %>%
+table3 <- bind_rows(table3, ref_rows) %>%
   mutate(cat_order = case_when(category == "Exit category" ~ 1L,
                                category == "Age" ~ 2L,
                                category == "Gender" ~ 3L,
@@ -378,7 +378,7 @@ table2 <- bind_rows(table2, ref_rows) %>%
                            TRUE ~ str_remove(group, "age_grp|gender_me|los|prog_type_use|race_eth_me|exit_category")))
 
 # Turn into gt table
-table2 <- table2 %>%
+table3 <- table3 %>%
   gt(groupname_col = "category", rowname_col = "group") %>%
   tab_spanner(label = md("All exits"), columns = ends_with("_all")) %>%
   tab_spanner(label = md("Medicaid subset"), columns = ends_with("_mcaid")) %>%
@@ -403,14 +403,14 @@ table2 <- table2 %>%
   sub_missing()
 
 
-table_2 <- table_formatter(table2)
+table_3 <- table_formatter(table3)
 
 # Save output
-gtsave(table_2, filename = "bh_manuscript_table2.png",
+gtsave(table_3, filename = "bh_manuscript_table3.png",
        path = file.path(here::here(), "analyses/behavioral"))
 
 
-##Table S2: Poisson Regression table
+##Table S3: Poisson Regression table
 #Repeat the same thing, but adjust the inputs
 # Do some basic setup
 any_model <- broom::tidy(any_adj_pois, conf.int = TRUE, exponentiate = T) %>% as.data.frame()
@@ -420,7 +420,7 @@ mcaid_model <- broom::tidy(mcaid_adj_pois, conf.int = TRUE, exponentiate = T) %>
 mcaid_model <- table_regression(mcaid_model, type = "mcaid")
 
 
-tableS2 <- left_join(any_model, mcaid_model, by = "group") %>%
+tableS3 <- left_join(any_model, mcaid_model, by = "group") %>%
   mutate(order = 2L,
          category = case_when(str_detect(group, "exit_category") ~ "Exit category",
                               str_detect(group, "age_") ~ "Age",
@@ -441,7 +441,7 @@ ref_rows <- data.frame(category = c("Exit category", "Gender", "Race/ethnicity",
                        order = rep(1L, 4))
 
 
-tableS2 <- bind_rows(tableS2, ref_rows) %>%
+tableS3 <- bind_rows(tableS3, ref_rows) %>%
   mutate(cat_order = case_when(category == "Exit category" ~ 1L,
                                category == "Age" ~ 2L,
                                category == "Gender" ~ 3L,
@@ -473,7 +473,7 @@ tableS2 <- bind_rows(tableS2, ref_rows) %>%
                            TRUE ~ str_remove(group, "age_grp|gender_me|los|prog_type_use|race_eth_me|exit_category")))
 
 # Turn into gt table
-tableS2 <- tableS2 %>%
+tableS3 <- tableS3 %>%
   gt(groupname_col = "category", rowname_col = "group") %>%
   tab_spanner(label = md("All exits"), columns = ends_with("_all")) %>%
   tab_spanner(label = md("Medicaid subset"), columns = ends_with("_mcaid")) %>%
@@ -498,10 +498,10 @@ tableS2 <- tableS2 %>%
   sub_missing()
 
 
-table_S2 <- table_formatter(tableS2)
+table_S3 <- table_formatter(tableS3)
 
 # Save output
-gtsave(table_S2, filename = "bh_manuscript_tableS2.png",
+gtsave(table_S3, filename = "bh_manuscript_tableS3.png",
        path = file.path(here::here(), "analyses/behavioral"))
 
 
@@ -515,7 +515,7 @@ all_pop[, Senior := (fcase(age_at_exit >= 62, TRUE,
                            default = FALSE))]
 all_pop[, Child := (fcase(age_at_exit <18, TRUE, 
                           default = FALSE))]
-all_pop[gender_me == 'Multiple', gender_me := 'Another gender']
+# all_pop[gender_me == 'Multiple', gender_me := 'Another gender']
 all_pop[, hh_disability := as.logical(hh_disability)]
 all_pop[, single_caregiver := as.logical(single_caregiver)]
 all_pop[race_eth_me == 'Unknown', race_eth_me := NA]

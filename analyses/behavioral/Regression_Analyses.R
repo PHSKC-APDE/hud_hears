@@ -38,8 +38,40 @@ all_pop <- all_pop %>%
 # MCAID coverage preliminary models that include subset with medicaid coverage 7/12 months before and after and age restriction
 mcaid_subset7mo <- all_pop %>% filter(include_cov_age == T)
 
-#Make subset with only under 62
-# U62all_pop <- all_pop %>% filter(age_at_exit <62)
+
+
+
+##summarize exit reasons by type----
+reasons_by_exit_type <- all_pop %>% group_by(exit_category, exit_reason_clean) %>% summarize(n=n())
+neutral_reasons <- reasons_by_exit_type %>% filter(exit_category %in% "Neutral")
+positive_reasons <- reasons_by_exit_type %>% filter(exit_category %in% "Positive")
+negative_reasons <- reasons_by_exit_type %>% filter(exit_category %in% "Negative")
+
+#take top 10 for all, then by exit type
+reasons_top10 <-reasons_by_exit_type %>% ungroup() %>% 
+  mutate(Percent =(n()/sum(n())*100))%>%
+  rename("Exit Reason"="exit_reason_clean") %>%
+  rename("Exit Category"= "exit_category") %>%
+  filter(rank(desc(n))<=10) %>% 
+  arrange(rank(desc(n)))
+
+neutral_top10 <-neutral_reasons %>% ungroup() %>% filter(rank(desc(n))<=10) %>% 
+  arrange(rank(desc(n)))
+
+positive_top10 <-positive_reasons %>% ungroup() %>% filter(rank(desc(n))<=10) %>%
+  arrange(rank(desc(n)))
+
+negative_top10 <-negative_reasons %>% ungroup() %>% filter(rank(desc(n))<=10) %>% 
+  arrange(rank(desc(n)))
+
+
+#export reasons and top 10 reasons tables (for all exits)
+
+kable(reasons_top10, format="html") %>% kable_classic() %>% save_kable("C:/Users/n-mesuter/OneDrive - King County/Documents/GitHub/hud_hears/analyses/behavioral/top10_exitreasons.html")
+kable(reasons_top10, format="html") %>% kable_classic() %>% save_kable("C:/Users/n-mesuter/OneDrive - King County/Documents/GitHub/hud_hears/analyses/behavioral/top10_exitreasons.png")
+
+kable(reasons_by_exit_type, format="html") %>% kable_classic() %>% save_kable("C:/Users/n-mesuter/OneDrive - King County/Documents/GitHub/hud_hears/analyses/behavioral/reasons_by_exit_type.html")
+kable(reasons_by_exit_type, format="html") %>% kable_classic() %>% save_kable("C:/Users/n-mesuter/OneDrive - King County/Documents/GitHub/hud_hears/analyses/behavioral/reasons_by_exit_type.png")
 
 
 # Summary table of outcomes ----
@@ -85,11 +117,11 @@ summarizer <- function(df,
   output
 }
 
-## Make table ----
+## Make table of outcomes by pop subset and exit category----
 descriptive <- bind_rows(summarizer(all_pop, outcome = "all", exit_category),
                          summarizer(mcaid_subset7mo, outcome = "mcaid", exit_category))
 
-#Note: continued below
+#Note: table is formatted below
 
 
 
@@ -189,6 +221,17 @@ mcaid_adj <- geepack::geeglm(crisis_any_mcaid ~ exit_category + gender_me + age_
 
 summary(mcaid_adj)
 broom::tidy(mcaid_adj, conf.int = TRUE, exponentiate = T) %>% as.data.frame()
+
+#add adjustment variable of existing BH condition (this was not included in paper)
+mcaid_adj_2 <- geepack::geeglm(crisis_any_mcaid ~ exit_category + gender_me + age_at_exit + race_eth_me  + 
+                               hh_size + single_caregiver + housing_time_at_exit + prog_type_use + 
+                               hh_disability +  crisis_any_mcaid_before + any_cond,
+                             data = mcaid_subset7mo, 
+                             id = id_hh,
+                             family = "binomial")
+
+summary(mcaid_adj_2)
+broom::tidy(mcaid_adj_2, conf.int = TRUE, exponentiate = T) %>% as.data.frame()
 
 
 # Poisson model (not being used but just for interest's sake)
@@ -532,9 +575,8 @@ gtsave(table_S3, filename = "bh_manuscript_tableS3.html",
 any_model_U62 <- broom::tidy(any_adj_U62, conf.int = TRUE, exponentiate = T) %>% as.data.frame()
 any_model_U62 <- table_regression(any_model_U62, type = "all")
 
-
-
-tableS4 <- mutate(category = case_when(str_detect(group, "exit_category") ~ "Exit category",
+tableS4 <- any_model_U62 %>% mutate(order = 2L,
+         category = case_when(str_detect(group, "exit_category") ~ "Exit category",
                               str_detect(group, "age_") ~ "Age",
                               str_detect(group, "gender_") ~ "Gender",
                               str_detect(group, "race_") ~ "Race/ethnicity",
@@ -579,19 +621,16 @@ tableS4 <- bind_rows(tableS4, ref_rows_U62) %>%
                            str_detect(group, "before") ~ "Prior crisis events",
                            TRUE ~ str_remove(group, "age_grp|gender_me|los|prog_type_use|race_eth_me|exit_category")))
 
+
 # Turn into gt table
-tableS3 <- tableS3 %>%
+tableS4 <- tableS4 %>%
   gt(groupname_col = "category", rowname_col = "group") %>%
-  tab_spanner(label = md("All exits"), columns = ends_with("_all")) %>%
-  tab_spanner(label = md("Medicaid subset"), columns = ends_with("_mcaid")) %>%
+  tab_spanner(label = md("All Exits (Under 62 years"), columns = ends_with("_all")) %>%
   cols_label(category = md("Category"),
              group = md("Group"),
              estimate_all = md("Incidence rate ratio"),
              ci_all = md("95% CI"),
-             p_all = md("p-value"),
-             estimate_mcaid = md("Incidence rate ratio"),
-             ci_mcaid = md("95% CI"),
-             p_mcaid = md("p-value")) %>%
+             p_all = md("p-value")) %>% 
   tab_footnote(footnote = "* = p<0.05, ** = p<0.01, *** = p<0.001",
                locations = cells_column_labels(columns = starts_with("estimate"))) %>%
   tab_footnote(footnote = "Multiple genders = both genders reported at different time points", 
@@ -605,12 +644,12 @@ tableS3 <- tableS3 %>%
   sub_missing()
 
 
-table_S3 <- table_formatter(tableS3)
+table_S4 <- table_formatter(tableS4)
 
 # Save output
-gtsave(table_S3, filename = "bh_manuscript_tableS3.png",
+gtsave(table_S4, filename = "bh_manuscript_tableS4.png",
        path = file.path(here::here(), "analyses/behavioral"))
-gtsave(table_S3, filename = "bh_manuscript_tableS3.html",
+gtsave(table_S4, filename = "bh_manuscript_tableS4.html",
        path = file.path(here::here(), "analyses/behavioral"))
 
 
@@ -630,6 +669,8 @@ all_pop[, Child := (fcase(age_at_exit <18, TRUE,
 all_pop[, hh_disability := as.logical(hh_disability)]
 all_pop[, single_caregiver := as.logical(single_caregiver)]
 all_pop[race_eth_me == 'Unknown', race_eth_me := NA]
+all_pop[, crisis_any_before := as.logical(crisis_any_before)]
+
 
 #### Build Arsenal Table ----
 # Configure Arsenal arguments ----
@@ -658,6 +699,7 @@ table1 <- as.data.table(summary(
                      Child +
                      gender_me +
                      race_eth_me +
+                     crisis_any_before +
                      housing_time_at_exit +
                      hh_size +
                      single_caregiver +
@@ -715,6 +757,8 @@ table1[, col1 := gsub("prog_type_use", "Program type", col1)]
 table1[, col1 := gsub("hh_size", "Household size", col1)]
 table1[, col1 := gsub("Senior", "Senior (aged 62+)", col1)]
 table1[, col1 := gsub("Child", "Child (aged < 18)", col1)]
+table1[, col1 := gsub("crisis_any_before", "Prior crisis event)", col1)]
+
 
 table1[, col1 := gsub("&nbsp;|\\*\\*", "", col1)]
 table1[ !is.na(`p value`) & `p value` != "", variable := col1]
@@ -761,7 +805,7 @@ mcaid_subset7mo[, Child := (fcase(age_at_exit <18, TRUE,
 # mcaid_subset7mo[gender_me == 'Multiple', gender_me := 'Another gender']
 mcaid_subset7mo[, hh_disability := as.logical(hh_disability)]
 mcaid_subset7mo[, single_caregiver := as.logical(single_caregiver)]
-mcaid_subset7mo[, any_cond := as.logical(any_cond)]
+mcaid_subset7mo[, crisis_any_mcaid_before := as.logical(crisis_any_mcaid_before)]
 mcaid_subset7mo[race_eth_me == 'Unknown', race_eth_me := NA]
 
 #### Build Arsenal Table ----
@@ -790,7 +834,7 @@ table1a <- as.data.table(summary(
                      Child +
                      gender_me +
                      race_eth_me +
-                     any_cond+
+                     crisis_any_mcaid_before+
                      housing_time_at_exit +
                      hh_size +
                      single_caregiver +
@@ -848,7 +892,7 @@ table1a[, col1 := gsub("prog_type_use", "Program type", col1)]
 table1a[, col1 := gsub("hh_size", "Household size", col1)]
 table1a[, col1 := gsub("Child", "Child (aged < 18)", col1)]
 table1a[, col1 := gsub("Child", "Child (aged < 18)", col1)]
-table1a[, col1 := gsub("any_cond", "Existing Behavioral Health Condition", col1)]
+table1a[, col1 := gsub("crisis_any_mcaid_before", "Prior crisis event", col1)]
 
 
 

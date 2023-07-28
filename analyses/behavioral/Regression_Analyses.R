@@ -750,7 +750,142 @@ table1 <- table1 %>% select (-c("P-value")) %>% rename("Demographic Variable"="c
 #export as html and png
 library(knitr)
 library(kableExtra)
-kable (table1, format="html") %>% save_kable("C:/Users/n-mesuter/OneDrive - King County/Documents/GitHub/hud_hears/analyses/behavioral/table1.html")
+kable(table1, format="html") %>% kable_classic() %>% save_kable("C:/Users/n-mesuter/OneDrive - King County/Documents/GitHub/hud_hears/analyses/behavioral/table1.html")
+kable(table1, format="html") %>% kable_classic() %>% save_kable("C:/Users/n-mesuter/OneDrive - King County/Documents/GitHub/hud_hears/analyses/behavioral/table1.png")
 
-kable (table1, format="html") %>% save_kable("C:/Users/n-mesuter/OneDrive - King County/Documents/GitHub/hud_hears/analyses/behavioral/table1.png")
+##Repeat this for Medicaid only----
+#### Prep vars ----
+setDT(mcaid_subset7mo)
+mcaid_subset7mo[, Child := (fcase(age_at_exit <18, TRUE, 
+                          default = FALSE))]
+# mcaid_subset7mo[gender_me == 'Multiple', gender_me := 'Another gender']
+mcaid_subset7mo[, hh_disability := as.logical(hh_disability)]
+mcaid_subset7mo[, single_caregiver := as.logical(single_caregiver)]
+mcaid_subset7mo[, any_cond := as.logical(any_cond)]
+mcaid_subset7mo[race_eth_me == 'Unknown', race_eth_me := NA]
+
+#### Build Arsenal Table ----
+# Configure Arsenal arguments ----
+library(arsenal)
+my_controls <- tableby.control(
+  test = T,
+  total = T,
+  numeric.test = "kwt", cat.test = "chisq",
+  numeric.stats = c("meansd", "medianq1q3", "range", "Nmiss2"),
+  # numeric.stats = c("meansd", "median", "Nmiss2"),
+  digits = 0,
+  cat.stats = c("countpct", "Nmiss2"),
+  stats.labels = list(
+    meansd = "Mean (SD)",
+    medianq1q3 = "Median (IQR)",
+    range = "Range",
+    Nmiss2 = "Missing"
+  )
+)
+
+# create table ----
+table1a <- as.data.table(summary(
+  arsenal::tableby(exit_category ~ 
+                     age_at_exit +
+                     Child +
+                     gender_me +
+                     race_eth_me +
+                     any_cond+
+                     housing_time_at_exit +
+                     hh_size +
+                     single_caregiver +
+                     hh_disability +
+                     prog_type_use,
+                   data = mcaid_subset7mo, # at exit!
+                   control = my_controls)
+))
+
+# strip attributes ----
+attr(table1a, 'align') <- NULL
+attr(table1a, 'ylabel') <- NULL
+attr(table1a, 'control.list') <- NULL
+table1a <- setDT(copy(as.data.frame(table1a)))
+
+# format big numbers ----
+for(ii in 2:5){
+  orig.colname <- names(table1a)[ii]
+  setnames(table1a, orig.colname, 'tempy')
+  orig.colname <- paste0(gsub("\\(N=\\d+\\)", "(N=", orig.colname), 
+                         format(as.integer(gsub(".*\\((N=)(\\d+)\\).*", "\\2", orig.colname)), big.mark = ','), 
+                         ")")
+  table1a[, tempy := unlist(gsub("\\(|\\)", "", tempy))] # drop parenthesis
+  table1a[, tempy := gsub(", ", ",_", tempy)] # temporarily swap out space 
+  table1a[, tempy := gsub(" - ", "_-_", tempy)] # temporarily swap out space i
+  table1a[, c('tempy1', 'tempy2') := tstrsplit(tempy, split = ' ', fixed=TRUE)]
+  table1a[, tempy1 := as.integer(tempy1)]
+  table1a[tempy1 > 999, tempy1.big := format(tempy1, big.mark = ',')]
+  table1a[, tempy1.big := fcase(tempy1 > 999, format(tempy1, big.mark = ','), 
+                               tempy1 <= 999, as.character(tempy1))]
+  table1a[, tempy2 := suppressWarnings(as.integer(tempy2))]
+  table1a[, tempy2.big := fcase(tempy2 > 999, format(tempy2, big.mark = ','), 
+                               tempy2 <= 999, as.character(tempy2))]
+  table1a[!is.na(tempy1.big) & is.na(tempy2.big) & grepl(" ", tempy), tempy2.big := gsub("^.* ", "", tempy)] # to keep 2nd half as is when only first part is a big number
+  table1a[, tempybig := gsub(" \\(NA\\)", "", paste0(tempy1.big, " (", tempy2.big, ")"))]
+  table1a[tempybig == 'NA', tempybig := NA]
+  table1a[is.na(tempybig) & !is.na(tempy), tempybig := tempy]
+  table1a[, tempy := tempybig]
+  table1a[, tempy := gsub(",_", ", ", tempy)]
+  table1a[, tempy := gsub("_-_", " - ", tempy)]
+  setnames(table1a, 'tempy', orig.colname)
+  table1a[, grep('tempy', names(table1a)) := NULL]
+}
+
+# tidy table ----  
+setnames(table1a, names(table1a)[1], 'col1')
+table1a[, col1 := gsub("race_eth_me", "Race/ethnicity", col1)]
+table1a[, col1 := gsub("gender_me", "Gender", col1)]
+table1a[, col1 := gsub("age_at_exit", "Age", col1)]
+table1a[, col1 := gsub("hh_disability", "Head of household disability", col1)]
+table1a[, col1 := gsub("hh_gt_1_worker", "Household ≥ 2 wage earners", col1)]
+table1a[, col1 := gsub("single_caregiver", "Single caregiver", col1)]
+table1a[, col1 := gsub("housing_time_at_exit", "Years of housing assistance", col1)]
+table1a[, col1 := gsub("prog_type_use", "Program type", col1)]
+table1a[, col1 := gsub("hh_size", "Household size", col1)]
+table1a[, col1 := gsub("Child", "Child (aged < 18)", col1)]
+table1a[, col1 := gsub("Child", "Child (aged < 18)", col1)]
+table1a[, col1 := gsub("any_cond", "Existing Behavioral Health Condition", col1)]
+
+
+
+table1a[, col1 := gsub("&nbsp;|\\*\\*", "", col1)]
+table1a[ !is.na(`p value`) & `p value` != "", variable := col1]
+table1a[, variable := variable[1], by= .(cumsum(!is.na(variable)) ) ] # fill downward
+
+table1a[variable %in% c('Age', 'Years of housing assistance'), col1 := gsub("\\(", "(years) (", col1)]
+table1a[variable %in% c('Age', 'Years of housing assistance'), col1 := gsub("Range", "Range (years)", col1)]
+
+# more tidying ----
+# when binary true/false, collapse it down to one row
+tf.vars <- table1a[col1 == 'TRUE']$variable # identify true / false variables
+table1a <- table1a[col1 != "FALSE"]
+table1a[col1 == "TRUE", col1 := variable]
+for(tf in tf.vars){ # collapse the header and the TRUE row down to one row
+  table1a[col1 == tf, dup := 1:.N, col1]
+  table1a[dup == 2 & col1 == tf, "p value" := table1a[dup==1 & col1 == tf]$`p value`]
+  table1a <- table1a[!(dup == 1 & col1 == tf)]
+  table1a[, dup := NULL]
+}
+
+#adds missing column, but that is not applicable here as the data have already been filtered to include only with non-missing covariates
+table1a <- table1a[!(col1 == "Missing" & get(names(table1a)[2]) == 0 & get(names(table1a)[3]) == 0 & get(names(table1a)[4]) == 0)] # drop if missing always zero
+
+table1a[col1 != variable, col1 := paste0("   ", col1)] # add indent for categories within a variable
+
+table1a <- table1a[, 1:6]
+
+setnames(table1a, c("p value"), c("P-value"))
+
+#Remove p-value column and rename col 1
+table1a <- table1a %>% select (-c("P-value")) %>% rename("Demographic Variable"="col1")
+
+#export as html and png
+# library(knitr)
+# library(kableExtra)
+kable(table1a, format="html") %>% kable_classic() %>% save_kable("C:/Users/n-mesuter/OneDrive - King County/Documents/GitHub/hud_hears/analyses/behavioral/table1a.html")
+kable(table1a, format="html") %>% kable_classic() %>% save_kable("C:/Users/n-mesuter/OneDrive - King County/Documents/GitHub/hud_hears/analyses/behavioral/table1a.png")
 

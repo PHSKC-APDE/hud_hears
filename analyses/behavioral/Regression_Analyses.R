@@ -115,6 +115,21 @@ any_adj <- geepack::geeglm(crisis_any ~ exit_category + gender_me + age_at_exit 
 summary(any_adj)
 broom::tidy(any_adj, conf.int = TRUE, exponentiate = T) %>% as.data.frame()
 
+####Sensitivity analyses----
+
+#Repeat this model, with all population but exclusion 62 and up
+all_pop_U62 <-all_pop %>% filter(age_at_exit <62)
+
+any_adj_U62 <- geepack::geeglm(crisis_any ~ exit_category + gender_me + age_at_exit + race_eth_me  + 
+                             hh_size + single_caregiver + housing_time_at_exit + prog_type_use + 
+                             hh_disability + crisis_any_before, 
+                           data = all_pop_U62, 
+                           id = id_hh,
+                           family = "binomial")
+
+summary(any_adj_U62)
+broom::tidy(any_adj_U62, conf.int = TRUE, exponentiate = T) %>% as.data.frame()
+
 
 # Poisson model (not being used but just for interest's sake)
 any_adj_pois <- geepack::geeglm(crisis_num ~ exit_category + gender_me + age_at_exit + race_eth_me  + 
@@ -291,7 +306,7 @@ table_regression <- function(tbl, type = c("all", "mcaid")) {
 
 
 # TABLE 2
-#DESCRIPTIVE STATS fo outcomes ----
+#DESCRIPTIVE STATS for outcomes ----
 # Turn into a gt table and make pretty
 
 
@@ -310,6 +325,8 @@ descriptive <- table_formatter(descriptive)
 
 # Save output 
 gtsave(descriptive, filename = "bh_manuscript_table2.png",
+       path = file.path(here::here(), "analyses/behavioral"))
+gtsave(descriptive, filename = "bh_manuscript_table2.html",
        path = file.path(here::here(), "analyses/behavioral"))
 
 
@@ -408,6 +425,8 @@ table_3 <- table_formatter(table3)
 # Save output
 gtsave(table_3, filename = "bh_manuscript_table3.png",
        path = file.path(here::here(), "analyses/behavioral"))
+gtsave(table_3, filename = "bh_manuscript_table3.html",
+       path = file.path(here::here(), "analyses/behavioral"))
 
 
 ##Table S3: Poisson Regression table
@@ -503,6 +522,98 @@ table_S3 <- table_formatter(tableS3)
 # Save output
 gtsave(table_S3, filename = "bh_manuscript_tableS3.png",
        path = file.path(here::here(), "analyses/behavioral"))
+gtsave(table_S3, filename = "bh_manuscript_tableS3.html",
+       path = file.path(here::here(), "analyses/behavioral"))
+
+
+# Table s4----
+#Repeating primary analysis with exclusion of 62 and up
+# Do some basic setup
+any_model_U62 <- broom::tidy(any_adj_U62, conf.int = TRUE, exponentiate = T) %>% as.data.frame()
+any_model_U62 <- table_regression(any_model_U62, type = "all")
+
+
+
+tableS4 <- mutate(category = case_when(str_detect(group, "exit_category") ~ "Exit category",
+                              str_detect(group, "age_") ~ "Age",
+                              str_detect(group, "gender_") ~ "Gender",
+                              str_detect(group, "race_") ~ "Race/ethnicity",
+                              str_detect(group, "^los|housing_time") ~ "Time in housing",
+                              group %in% c("hh_size", "single_caregiver", "hh_disability")
+                              ~ "Household characteristics",
+                              str_detect(group, "prog_type_use") ~ "Program type",
+                              str_detect(group, "before") ~ "Existing behavioral health"))
+
+# Make and bind the reference rows
+ref_rows_U62 <- data.frame(category = c("Exit category", "Gender", "Race/ethnicity", "Program type"),
+                       group = c("exit_categoryNeutral", "gender_meFemale", 
+                                 "race_eth_meWhite", "prog_type_useHCV"),
+                       estimate_all = rep("ref", 4), 
+                       order = rep(1L, 4))
+
+
+tableS4 <- bind_rows(tableS4, ref_rows_U62) %>%
+  mutate(cat_order = case_when(category == "Exit category" ~ 1L,
+                               category == "Age" ~ 2L,
+                               category == "Gender" ~ 3L,
+                               category == "Race/ethnicity" ~ 4L,
+                               category == "Time in housing" ~ 5L,
+                               category == "Household characteristics" ~ 6L,
+                               category == "Program type" ~ 7L,
+                               category == "Existing behavioral health" ~ 8L),
+         group_order = case_when(group %in% c("hh_size") ~ 1L,
+                                 group %in% c("single_caregiver") ~ 2L,
+                                 group %in% c("hh_disability") ~ 3L)) %>%
+  arrange(cat_order, order, group_order, group) %>%
+  filter(group != "(Intercept)") %>%
+  select(-ends_with("order")) %>%
+  mutate(estimate_all = case_when(p_all =="<0.05" ~ paste0(estimate_all, "*"),
+                                  p_all =="<0.01" ~ paste0(estimate_all, "**"),
+                                  p_all =="<0.001" ~ paste0(estimate_all, "***"),
+                                  TRUE ~ as.character(estimate_all))) %>%
+  mutate(group = case_when(group == "housing_time_at_exit" ~ "Years in housing",
+                           group == "hh_size" ~ "Household size",
+                           group == "single_caregiver" ~ "Single caregiver",
+                           group == "hh_disability" ~ "HoH disability",
+                           group == "age_at_exit" ~ "Age at exit (years)",
+                           str_detect(group, "before") ~ "Prior crisis events",
+                           TRUE ~ str_remove(group, "age_grp|gender_me|los|prog_type_use|race_eth_me|exit_category")))
+
+# Turn into gt table
+tableS3 <- tableS3 %>%
+  gt(groupname_col = "category", rowname_col = "group") %>%
+  tab_spanner(label = md("All exits"), columns = ends_with("_all")) %>%
+  tab_spanner(label = md("Medicaid subset"), columns = ends_with("_mcaid")) %>%
+  cols_label(category = md("Category"),
+             group = md("Group"),
+             estimate_all = md("Incidence rate ratio"),
+             ci_all = md("95% CI"),
+             p_all = md("p-value"),
+             estimate_mcaid = md("Incidence rate ratio"),
+             ci_mcaid = md("95% CI"),
+             p_mcaid = md("p-value")) %>%
+  tab_footnote(footnote = "* = p<0.05, ** = p<0.01, *** = p<0.001",
+               locations = cells_column_labels(columns = starts_with("estimate"))) %>%
+  tab_footnote(footnote = "Multiple genders = both genders reported at different time points", 
+               locations =  cells_row_groups(groups = "Gender")) %>%
+  tab_footnote(footnote = "AI/AN = American Indian/Alaskan Native, NH/PI = Native Hawaiian/Pacific Islander", 
+               locations = cells_row_groups(groups = "Race/ethnicity")) %>%
+  tab_footnote(footnote = "HoH = Head of household", 
+               locations = cells_stub(rows = str_detect(group, "HoH"))) %>%
+  tab_footnote(footnote = "HCV = Housing Choice Voucher, PH = Public housing, TBV=Tenant Based Voucher", 
+               locations = cells_row_groups(groups = "Program type")) %>%
+  sub_missing()
+
+
+table_S3 <- table_formatter(tableS3)
+
+# Save output
+gtsave(table_S3, filename = "bh_manuscript_tableS3.png",
+       path = file.path(here::here(), "analyses/behavioral"))
+gtsave(table_S3, filename = "bh_manuscript_tableS3.html",
+       path = file.path(here::here(), "analyses/behavioral"))
+
+
 
 
 ## Added on 7/25/23 
@@ -624,6 +735,7 @@ for(tf in tf.vars){ # collapse the header and the TRUE row down to one row
   table1[, dup := NULL]
 }
 
+#adds missing column, but that is not applicable here as the data have already been filtered to include only with non-missing covariates
 table1 <- table1[!(col1 == "Missing" & get(names(table1)[2]) == 0 & get(names(table1)[3]) == 0 & get(names(table1)[4]) == 0)] # drop if missing always zero
 
 table1[col1 != variable, col1 := paste0("   ", col1)] # add indent for categories within a variable
@@ -631,4 +743,14 @@ table1[col1 != variable, col1 := paste0("   ", col1)] # add indent for categorie
 table1 <- table1[, 1:6]
 
 setnames(table1, c("p value"), c("P-value"))
+
+#Remove p-value column and rename col 1
+table1 <- table1 %>% select (-c("P-value")) %>% rename("Demographic Variable"="col1")
+
+#export as html and png
+library(knitr)
+library(kableExtra)
+kable (table1, format="html") %>% save_kable("C:/Users/n-mesuter/OneDrive - King County/Documents/GitHub/hud_hears/analyses/behavioral/table1.html")
+
+kable (table1, format="html") %>% save_kable("C:/Users/n-mesuter/OneDrive - King County/Documents/GitHub/hud_hears/analyses/behavioral/table1.png")
 

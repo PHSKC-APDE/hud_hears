@@ -283,48 +283,237 @@ border: 0;
 <table class=" lightable-classic" style="font-family: &quot;Arial Narrow&quot;, &quot;Source Sans Pro&quot;, sans-serif; margin-left: auto; margin-right: auto;">
  <thead>
   <tr>
-   <th style="text-align:left;"> country </th>
-   <th style="text-align:right;"> year </th>
-   <th style="text-align:right;"> cases </th>
-   <th style="text-align:right;"> population </th>
+   <th style="text-align:left;"> Demographic Variable </th>
+   <th style="text-align:left;"> Neutral (N=7,984) </th>
+   <th style="text-align:left;"> Positive (N=2,902) </th>
+   <th style="text-align:left;"> Negative (N=5,415) </th>
+   <th style="text-align:left;"> Total (N=16,301) </th>
   </tr>
  </thead>
 <tbody>
   <tr>
-   <td style="text-align:left;"> Afghanistan </td>
-   <td style="text-align:right;"> 1999 </td>
-   <td style="text-align:right;"> 745 </td>
-   <td style="text-align:right;"> 19987071 </td>
+   <td style="text-align:left;"> Age </td>
+   <td style="text-align:left;">  </td>
+   <td style="text-align:left;">  </td>
+   <td style="text-align:left;">  </td>
+   <td style="text-align:left;">  </td>
   </tr>
   <tr>
-   <td style="text-align:left;"> Afghanistan </td>
-   <td style="text-align:right;"> 2000 </td>
-   <td style="text-align:right;"> 2666 </td>
-   <td style="text-align:right;"> 20595360 </td>
+   <td style="text-align:left;"> Mean (years) (SD) </td>
+   <td style="text-align:left;"> 37 (26) </td>
+   <td style="text-align:left;"> 31 (21) </td>
+   <td style="text-align:left;"> 31 (22) </td>
+   <td style="text-align:left;"> 34 (24) </td>
   </tr>
   <tr>
-   <td style="text-align:left;"> Brazil </td>
-   <td style="text-align:right;"> 1999 </td>
-   <td style="text-align:right;"> 37737 </td>
-   <td style="text-align:right;"> 172006362 </td>
+   <td style="text-align:left;"> Median (years) (IQR) </td>
+   <td style="text-align:left;"> 35 (14, 57) </td>
+   <td style="text-align:left;"> 27 (14, 47) </td>
+   <td style="text-align:left;"> 27 (12, 47) </td>
+   <td style="text-align:left;"> 31 (13, 52) </td>
   </tr>
   <tr>
-   <td style="text-align:left;"> Brazil </td>
-   <td style="text-align:right;"> 2000 </td>
-   <td style="text-align:right;"> 80488 </td>
-   <td style="text-align:right;"> 174504898 </td>
+   <td style="text-align:left;"> Range (years) </td>
+   <td style="text-align:left;"> 0 - 105 </td>
+   <td style="text-align:left;"> 0 - 97 </td>
+   <td style="text-align:left;"> 0 - 107 </td>
+   <td style="text-align:left;"> 0 - 107 </td>
   </tr>
   <tr>
-   <td style="text-align:left;"> China </td>
-   <td style="text-align:right;"> 1999 </td>
-   <td style="text-align:right;"> 212258 </td>
-   <td style="text-align:right;"> 1272915272 </td>
+   <td style="text-align:left;"> Senior (aged 62+) </td>
+   <td style="text-align:left;"> 1,621 (20.3%) </td>
+   <td style="text-align:left;"> 267 (9.2%) </td>
+   <td style="text-align:left;"> 525 (9.7%) </td>
+   <td style="text-align:left;"> 2,413 (14.8%) </td>
   </tr>
   <tr>
-   <td style="text-align:left;"> China </td>
-   <td style="text-align:right;"> 2000 </td>
-   <td style="text-align:right;"> 213766 </td>
-   <td style="text-align:right;"> 1280428583 </td>
+   <td style="text-align:left;"> Child (aged &lt; 18) </td>
+   <td style="text-align:left;"> 2,429 (30.4%) </td>
+   <td style="text-align:left;"> 984 (33.9%) </td>
+   <td style="text-align:left;"> 1,993 (36.8%) </td>
+   <td style="text-align:left;"> 5,406 (33.2%) </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> Gender </td>
+   <td style="text-align:left;">  </td>
+   <td style="text-align:left;">  </td>
+   <td style="text-align:left;">  </td>
+   <td style="text-align:left;">  </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> Female </td>
+   <td style="text-align:left;"> 4,293 (53.8%) </td>
+   <td style="text-align:left;"> 1,572 (54.2%) </td>
+   <td style="text-align:left;"> 2,928 (54.1%) </td>
+   <td style="text-align:left;"> 8,793 (53.9%) </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> Male </td>
+   <td style="text-align:left;"> 3,592 (45.0%) </td>
+   <td style="text-align:left;"> 1,289 (44.4%) </td>
+   <td style="text-align:left;"> 2,406 (44.4%) </td>
+   <td style="text-align:left;"> 7,287 (44.7%) </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> Multiple </td>
+   <td style="text-align:left;"> 99 (1.2%) </td>
+   <td style="text-align:left;"> 41 (1.4%) </td>
+   <td style="text-align:left;"> 81 (1.5%) </td>
+   <td style="text-align:left;"> 221 (1.4%) </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> Race/ethnicity </td>
+   <td style="text-align:left;">  </td>
+   <td style="text-align:left;">  </td>
+   <td style="text-align:left;">  </td>
+   <td style="text-align:left;">  </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> White </td>
+   <td style="text-align:left;"> 2,566 (32.1%) </td>
+   <td style="text-align:left;"> 728 (25.1%) </td>
+   <td style="text-align:left;"> 1,469 (27.1%) </td>
+   <td style="text-align:left;"> 4,763 (29.2%) </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> AI/AN </td>
+   <td style="text-align:left;"> 120 (1.5%) </td>
+   <td style="text-align:left;"> 20 (0.7%) </td>
+   <td style="text-align:left;"> 122 (2.3%) </td>
+   <td style="text-align:left;"> 262 (1.6%) </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> Asian </td>
+   <td style="text-align:left;"> 782 (9.8%) </td>
+   <td style="text-align:left;"> 317 (10.9%) </td>
+   <td style="text-align:left;"> 323 (6.0%) </td>
+   <td style="text-align:left;"> 1,422 (8.7%) </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> Black </td>
+   <td style="text-align:left;"> 3,245 (40.6%) </td>
+   <td style="text-align:left;"> 1,348 (46.5%) </td>
+   <td style="text-align:left;"> 2,390 (44.1%) </td>
+   <td style="text-align:left;"> 6,983 (42.8%) </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> Latino </td>
+   <td style="text-align:left;"> 583 (7.3%) </td>
+   <td style="text-align:left;"> 188 (6.5%) </td>
+   <td style="text-align:left;"> 532 (9.8%) </td>
+   <td style="text-align:left;"> 1,303 (8.0%) </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> Multiple </td>
+   <td style="text-align:left;"> 585 (7.3%) </td>
+   <td style="text-align:left;"> 265 (9.1%) </td>
+   <td style="text-align:left;"> 491 (9.1%) </td>
+   <td style="text-align:left;"> 1,341 (8.2%) </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> NH/PI </td>
+   <td style="text-align:left;"> 103 (1.3%) </td>
+   <td style="text-align:left;"> 36 (1.2%) </td>
+   <td style="text-align:left;"> 88 (1.6%) </td>
+   <td style="text-align:left;"> 227 (1.4%) </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> Years of housing assistance </td>
+   <td style="text-align:left;">  </td>
+   <td style="text-align:left;">  </td>
+   <td style="text-align:left;">  </td>
+   <td style="text-align:left;">  </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> Mean (years) (SD) </td>
+   <td style="text-align:left;"> 5 (4) </td>
+   <td style="text-align:left;"> 7 (4) </td>
+   <td style="text-align:left;"> 6 (4) </td>
+   <td style="text-align:left;"> 5 (4) </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> Median (years) (IQR) </td>
+   <td style="text-align:left;"> 3 (2, 8) </td>
+   <td style="text-align:left;"> 7 (3, 11) </td>
+   <td style="text-align:left;"> 5 (2, 10) </td>
+   <td style="text-align:left;"> 4 (2, 9) </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> Range (years) </td>
+   <td style="text-align:left;"> 0 - 15 </td>
+   <td style="text-align:left;"> 0 - 15 </td>
+   <td style="text-align:left;"> 0 - 15 </td>
+   <td style="text-align:left;"> 0 - 15 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> Household size </td>
+   <td style="text-align:left;">  </td>
+   <td style="text-align:left;">  </td>
+   <td style="text-align:left;">  </td>
+   <td style="text-align:left;">  </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> Mean (SD) </td>
+   <td style="text-align:left;"> 3 (2) </td>
+   <td style="text-align:left;"> 4 (2) </td>
+   <td style="text-align:left;"> 3 (2) </td>
+   <td style="text-align:left;"> 3 (2) </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> Median (IQR) </td>
+   <td style="text-align:left;"> 2 (1, 4) </td>
+   <td style="text-align:left;"> 4 (2, 5) </td>
+   <td style="text-align:left;"> 3 (1, 4) </td>
+   <td style="text-align:left;"> 3 (1, 5) </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> Range </td>
+   <td style="text-align:left;"> 1 - 12 </td>
+   <td style="text-align:left;"> 1 - 10 </td>
+   <td style="text-align:left;"> 1 - 12 </td>
+   <td style="text-align:left;"> 1 - 12 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> Single caregiver </td>
+   <td style="text-align:left;"> 1,972 (24.7%) </td>
+   <td style="text-align:left;"> 456 (15.7%) </td>
+   <td style="text-align:left;"> 1,767 (32.6%) </td>
+   <td style="text-align:left;"> 4,195 (25.7%) </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> Head of household disability </td>
+   <td style="text-align:left;"> 2,470 (30.9%) </td>
+   <td style="text-align:left;"> 426 (14.7%) </td>
+   <td style="text-align:left;"> 1,556 (28.7%) </td>
+   <td style="text-align:left;"> 4,452 (27.3%) </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> Program type </td>
+   <td style="text-align:left;">  </td>
+   <td style="text-align:left;">  </td>
+   <td style="text-align:left;">  </td>
+   <td style="text-align:left;">  </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> PBV </td>
+   <td style="text-align:left;"> 4,436 (55.6%) </td>
+   <td style="text-align:left;"> 755 (26.0%) </td>
+   <td style="text-align:left;"> 961 (17.7%) </td>
+   <td style="text-align:left;"> 6,152 (37.7%) </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> TBV </td>
+   <td style="text-align:left;"> 2,130 (26.7%) </td>
+   <td style="text-align:left;"> 1,404 (48.4%) </td>
+   <td style="text-align:left;"> 3,376 (62.3%) </td>
+   <td style="text-align:left;"> 6,910 (42.4%) </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> PH </td>
+   <td style="text-align:left;"> 1,418 (17.8%) </td>
+   <td style="text-align:left;"> 743 (25.6%) </td>
+   <td style="text-align:left;"> 1,078 (19.9%) </td>
+   <td style="text-align:left;"> 3,239 (19.9%) </td>
   </tr>
 </tbody>
 </table>

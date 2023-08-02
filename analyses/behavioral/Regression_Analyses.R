@@ -49,7 +49,8 @@ negative_reasons <- reasons_by_exit_type %>% filter(exit_category %in% "Negative
 
 #take top 10 for all, then by exit type
 reasons_top10 <-reasons_by_exit_type %>% ungroup() %>% 
-  mutate(Percent =(n()/sum(n())*100))%>%
+  mutate(Percent =(n/sum(n)*100))%>%
+  mutate(across(c("Percent"), round ,2)) %>%
   rename("Exit Reason"="exit_reason_clean") %>%
   rename("Exit Category"= "exit_category") %>%
   filter(rank(desc(n))<=10) %>% 
@@ -66,6 +67,7 @@ negative_top10 <-negative_reasons %>% ungroup() %>% filter(rank(desc(n))<=10) %>
 
 
 #export reasons and top 10 reasons tables (for all exits)
+library(kableExtra)
 
 kable(reasons_top10, format="html") %>% kable_classic() %>% save_kable("C:/Users/n-mesuter/OneDrive - King County/Documents/GitHub/hud_hears/analyses/behavioral/top10_exitreasons.html")
 kable(reasons_top10, format="html") %>% kable_classic() %>% save_kable("C:/Users/n-mesuter/OneDrive - King County/Documents/GitHub/hud_hears/analyses/behavioral/top10_exitreasons.png")

@@ -2,16 +2,16 @@
 #Code updated on July 18, 2023
 #Author: Megan Suter
 
+#MUST RUN AFTER file "Outcomes_code_cleaned.R"
 
 
-#Code Purpose: Run regression models for exit type and BH analysis
+#Code Purpose: Generate descriptive statsitics and run regression models for exit type and BH analysis
+#create output, export output, and create tables
+
 #NOTE: behavioral health conditions and Medicaid ED visits are based on Medicaid
 # data. Those included in this sample have 7 months or greater of full Medicaid coverage
 # before and after date of exit
 
-
-
-#Run after file "Outcomes_code_cleaned.R"
 
 
 # Data Prep ----
@@ -213,7 +213,8 @@ summary(mcaid_crude)
 broom::tidy(mcaid_crude, conf.int = TRUE, exponentiate = T)
 
 ## Adjusted ----
-# Multiple categories model (use this)
+
+# Multiple categories model (This is the main model)
 mcaid_adj <- geepack::geeglm(crisis_any_mcaid ~ exit_category + gender_me + age_at_exit + race_eth_me  + 
                              hh_size + single_caregiver + housing_time_at_exit + prog_type_use + 
                              hh_disability +  crisis_any_mcaid_before, 
@@ -236,7 +237,7 @@ summary(mcaid_adj_2)
 broom::tidy(mcaid_adj_2, conf.int = TRUE, exponentiate = T) %>% as.data.frame()
 
 
-# Poisson model (not being used but just for interest's sake)
+# Poisson model (Included as a supplemental table)
 mcaid_adj_pois <- geepack::geeglm(crisis_num_mcaid ~ exit_category + gender_me + age_at_exit + race_eth_me  + 
                                   hh_size + single_caregiver + housing_time_at_exit + prog_type_use + 
                                   hh_disability + crisis_any_mcaid_before, 
@@ -246,6 +247,41 @@ mcaid_adj_pois <- geepack::geeglm(crisis_num_mcaid ~ exit_category + gender_me +
 
 summary(mcaid_adj_pois)
 broom::tidy(mcaid_adj_pois, conf.int = TRUE, exponentiate = T) %>% as.data.frame()
+
+#Poisson with additional adjustment (this was not included in paper)
+mcaid_adj_pois_2 <- geepack::geeglm(crisis_num_mcaid ~ exit_category + gender_me + age_at_exit + race_eth_me  + 
+                                    hh_size + single_caregiver + housing_time_at_exit + prog_type_use + 
+                                    hh_disability + crisis_any_mcaid_before + any_cond, 
+                                  data = mcaid_subset7mo, 
+                                  id = id_hh,
+                                  family = "poisson")
+
+summary(mcaid_adj_pois_2)
+broom::tidy(mcaid_adj_pois_2, conf.int = TRUE, exponentiate = T) %>% as.data.frame()
+
+
+
+#Medicaid subset models that only include outcomes available for all (no Medicaid outcomes included here)
+
+#Logistic
+mcaid_adj_noed <- geepack::geeglm(crisis_any ~ exit_category + gender_me + age_at_exit + race_eth_me  + 
+                               hh_size + single_caregiver + housing_time_at_exit + prog_type_use + 
+                               hh_disability +  crisis_any_before, 
+                             data = mcaid_subset7mo, 
+                             id = id_hh,
+                             family = "binomial")
+summary(mcaid_adj_noed)
+broom::tidy(mcaid_adj_noed, conf.int = TRUE, exponentiate = T) %>% as.data.frame()
+
+#Poisson
+mcaid_adj_pois_noed <- geepack::geeglm(crisis_num ~ exit_category + gender_me + age_at_exit + race_eth_me  + 
+                                    hh_size + single_caregiver + housing_time_at_exit + prog_type_use + 
+                                    hh_disability + crisis_any_before, 
+                                  data = mcaid_subset7mo, 
+                                  id = id_hh,
+                                  family = "poisson")
+summary(mcaid_adj_pois_noed)
+broom::tidy(mcaid_adj_pois_noed, conf.int = TRUE, exponentiate = T) %>% as.data.frame()
 
 
 

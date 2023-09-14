@@ -355,9 +355,9 @@
                 plot.name = 'figure_2_mean_predicted_wages')
       
       # Plot residuals ----
-      OvEdt <- copy(wage_model.preds)[!is.na(wage), .(wage, fitted = estimate, exit_category, time = as.integer(time), residual = wage - estimate)]
-      OvEdt[exit_category == "Negative", time := time - .05]
-      OvEdt[exit_category == "Positive", time := time + .05]
+      OvEdt <- copy(wage_model.preds)[!is.na(wage), .(wage, fitted = estimate, exit_category, time = as.numeric(as.character(time)), residual = wage - estimate)]
+      OvEdt[exit_category == "Negative", time := time - .1]
+      OvEdt[exit_category == "Positive", time := time + .1]
       set.seed(98104) # because jitter is 'random'
       
       plot.resid.mod1 <- ggplot() +

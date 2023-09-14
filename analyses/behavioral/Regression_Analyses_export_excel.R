@@ -67,13 +67,17 @@ negative_top10 <-negative_reasons %>% ungroup() %>% filter(rank(desc(n))<=10) %>
 
 
 #export reasons and top 10 reasons tables (for all exits)
-library(kableExtra)
-
-kable(reasons_top10, format="html") %>% kable_classic() %>% save_kable("C:/Users/n-mesuter/OneDrive - King County/Documents/GitHub/hud_hears/analyses/behavioral/top10_exitreasons.html")
-kable(reasons_top10, format="html") %>% kable_classic() %>% save_kable("C:/Users/n-mesuter/OneDrive - King County/Documents/GitHub/hud_hears/analyses/behavioral/top10_exitreasons.png")
-
-kable(reasons_by_exit_type, format="html") %>% kable_classic() %>% save_kable("C:/Users/n-mesuter/OneDrive - King County/Documents/GitHub/hud_hears/analyses/behavioral/reasons_by_exit_type.html")
-kable(reasons_by_exit_type, format="html") %>% kable_classic() %>% save_kable("C:/Users/n-mesuter/OneDrive - King County/Documents/GitHub/hud_hears/analyses/behavioral/reasons_by_exit_type.png")
+# library(kableExtra)
+# kable(reasons_top10, format="html") %>% kable_classic() %>% save_kable("C:/Users/n-mesuter/OneDrive - King County/Documents/GitHub/hud_hears/analyses/behavioral/top10_exitreasons.html")
+# kable(reasons_top10, format="html") %>% kable_classic() %>% save_kable("C:/Users/n-mesuter/OneDrive - King County/Documents/GitHub/hud_hears/analyses/behavioral/top10_exitreasons.png")
+# kable(reasons_by_exit_type, format="html") %>% kable_classic() %>% save_kable("C:/Users/n-mesuter/OneDrive - King County/Documents/GitHub/hud_hears/analyses/behavioral/reasons_by_exit_type.html")
+# kable(reasons_by_exit_type, format="html") %>% kable_classic() %>% save_kable("C:/Users/n-mesuter/OneDrive - King County/Documents/GitHub/hud_hears/analyses/behavioral/reasons_by_exit_type.png")
+library(openxlsx)
+wb <- createWorkbook()
+addWorksheet(wb, "reasons_top10")
+writeDataTable(wb, "reasons_top10", reasons_top10)
+addWorksheet(wb, "reasons_by_exit_type")
+writeDataTable(wb, "reasons_by_exit_type", reasons_by_exit_type)
 
 
 # Summary table of outcomes ----
@@ -123,6 +127,9 @@ summarizer <- function(df,
 descriptive <- bind_rows(summarizer(all_pop, outcome = "all", exit_category),
                          summarizer(mcaid_subset7mo, outcome = "mcaid", exit_category))
 
+addWorksheet(wb, "descriptive")
+writeDataTable(wb, "descriptive", reasons_by_exit_type)
+
 #Note: table is formatted below
 
 
@@ -135,7 +142,10 @@ any_crude <- geepack::geeglm(crisis_any ~ exit_category,
                             family = "binomial")
 
 summary(any_crude)
-broom::tidy(any_crude, conf.int = TRUE, exponentiate = T)
+any_crudedt <- setDT(broom::tidy(any_crude, conf.int = TRUE, exponentiate = T))
+
+addWorksheet(wb, "any_crude")
+writeDataTable(wb, "any_crude", any_crudedt)
 
 ## Adjusted ----
 # Multiple categories model (use this)
@@ -147,7 +157,10 @@ any_adj <- geepack::geeglm(crisis_any ~ exit_category + gender_me + age_at_exit 
                                family = "binomial")
 
 summary(any_adj)
-broom::tidy(any_adj, conf.int = TRUE, exponentiate = T) %>% as.data.frame()
+any_adjdt <- setDT(broom::tidy(any_adj, conf.int = TRUE, exponentiate = T))
+
+addWorksheet(wb, "any_adj")
+writeDataTable(wb, "any_adj", any_adjdt)
 
 ####Sensitivity analyses----
 
@@ -162,7 +175,9 @@ any_adj_U62 <- geepack::geeglm(crisis_any ~ exit_category + gender_me + age_at_e
                            family = "binomial")
 
 summary(any_adj_U62)
-broom::tidy(any_adj_U62, conf.int = TRUE, exponentiate = T) %>% as.data.frame()
+any_adj_U62dt <- setDT(broom::tidy(any_adj_U62, conf.int = TRUE, exponentiate = T))
+addWorksheet(wb, "any_adj_U62")
+writeDataTable(wb, "any_adj_U62", any_adj_U62dt)
 
 
 # Poisson model (not being used but just for interest's sake)
@@ -174,8 +189,9 @@ any_adj_pois <- geepack::geeglm(crisis_num ~ exit_category + gender_me + age_at_
                                family = "poisson")
 
 summary(any_adj_pois)
-broom::tidy(any_adj_pois, conf.int = TRUE, exponentiate = T) %>% as.data.frame()
-
+any_adj_poisdt <- setDT(broom::tidy(any_adj_pois, conf.int = TRUE, exponentiate = T))
+addWorksheet(wb, "any_adj_pois")
+writeDataTable(wb, "any_adj_pois", any_adj_poisdt)
 
 # ## Stratified by prior crisis (not using these at this time) ----
 # # No prior BH crises
@@ -210,7 +226,9 @@ mcaid_crude <- geepack::geeglm(crisis_any_mcaid ~ exit_category,
                              family = "binomial")
 
 summary(mcaid_crude)
-broom::tidy(mcaid_crude, conf.int = TRUE, exponentiate = T)
+mcaid_crudedt <- setDT(broom::tidy(mcaid_crude, conf.int = TRUE, exponentiate = T))
+addWorksheet(wb, "mcaid_crude")
+writeDataTable(wb, "mcaid_crude", mcaid_crudedt)
 
 ## Adjusted ----
 
@@ -223,7 +241,10 @@ mcaid_adj <- geepack::geeglm(crisis_any_mcaid ~ exit_category + gender_me + age_
                            family = "binomial")
 
 summary(mcaid_adj)
-broom::tidy(mcaid_adj, conf.int = TRUE, exponentiate = T) %>% as.data.frame()
+mcaid_adjdt <- setDT(broom::tidy(mcaid_adj, conf.int = TRUE, exponentiate = T))
+addWorksheet(wb, "mcaid_adj")
+writeDataTable(wb, "mcaid_adj", mcaid_adjdt)
+
 
 #add adjustment variable of existing BH condition (this was not included in paper)
 mcaid_adj_2 <- geepack::geeglm(crisis_any_mcaid ~ exit_category + gender_me + age_at_exit + race_eth_me  + 
@@ -234,8 +255,9 @@ mcaid_adj_2 <- geepack::geeglm(crisis_any_mcaid ~ exit_category + gender_me + ag
                              family = "binomial")
 
 summary(mcaid_adj_2)
-broom::tidy(mcaid_adj_2, conf.int = TRUE, exponentiate = T) %>% as.data.frame()
-
+mcaid_adj_2dt <- setDT(broom::tidy(mcaid_adj_2, conf.int = TRUE, exponentiate = T))
+addWorksheet(wb, "mcaid_adj_2")
+writeDataTable(wb, "mcaid_adj_2", mcaid_adj_2dt)
 
 # Poisson model (Included as a supplemental table)
 mcaid_adj_pois <- geepack::geeglm(crisis_num_mcaid ~ exit_category + gender_me + age_at_exit + race_eth_me  + 
@@ -246,7 +268,9 @@ mcaid_adj_pois <- geepack::geeglm(crisis_num_mcaid ~ exit_category + gender_me +
                                 family = "poisson")
 
 summary(mcaid_adj_pois)
-broom::tidy(mcaid_adj_pois, conf.int = TRUE, exponentiate = T) %>% as.data.frame()
+mcaid_adj_poisdt <- setDT(broom::tidy(mcaid_adj_pois, conf.int = TRUE, exponentiate = T))
+addWorksheet(wb, "mcaid_adj_pois")
+writeDataTable(wb, "mcaid_adj_pois", mcaid_adj_poisdt)
 
 #Poisson with additional adjustment (this was not included in paper)
 mcaid_adj_pois_2 <- geepack::geeglm(crisis_num_mcaid ~ exit_category + gender_me + age_at_exit + race_eth_me  + 
@@ -257,8 +281,9 @@ mcaid_adj_pois_2 <- geepack::geeglm(crisis_num_mcaid ~ exit_category + gender_me
                                   family = "poisson")
 
 summary(mcaid_adj_pois_2)
-broom::tidy(mcaid_adj_pois_2, conf.int = TRUE, exponentiate = T) %>% as.data.frame()
-
+mcaid_adj_pois_2dt <- setDT(broom::tidy(mcaid_adj_pois_2, conf.int = TRUE, exponentiate = T))
+addWorksheet(wb, "mcaid_adj_pois_2")
+writeDataTable(wb, "mcaid_adj_pois_2", mcaid_adj_pois_2dt)
 
 
 #Medicaid subset models that only include outcomes available for all (no Medicaid outcomes included here)
@@ -271,7 +296,9 @@ mcaid_adj_noed <- geepack::geeglm(crisis_any ~ exit_category + gender_me + age_a
                              id = id_hh,
                              family = "binomial")
 summary(mcaid_adj_noed)
-broom::tidy(mcaid_adj_noed, conf.int = TRUE, exponentiate = T) %>% as.data.frame()
+mcaid_adj_noeddt <- setDT(broom::tidy(mcaid_adj_noed, conf.int = TRUE, exponentiate = T))
+addWorksheet(wb, "mcaid_adj_noed")
+writeDataTable(wb, "mcaid_adj_noed", mcaid_adj_noeddt)
 
 #Poisson
 mcaid_adj_pois_noed <- geepack::geeglm(crisis_num ~ exit_category + gender_me + age_at_exit + race_eth_me  + 
@@ -281,8 +308,9 @@ mcaid_adj_pois_noed <- geepack::geeglm(crisis_num ~ exit_category + gender_me + 
                                   id = id_hh,
                                   family = "poisson")
 summary(mcaid_adj_pois_noed)
-broom::tidy(mcaid_adj_pois_noed, conf.int = TRUE, exponentiate = T) %>% as.data.frame()
-
+mcaid_adj_pois_noeddt <- setDT(broom::tidy(mcaid_adj_pois_noed, conf.int = TRUE, exponentiate = T))
+addWorksheet(wb, "mcaid_adj_pois_noed")
+writeDataTable(wb, "mcaid_adj_pois_noed", mcaid_adj_pois_noeddt)
 
 
 # MAKE TABLES FOR MANUSCRIPT ----
@@ -405,10 +433,14 @@ gt(groupname_col = "category", rowname_col = "group") %>%
 descriptive <- table_formatter(descriptive)
 
 # Save output 
-gtsave(descriptive, filename = "bh_manuscript_table2.png",
-       path = file.path(here::here(), "analyses/behavioral"))
-gtsave(descriptive, filename = "bh_manuscript_table2.html",
-       path = file.path(here::here(), "analyses/behavioral"))
+gtsave(descriptive, filename = "bh_manuscript_table2.rtf", path = 'C:/temp')
+descriptivedf <- as.data.frame(descriptive)
+addWorksheet(wb, "descriptive_clean")
+writeDataTable(wb, "descriptive_clean", descriptivedf)
+# gtsave(descriptive, filename = "bh_manuscript_table2.png",
+#        path = file.path(here::here(), "analyses/behavioral"))
+# gtsave(descriptive, filename = "bh_manuscript_table2.html",
+#        path = file.path(here::here(), "analyses/behavioral"))
 
 
 
@@ -504,10 +536,14 @@ table3 <- table3 %>%
 table_3 <- table_formatter(table3)
 
 # Save output
-gtsave(table_3, filename = "bh_manuscript_table3.png",
-       path = file.path(here::here(), "analyses/behavioral"))
-gtsave(table_3, filename = "bh_manuscript_table3.html",
-       path = file.path(here::here(), "analyses/behavioral"))
+gtsave(table_3, filename = "bh_manuscript_table3.rtf", path = 'C:/temp')
+table_3df <- as.data.frame(table_3)
+addWorksheet(wb, "table_3")
+writeDataTable(wb, "table_3", table_3df)
+# gtsave(table_3, filename = "bh_manuscript_table3.png",
+#        path = file.path(here::here(), "analyses/behavioral"))
+# gtsave(table_3, filename = "bh_manuscript_table3.html",
+#        path = file.path(here::here(), "analyses/behavioral"))
 
 
 ##Table S3: Poisson Regression table
@@ -601,10 +637,14 @@ tableS3 <- tableS3 %>%
 table_S3 <- table_formatter(tableS3)
 
 # Save output
-gtsave(table_S3, filename = "bh_manuscript_tableS3.png",
-       path = file.path(here::here(), "analyses/behavioral"))
-gtsave(table_S3, filename = "bh_manuscript_tableS3.html",
-       path = file.path(here::here(), "analyses/behavioral"))
+gtsave(table_S3, filename = "bh_manuscript_tableS3.rtf", path = 'C:/temp')
+table_S3df <- as.data.frame(table_S3)
+addWorksheet(wb, "table_S3")
+writeDataTable(wb, "table_S3", table_S3df)
+# gtsave(table_S3, filename = "bh_manuscript_tableS3.png",
+#        path = file.path(here::here(), "analyses/behavioral"))
+# gtsave(table_S3, filename = "bh_manuscript_tableS3.html",
+#        path = file.path(here::here(), "analyses/behavioral"))
 
 
 # Table s4----
@@ -685,10 +725,14 @@ tableS4 <- tableS4 %>%
 table_S4 <- table_formatter(tableS4)
 
 # Save output
-gtsave(table_S4, filename = "bh_manuscript_tableS4.png",
-       path = file.path(here::here(), "analyses/behavioral"))
-gtsave(table_S4, filename = "bh_manuscript_tableS4.html",
-       path = file.path(here::here(), "analyses/behavioral"))
+gtsave(table_S4, filename = "bh_manuscript_tableS4.rtf", path = 'C:/temp')
+table_S4df <- as.data.frame(table_S4)
+addWorksheet(wb, "table_S4")
+writeDataTable(wb, "table_S4", table_S4df)
+# gtsave(table_S4, filename = "bh_manuscript_tableS4.png",
+#        path = file.path(here::here(), "analyses/behavioral"))
+# gtsave(table_S4, filename = "bh_manuscript_tableS4.html",
+#        path = file.path(here::here(), "analyses/behavioral"))
 
 
 
@@ -830,10 +874,15 @@ setnames(table1, c("p value"), c("P-value"))
 table1 <- table1 %>% select (-c("P-value")) %>% rename("Demographic Variable"="col1")
 
 #export as html and png
-library(knitr)
-library(kableExtra)
-kable(table1, format="html") %>% kable_classic() %>% save_kable("C:/Users/n-mesuter/OneDrive - King County/Documents/GitHub/hud_hears/analyses/behavioral/table1.html")
-kable(table1, format="html") %>% kable_classic() %>% save_kable("C:/Users/n-mesuter/OneDrive - King County/Documents/GitHub/hud_hears/analyses/behavioral/table1.png")
+# library(knitr)
+# library(kableExtra)
+# kable(table1, format="html") %>% kable_classic() %>% save_kable("C:/Users/n-mesuter/OneDrive - King County/Documents/GitHub/hud_hears/analyses/behavioral/table1.html")
+# kable(table1, format="html") %>% kable_classic() %>% save_kable("C:/Users/n-mesuter/OneDrive - King County/Documents/GitHub/hud_hears/analyses/behavioral/table1.png")
+
+gtsave(gt(copy(table1)), filename = "bh_manuscript_table1.rtf", path = 'C:/temp')
+table1df <- as.data.frame(table1)
+addWorksheet(wb, "table1")
+writeDataTable(wb, "table1", table1df)
 
 ##Repeat this for Medicaid only----
 #### Prep vars ----
@@ -965,9 +1014,14 @@ setnames(table1a, c("p value"), c("P-value"))
 #Remove p-value column and rename col 1
 table1a <- table1a %>% select (-c("P-value")) %>% rename("Demographic Variable"="col1")
 
-#export as html and png
+#export
+gtsave(gt(copy(table1a)), filename = "bh_manuscript_table1a.rtf", path = 'C:/temp')
+table1adf <- as.data.frame(table1a)
+addWorksheet(wb, "table1a")
+writeDataTable(wb, "table1a", table1adf)
+saveWorkbook(wb, "C:/temp/all_tables_2023_08_23.xlsx", overwrite = TRUE)
 # library(knitr)
 # library(kableExtra)
-kable(table1a, format="html") %>% kable_classic() %>% save_kable("C:/Users/n-mesuter/OneDrive - King County/Documents/GitHub/hud_hears/analyses/behavioral/table1a.html")
-kable(table1a, format="html") %>% kable_classic() %>% save_kable("C:/Users/n-mesuter/OneDrive - King County/Documents/GitHub/hud_hears/analyses/behavioral/table1a.png")
+# kable(table1a, format="html") %>% kable_classic() %>% save_kable("C:/Users/n-mesuter/OneDrive - King County/Documents/GitHub/hud_hears/analyses/behavioral/table1a.html")
+# kable(table1a, format="html") %>% kable_classic() %>% save_kable("C:/Users/n-mesuter/OneDrive - King County/Documents/GitHub/hud_hears/analyses/behavioral/table1a.png")
 
